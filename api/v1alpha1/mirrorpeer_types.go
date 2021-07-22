@@ -20,26 +20,38 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// StorageClusterRef holds a reference to a StorageCluster
+type StorageClusterRef struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+}
+
+// PeerRef holds a reference to a mirror peer
+type PeerRef struct {
+	// ClusterName is the name of ManagedCluster.
+	// ManagedCluster matching this name is considered
+	// a peer cluster.
+	ClusterName string `json:"clusterName"`
+	// StorageClusterRef holds a reference to StorageCluster object
+	StorageClusterRef StorageClusterRef `json:"storageClusterRef"`
+}
 
 // MirrorPeerSpec defines the desired state of MirrorPeer
 type MirrorPeerSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Items is a list of PeerRef.
 
-	// Foo is an example field of MirrorPeer. Edit mirrorpeer_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// +kubebuilder:validation:MaxItems=2
+	// +kubebuilder:validation:MinItems=2
+	Items []PeerRef `json:"items"`
 }
 
 // MirrorPeerStatus defines the observed state of MirrorPeer
 type MirrorPeerStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:resource:scope=Cluster
 
 // MirrorPeer is the Schema for the mirrorpeers API
 type MirrorPeer struct {
