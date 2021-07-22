@@ -1,0 +1,7 @@
+apiVersion: multicluster.odf.openshift.io/v1alpha1
+kind: MirrorPeer
+metadata:
+  name: mirrorpeer-sample
+spec:
+  # Add fields here
+  foo: bar

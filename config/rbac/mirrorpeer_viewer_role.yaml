@@ -1,0 +1,20 @@
+# permissions for end users to view mirrorpeers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mirrorpeer-viewer-role
+rules:
+- apiGroups:
+  - multicluster.odf.openshift.io
+  resources:
+  - mirrorpeers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - multicluster.odf.openshift.io
+  resources:
+  - mirrorpeers/status
+  verbs:
+  - get
