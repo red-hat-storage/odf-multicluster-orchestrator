@@ -1,0 +1,9 @@
+domain: odf.openshift.io
+layout:
+- go.kubebuilder.io/v3
+plugins:
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
+projectName: odf-multicluster-orchestrator
+repo: github.com/red-hat-storage/odf-multicluster-orchestrator
+version: "3"
