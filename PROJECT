@@ -9,7 +9,7 @@ repo: github.com/red-hat-storage/odf-multicluster-orchestrator
 resources:
 - api:
     crdVersion: v1
-    namespaced: true
+    namespaced: false
   controller: true
   domain: odf.openshift.io
   group: multicluster
