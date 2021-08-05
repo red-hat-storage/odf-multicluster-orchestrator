@@ -1,3 +1,5 @@
+// +build integration
+
 /*
 Copyright 2021 Red Hat OpenShift Data Foundation.
 
@@ -14,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package integration_test
 
 import (
 	"path/filepath"
@@ -34,9 +36,6 @@ import (
 	//+kubebuilder:scaffold:imports
 )
 
-// These tests use Ginkgo (BDD-style Go testing framework). Refer to
-// http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
-
 var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
@@ -50,15 +49,16 @@ func TestAPIs(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
+	var err error
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "config", "crd", "bases")},
+		CRDDirectoryPaths:     []string{filepath.Join("../..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
 	}
 
-	cfg, err := testEnv.Start()
+	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
