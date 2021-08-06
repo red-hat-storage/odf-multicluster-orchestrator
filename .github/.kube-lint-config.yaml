@@ -1,4 +1,0 @@
-checks:
-  doNotAutoAddDefaults: true
-  include:
-  - "privileged-container"

@@ -1,0 +1,16 @@
+checks:
+  include:
+  - "cluster-admin-role-binding"
+  - "exposed-services"
+  - "privileged-ports"
+  - "writable-host-mount"
+  exclude:
+  - "dangling-service"
+  - "default-service-account"
+  - "mismatching-selector"
+  - "no-read-only-root-fs"
+  - "non-existent-service-account"
+  - "run-as-non-root"
+  - "unset-cpu-requirements"
+  - "unset-memory-requirements"
+  - "latest-tag"
