@@ -19,12 +19,13 @@ package controllers
 import (
 	"context"
 
+	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // MirrorPeerReconciler reconciles a MirrorPeer object
@@ -39,18 +40,51 @@ type MirrorPeerReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the MirrorPeer object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	logger := log.FromContext(ctx)
 
-	// your logic here
+	// Fetch MirrorPeer for given Request
+	var mirrorPeer multiclusterv1alpha1.MirrorPeer
+	err := r.Get(ctx, req.NamespacedName, &mirrorPeer)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Request object not found, could have been deleted after reconcile request.
+			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
+			// Return and don't requeue
+			logger.Info("Could not find MirrorPeer. Ignoring since object must have been deleted")
+			return ctrl.Result{}, nil
+		}
+		// Error reading the object - requeue the request.
+		logger.Error(err, "Failed to get MirrorPeer")
+		return ctrl.Result{}, err
+	}
 
+	logger.V(2).Info("Validating MirrorPeer", "MirrorPeer", req.NamespacedName)
+	// Validate MirrorPeer
+	// MirrorPeer.Spec must be defined
+	if err := undefinedMirrorPeerSpec(mirrorPeer.Spec); err != nil {
+		return ctrl.Result{Requeue: false}, err
+	}
+	// MirrorPeer.Spec.Items must be unique
+	if err := uniqueSpecItems(mirrorPeer.Spec); err != nil {
+		return ctrl.Result{Requeue: false}, err
+	}
+	for i := range mirrorPeer.Spec.Items {
+		// MirrorPeer.Spec.Items must not have empty fields
+		if err := emptySpecItems(mirrorPeer.Spec.Items[i]); err != nil {
+			// return error and do not requeue since user needs to update the spec
+			// when user updates the spec, new reconcile will be triggered
+			return reconcile.Result{Requeue: false}, err
+		}
+		// MirrorPeer.Spec.Items[*].ClusterName must be a valid ManagedCluster
+		if err := isManagedCluster(ctx, r.Client, mirrorPeer.Spec.Items[i].ClusterName); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+	logger.V(2).Info("All validations for MirrorPeer passed", "MirrorPeer", req.NamespacedName)
 	return ctrl.Result{}, nil
 }
 
