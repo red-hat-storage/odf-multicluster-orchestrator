@@ -54,3 +54,22 @@ else
 OSDK = $(shell which operator-sdk)
 endif
 endif
+
+GOLANGCI_URL := https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh
+GOLANGCI_VERSION := 1.41.1
+
+.PHONY: golangci-bin
+GOLANGCI_BIN := $(shell pwd)/bin/golangci-lint
+GOLANGCI_INSTALLED_VER := $(shell $(GOLANGCI_BIN) version --format=short 2>&1)
+golangci-bin: ## Download goloanci-lint locally if necessary.
+ifeq (,$(GOLANGCI_INSTALLED_VER))
+	$(info Installing golangci-lint (version: $(GOLANGCI_VERSION)) into $(GOLANGCI_BIN))
+	curl -sSfL $(GOLANGCI_URL) | sh -s v$(GOLANGCI_VERSION)
+else ifneq ($(GOLANGCI_VERSION),$(GOLANGCI_INSTALLED_VER))
+	$(error Incorrect version ($(GOLANGCI_INSTALLED_VER)) for golanci-lint found, expecting $(GOLANGCI_VERSION))
+endif
+
+.PHONY: kubelinter-bin
+KUBELINTER_BIN := $(shell pwd)/bin/kube-linter
+kubelinter-bin: ## Download kube-linter locally if necessary
+	$(call go-get-tool,$(KUBELINTER_BIN),golang.stackrox.io/kube-linter/cmd/kube-linter@0.2.2)
