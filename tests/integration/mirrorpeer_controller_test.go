@@ -47,7 +47,6 @@ var _ = Describe("MirrorPeer Validations", func() {
 				newMirrorPeer := mirrorPeer.DeepCopy()
 				err := k8sClient.Create(context.TODO(), newMirrorPeer, &client.CreateOptions{})
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("MirrorPeer.multicluster.odf.openshift.io \"test-mirrorpeer\" is invalid: spec.items: Invalid value: \"null\": spec.items in body must be of type array: \"null\""))
 			})
 			By("creating MirrorPeer with 1 Item", func() {
 				newMirrorPeer := mirrorPeer.DeepCopy()
@@ -64,7 +63,6 @@ var _ = Describe("MirrorPeer Validations", func() {
 				}
 				err := k8sClient.Create(context.TODO(), newMirrorPeer, &client.CreateOptions{})
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("MirrorPeer.multicluster.odf.openshift.io \"test-mirrorpeer\" is invalid: spec.items: Invalid value: \"\": spec.items in body should have at least 2 items"))
 			})
 			By("creating MirrorPeer without MirrorPeer.Spec.Items[*].ClusterName ", func() {
 				newMirrorPeer := mirrorPeer.DeepCopy()
@@ -187,7 +185,6 @@ var _ = Describe("MirrorPeer Validations", func() {
 				}
 				err = k8sClient.Update(context.TODO(), &newMirrorPeer, &client.UpdateOptions{})
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("MirrorPeer.multicluster.odf.openshift.io \"test-mirrorpeer\" is invalid: spec.items: Invalid value: \"\": spec.items in body should have at least 2 items"))
 			})
 		})
 		It("should not return validation error ", func() {
