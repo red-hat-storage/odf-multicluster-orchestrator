@@ -53,7 +53,15 @@ unit-test: ## Run unit tests
 	go test ./... -v -tags unit -coverprofile unit-cover.out
 
 ENVTEST_ASSETS_DIR=$(shell pwd)/testbin
-test: manifests generate fmt vet ## Run integration tests.
+OPENSHIFT_CI ?= false
+test: ## Run integration tests.
+ifeq ($(OPENSHIFT_CI), true)
+	@echo "Running in OpenShift CI. Syncing vendor"
+	go mod tidy && go mod vendor
+else
+	@echo "Running outside OpenShift CI. Ignoring vendor"
+endif
+	make manifests generate fmt vet
 	mkdir -p ${ENVTEST_ASSETS_DIR}
 	test -f ${ENVTEST_ASSETS_DIR}/setup-envtest.sh || curl -sSLo ${ENVTEST_ASSETS_DIR}/setup-envtest.sh https://raw.githubusercontent.com/kubernetes-sigs/controller-runtime/v0.8.3/hack/setup-envtest.sh
 	source ${ENVTEST_ASSETS_DIR}/setup-envtest.sh; fetch_envtest_tools $(ENVTEST_ASSETS_DIR); setup_envtest_env $(ENVTEST_ASSETS_DIR); go test ./tests/integration/... -v -tags integration -coverprofile integration-cover.out
