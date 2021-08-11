@@ -28,9 +28,21 @@ spec:
       - command:
         - /manager
         args:
+        - manager
         - --leader-elect
         image: controller:latest
         name: manager
+        env:
+        - name: TOKEN_EXCHANGE_IMAGE
+          value: ${IMG}
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         securityContext:
           allowPrivilegeEscalation: false
         livenessProbe:

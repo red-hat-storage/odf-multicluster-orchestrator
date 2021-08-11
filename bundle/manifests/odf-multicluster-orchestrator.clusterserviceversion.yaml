@@ -41,6 +41,66 @@ spec:
       clusterPermissions:
       - rules:
         - apiGroups:
+          - addon.open-cluster-management.io
+          resources:
+          - clustermanagementaddons
+          - managedclusteraddons
+          verbs:
+          - '*'
+        - apiGroups:
+          - addon.open-cluster-management.io
+          resources:
+          - managedclusteraddons/finalizers
+          verbs:
+          - '*'
+        - apiGroups:
+          - addon.open-cluster-management.io
+          resources:
+          - managedclusteraddons/status
+          verbs:
+          - '*'
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+          - get
+        - apiGroups:
+          - certificates.k8s.io
+          resources:
+          - certificatesigningrequests
+          - certificatesigningrequests/approval
+          verbs:
+          - create
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - certificates.k8s.io
+          resources:
+          - signers
+          verbs:
+          - approve
+        - apiGroups:
+          - cluster.open-cluster-management.io
+          resources:
+          - managedclusters
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          - events
+          - pods
+          - secrets
+          verbs:
+          - '*'
+        - apiGroups:
           - multicluster.odf.openshift.io
           resources:
           - mirrorpeers
@@ -66,6 +126,19 @@ spec:
           - get
           - patch
           - update
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - rolebindings
+          - roles
+          verbs:
+          - '*'
+        - apiGroups:
+          - work.open-cluster-management.io
+          resources:
+          - manifestworks
+          verbs:
+          - '*'
         serviceAccountName: odfmo-controller-manager
       deployments:
       - name: odfmo-controller-manager
@@ -82,9 +155,21 @@ spec:
             spec:
               containers:
               - args:
+                - manager
                 - --leader-elect
                 command:
                 - /manager
+                env:
+                - name: TOKEN_EXCHANGE_IMAGE
+                  value: quay.io/ocs-dev/odf-multicluster-orchestrator:latest
+                - name: POD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.name
+                - name: POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
                 image: quay.io/ocs-dev/odf-multicluster-orchestrator:latest
                 livenessProbe:
                   httpGet:
