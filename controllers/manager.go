@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"open-cluster-management.io/addon-framework/pkg/addonmanager"
+	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -29,6 +30,7 @@ func init() {
 	utilruntime.Must(clusterv1.AddToScheme(mgrScheme))
 
 	utilruntime.Must(multiclusterv1alpha1.AddToScheme(mgrScheme))
+	utilruntime.Must(addonapiv1alpha1.AddToScheme(mgrScheme))
 	//+kubebuilder:scaffold:scheme
 }
 
