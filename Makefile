@@ -46,10 +46,10 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
-golangci-lint: ## Run golangci-lint against code.
+golangci-lint: golangci-bin ## Run golangci-lint against code.
 	$(GOLANGCI_BIN) run ./...
 
-kube-linter: ## Run kube-linter against YAML files
+kube-linter: kubelinter-bin ## Run kube-linter against YAML files
 	$(KUBELINTER_BIN) lint ./ --config ./.kube-linter-config.yaml
 
 unit-test: ## Run unit tests
