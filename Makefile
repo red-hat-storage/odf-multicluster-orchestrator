@@ -1,4 +1,5 @@
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
+CWD := $(shell pwd)
 
 # All variables are defined here
 include hack/make/vars.mk
@@ -52,7 +53,7 @@ kube-linter: ## Run kube-linter against YAML files
 unit-test: ## Run unit tests
 	go test ./... -v -tags unit -coverprofile unit-cover.out
 
-ENVTEST_ASSETS_DIR=$(shell pwd)/testbin
+ENVTEST_ASSETS_DIR=$(CWD)/testbin
 OPENSHIFT_CI ?= false
 test: ## Run integration tests.
 ifeq ($(OPENSHIFT_CI), true)
