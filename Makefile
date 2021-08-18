@@ -46,7 +46,7 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
-golanci-lint: ## Run golangci-lint against code.
+golangci-lint: ## Run golangci-lint against code.
 	$(GOLANGCI_BIN) run ./...
 
 kube-linter: ## Run kube-linter against YAML files
