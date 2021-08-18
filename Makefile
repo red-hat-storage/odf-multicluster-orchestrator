@@ -71,13 +71,13 @@ endif
 
 ##@ Build
 
-build: generate fmt vet ## Build manager binary.
+build: generate fmt vet golangci-lint kube-linter ## Build manager binary.
 	go build -o bin/manager main.go
 
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
-docker-build: generate fmt vet ## Build docker image with the manager.
+docker-build: generate fmt vet golangci-lint kube-linter ## Build docker image with the manager.
 	docker build -t ${IMG} .
 
 docker-push: ## Push docker image with the manager.
