@@ -60,7 +60,7 @@ GOLANGCI_VERSION := 1.41.1
 
 .PHONY: golangci-bin
 GOLANGCI_BIN := $(CWD)/bin/golangci-lint
-GOLANGCI_INSTALLED_VER := $(shell $(GOLANGCI_BIN) version --format=short 2>&1)
+GOLANGCI_INSTALLED_VER := $(shell $(GOLANGCI_BIN) version --format=short 2>/dev/null)
 golangci-bin: ## Download goloanci-lint locally if necessary.
 ifeq (,$(GOLANGCI_INSTALLED_VER))
 	$(info Installing golangci-lint (version: $(GOLANGCI_VERSION)) into $(GOLANGCI_BIN))
