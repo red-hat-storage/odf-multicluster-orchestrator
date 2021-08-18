@@ -1,6 +1,8 @@
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 CWD := $(shell pwd)
 
+.DEFAULT_GOAL := help
+
 # All variables are defined here
 include hack/make/vars.mk
 
