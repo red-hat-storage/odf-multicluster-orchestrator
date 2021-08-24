@@ -7,6 +7,7 @@ require (
 	github.com/onsi/gomega v1.14.0
 	github.com/openshift/library-go v0.0.0-20210727084322-8a96c0a97c06
 	github.com/spf13/cobra v1.1.3
+	github.com/stretchr/testify v1.7.0
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
 	k8s.io/api v0.21.3
 	k8s.io/apimachinery v0.21.3

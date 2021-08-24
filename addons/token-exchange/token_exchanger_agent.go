@@ -6,27 +6,24 @@ import (
 	"time"
 
 	"github.com/openshift/library-go/pkg/controller/controllercmd"
-	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/resource/resourceapply"
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/informers"
-	corev1informers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
 	corev1lister "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	"open-cluster-management.io/addon-framework/pkg/lease"
 )
 
 const (
-	TokenExchangeName = "tokenexchange"
+	TokenExchangeName   = "tokenexchange"
+	CreatedByLabelKey   = "multicluster.odf.openshift.io/created-by"
+	CreatedByLabelValue = TokenExchangeName
 )
 
 func NewAgentCommand() *cobra.Command {
@@ -78,7 +75,7 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 	}
 	hubKubeInformerFactory := informers.NewSharedInformerFactoryWithOptions(hubKubeClient, 10*time.Minute, informers.WithNamespace(o.SpokeClusterName))
 
-	agent := newTokenExchangeAgentController(
+	greenSecretAgent := newgreenSecretTokenExchangeAgentController(
 		hubKubeClient,
 		hubKubeInformerFactory.Core().V1().Secrets(),
 		spokeKubeClient,
@@ -95,80 +92,29 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 
 	go hubKubeInformerFactory.Start(ctx.Done())
 	go spokeKubeInformerFactory.Start(ctx.Done())
-	go agent.Run(ctx, 1)
+	go greenSecretAgent.Run(ctx, 1)
 	go leaseUpdater.Start(ctx)
 
 	<-ctx.Done()
 	return nil
 }
 
-type tokenExchangeAgentController struct {
-	hubKubeClient     kubernetes.Interface
-	hubSecretLister   corev1lister.SecretLister
-	spokeKubeClient   kubernetes.Interface
-	spokeSecretLister corev1lister.SecretLister
-	clusterName       string
-	recorder          events.Recorder
-}
-
-func newTokenExchangeAgentController(
-	hubKubeClient kubernetes.Interface,
-	secretInformers corev1informers.SecretInformer,
-	spokeKubeClient kubernetes.Interface,
-	spokeSecretInformers corev1informers.SecretInformer,
-	clusterName string,
-	recorder events.Recorder,
-) factory.Controller {
-	c := &tokenExchangeAgentController{
-		hubKubeClient:     hubKubeClient,
-		hubSecretLister:   secretInformers.Lister(),
-		spokeKubeClient:   spokeKubeClient,
-		spokeSecretLister: spokeSecretInformers.Lister(),
-		clusterName:       clusterName,
-		recorder:          recorder,
-	}
-	queueKeyFn := func(obj runtime.Object) string {
-		key, err := cache.MetaNamespaceKeyFunc(obj)
-		if err != nil {
-			return ""
-		}
-		return key
-	}
-	informer := spokeSecretInformers.Informer()
-	return factory.New().
-		WithInformersQueueKeyFunc(queueKeyFn, informer).
-		WithSync(c.sync).
-		ToController(fmt.Sprintf("%s-controller", TokenExchangeName), recorder)
-}
-
-// TODO: update sync to exchange only required secret
-// sync gets all the secrets from managedcluster and creates it in "default" namespace on hub cluster.
-func (c *tokenExchangeAgentController) sync(ctx context.Context, syncCtx factory.SyncContext) error {
-	key := syncCtx.QueueKey()
-	klog.V(4).Infof("Reconciling addon deploy %q", key)
-
-	namespace, name, err := cache.SplitMetaNamespaceKey(key)
-	if err != nil {
-		// ignore addon whose key is not in format: namespace/name
-		return nil
-	}
-
-	se, err := c.spokeSecretLister.Secrets(namespace).Get(name)
+func getSecret(lister corev1lister.SecretLister, name, namespace string) (*corev1.Secret, error) {
+	se, err := lister.Secrets(namespace).Get(name)
 	switch {
 	case errors.IsNotFound(err):
-		return nil
+		return nil, err
 	case err != nil:
-		return err
+		return nil, err
+	}
+	return se, nil
+}
+
+func createSecret(client kubernetes.Interface, recorder events.Recorder, newSecret *corev1.Secret) error {
+	_, _, err := resourceapply.ApplySecret(client.CoreV1(), recorder, newSecret)
+	if err != nil {
+		return fmt.Errorf("failed to apply secret %q in namespace %q. Error %v", newSecret.Name, newSecret.Namespace, err)
 	}
 
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      se.Name, // TODO: Handle naming conflict
-			Namespace: "default",
-		},
-		Data: se.Data,
-	}
-
-	_, _, err = resourceapply.ApplySecret(c.hubKubeClient.CoreV1(), c.recorder, secret)
-	return err
+	return nil
 }
