@@ -15,6 +15,12 @@ spec:
       kind: MirrorPeer
       name: mirrorpeers.multicluster.odf.openshift.io
       version: v1alpha1
+    required:
+    - description: DRPolicy is the Schema for the drpolicies API
+      displayName: DRPolicy
+      kind: DRPolicy
+      name: drpolicies.ramendr.openshift.io
+      version: v1alpha1
   description: |
     Orchestrator for OpenShift Data Foundation clusters running across multiple OpenShift clusters.
     It uses Red Hat Advanced Cluster Management for Kubernetes as the multicluster control plane.
