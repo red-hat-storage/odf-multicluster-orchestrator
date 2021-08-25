@@ -19,11 +19,14 @@ package controllers
 import (
 	"context"
 
+	ramendrv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -47,6 +50,9 @@ type MirrorPeerReconciler struct {
 //+kubebuilder:rbac:groups=addon.open-cluster-management.io,resources=managedclusteraddons/finalizers,verbs=*
 //+kubebuilder:rbac:groups=addon.open-cluster-management.io,resources=managedclusteraddons;clustermanagementaddons,verbs=*
 //+kubebuilder:rbac:groups=addon.open-cluster-management.io,resources=managedclusteraddons/status,verbs=*
+//+kubebuilder:rbac:groups=drpolicies.ramendr.openshift.io,resources=drpolicies/finalizers,verbs=*
+//+kubebuilder:rbac:groups=drpolicies.ramendr.openshift.io,resources=drpolicies;clustermanagementaddons,verbs=*
+//+kubebuilder:rbac:groups=drpolicies.ramendr.openshift.io,resources=drpolicies/status,verbs=*
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -95,6 +101,43 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 	logger.V(2).Info("All validations for MirrorPeer passed", "MirrorPeer", req.NamespacedName)
+
+	// Define RamenDRPolicy object.
+	ramenDRPolicy := ramendrv1alpha1.DRPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "drpolicy",
+		},
+	}
+	// Make RamenDRPolicy entries reuseable.
+	ramenDRPolicyKeysAndValues := make([]interface{}, 2)
+	ramenDRPolicyKeysAndValues[0] = "DRPolicy"
+	ramenDRPolicyKeysAndValues[1] = ramenDRPolicy.Name
+	// managedClusterSet is the set of managed clusters governed by this
+	// policy, which have replication relationship enabled between them.
+	var managedClusterSet []ramendrv1alpha1.ManagedCluster
+	// Populate managedClusterSet using mirrorPeer.
+	for _, managedCluster := range mirrorPeer.Spec.Items {
+		managedClusterSet = append(managedClusterSet, ramendrv1alpha1.ManagedCluster{
+			Name:          managedCluster.ClusterName,
+			S3ProfileName: "",
+		})
+	}
+	// Create or update RamenDRPolicy.
+	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, &ramenDRPolicy, func() error {
+		// Mutate object to the desired state.
+		ramenDRPolicy.Spec.DRClusterSet = managedClusterSet
+		ramenDRPolicy.Spec.SchedulingInterval = "1h"
+		// Set appropriate owner reference if RamenDRPolicy was just created.
+		logger.Info("Creating or updating RamenDR Policy.", ramenDRPolicyKeysAndValues...)
+		logger.V(2).Info("Setting owner reference to MirrorPeer.", ramenDRPolicyKeysAndValues...)
+		// Set MirrorPeer as RamenDRPolicy's owner reference.
+		return controllerutil.SetOwnerReference(&mirrorPeer.ObjectMeta, &ramenDRPolicy.ObjectMeta, r.Scheme)
+	})
+	if err != nil {
+		logger.Error(err, "Failed to create or update RamenDR Policy.", ramenDRPolicyKeysAndValues...)
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
 }
 
