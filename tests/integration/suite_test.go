@@ -24,15 +24,17 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -54,7 +56,10 @@ var _ = BeforeSuite(func() {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("../..", "config", "crd", "bases")},
+		CRDDirectoryPaths: []string{
+			filepath.Join("../..", "config", "crd", "bases"),
+			filepath.Join("..", "testdata"),
+		},
 		ErrorIfCRDPathMissing: true,
 	}
 
@@ -65,11 +70,36 @@ var _ = BeforeSuite(func() {
 	err = multiclusterv1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = clusterv1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
 	//+kubebuilder:scaffold:scheme
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+		Scheme:                 scheme.Scheme,
+		MetricsBindAddress:     ":8080",
+		Port:                   9443,
+		HealthProbeBindAddress: ":8081",
+		LeaderElection:         false,
+		LeaderElectionID:       "1d19c724.odf.openshift.io",
+	})
+	Expect(err).NotTo(HaveOccurred())
+	Expect(mgr).NotTo(BeNil())
+
+	err = (&controllers.MirrorPeerReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr)
+	Expect(err).NotTo(HaveOccurred())
+
+	go func() {
+		err = mgr.Start(ctrl.SetupSignalHandler())
+		Expect(err).ToNot(HaveOccurred())
+	}()
 
 }, 60)
 
