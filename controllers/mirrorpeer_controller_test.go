@@ -24,7 +24,6 @@ import (
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -32,15 +31,10 @@ import (
 )
 
 func TestMirrorPeerReconcilerReconcile(t *testing.T) {
-	scheme := runtime.NewScheme()
-	err := clusterv1.AddToScheme(scheme)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = multiclusterv1alpha1.AddToScheme(scheme)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Using the same scheme as manager to ensure consistency.
+	// Using a different scheme for test might cause issues like
+	// missing scheme in manager
+	scheme := mgrScheme
 
 	mirrorpeer := multiclusterv1alpha1.MirrorPeer{
 		ObjectMeta: metav1.ObjectMeta{
@@ -94,7 +88,7 @@ func TestMirrorPeerReconcilerReconcile(t *testing.T) {
 		},
 	}
 
-	_, err = r.Reconcile(ctx, req)
+	_, err := r.Reconcile(ctx, req)
 	if err != nil {
 		t.Errorf("MirrorPeerReconciler Reconcile() failed. Error: %s", err)
 	}
