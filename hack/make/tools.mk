@@ -13,11 +13,11 @@ endef
 
 ##@ Tools
 
-CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
+CONTROLLER_GEN = $(CWD)/bin/controller-gen
 controller-gen: ## Download controller-gen locally if necessary.
 	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.4.1)
 
-KUSTOMIZE = $(shell pwd)/bin/kustomize
+KUSTOMIZE = $(CWD)/bin/kustomize
 kustomize: ## Download kustomize locally if necessary.
 	$(call go-get-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v3@v3.8.7)
 
@@ -59,8 +59,8 @@ GOLANGCI_URL := https://raw.githubusercontent.com/golangci/golangci-lint/master/
 GOLANGCI_VERSION := 1.41.1
 
 .PHONY: golangci-bin
-GOLANGCI_BIN := $(shell pwd)/bin/golangci-lint
-GOLANGCI_INSTALLED_VER := $(shell $(GOLANGCI_BIN) version --format=short 2>&1)
+GOLANGCI_BIN := $(CWD)/bin/golangci-lint
+GOLANGCI_INSTALLED_VER := $(shell $(GOLANGCI_BIN) version --format=short 2>/dev/null)
 golangci-bin: ## Download goloanci-lint locally if necessary.
 ifeq (,$(GOLANGCI_INSTALLED_VER))
 	$(info Installing golangci-lint (version: $(GOLANGCI_VERSION)) into $(GOLANGCI_BIN))
@@ -70,6 +70,6 @@ else ifneq ($(GOLANGCI_VERSION),$(GOLANGCI_INSTALLED_VER))
 endif
 
 .PHONY: kubelinter-bin
-KUBELINTER_BIN := $(shell pwd)/bin/kube-linter
+KUBELINTER_BIN := $(CWD)/bin/kube-linter
 kubelinter-bin: ## Download kube-linter locally if necessary
 	$(call go-get-tool,$(KUBELINTER_BIN),golang.stackrox.io/kube-linter/cmd/kube-linter@0.2.2)

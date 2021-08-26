@@ -1,4 +1,7 @@
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
+CWD := $(shell pwd)
+
+.DEFAULT_GOAL := help
 
 # All variables are defined here
 include hack/make/vars.mk
@@ -43,16 +46,16 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
-golanci-lint: ## Run golangci-lint against code.
+golangci-lint: golangci-bin ## Run golangci-lint against code.
 	$(GOLANGCI_BIN) run ./...
 
-kube-linter: ## Run kube-linter against YAML files
+kube-linter: kubelinter-bin ## Run kube-linter against YAML files
 	$(KUBELINTER_BIN) lint ./ --config ./.kube-linter-config.yaml
 
 unit-test: ## Run unit tests
 	go test ./... -v -tags unit -coverprofile unit-cover.out
 
-ENVTEST_ASSETS_DIR=$(shell pwd)/testbin
+ENVTEST_ASSETS_DIR=$(CWD)/testbin
 OPENSHIFT_CI ?= false
 test: ## Run integration tests.
 ifeq ($(OPENSHIFT_CI), true)
@@ -68,13 +71,13 @@ endif
 
 ##@ Build
 
-build: generate fmt vet ## Build manager binary.
+build: generate fmt vet golangci-lint kube-linter ## Build manager binary.
 	go build -o bin/manager main.go
 
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
-docker-build: generate fmt vet ## Build docker image with the manager.
+docker-build: generate fmt vet golangci-lint kube-linter ## Build docker image with the manager.
 	docker build -t ${IMG} .
 
 docker-push: ## Push docker image with the manager.
@@ -103,7 +106,7 @@ bundle: manifests kustomize operator-sdk ## Generate bundle manifests and metada
 	$(OSDK) bundle validate ./bundle
 
 .PHONY: bundle-build
-bundle-build: ## Build the bundle image.
+bundle-build: bundle ## Build the bundle image.
 	docker build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
 
 .PHONY: bundle-push
