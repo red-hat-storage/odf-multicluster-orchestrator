@@ -23,11 +23,13 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
@@ -210,6 +212,84 @@ var _ = Describe("MirrorPeer Validations", func() {
 				}
 				err = k8sClient.Update(context.TODO(), &newMirrorPeer, &client.UpdateOptions{})
 				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+	})
+})
+
+var _ = Describe("MirrorPeerReconciler Reconcile", func() {
+	When("creating MirrorPeer", func() {
+		BeforeEach(func() {
+			managedcluster1 := clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-provider-cluster1",
+				},
+				Spec: clusterv1.ManagedClusterSpec{},
+			}
+			err := k8sClient.Create(context.TODO(), &managedcluster1, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			managedcluster2 := clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-provider-cluster2",
+				},
+				Spec: clusterv1.ManagedClusterSpec{},
+			}
+			err = k8sClient.Create(context.TODO(), &managedcluster2, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			newMirrorPeer := mirrorPeer.DeepCopy()
+			newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
+				Items: []multiclusterv1alpha1.PeerRef{
+					{
+						ClusterName: "test-provider-cluster1",
+						StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
+							Name:      "test-storagecluster-1",
+							Namespace: "test-storagecluster-ns1",
+						},
+					},
+					{
+						ClusterName: "test-provider-cluster2",
+						StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
+							Name:      "test-storagecluster-2",
+							Namespace: "test-storagecluster-ns2",
+						},
+					},
+				},
+			}
+			err = k8sClient.Create(context.TODO(), newMirrorPeer, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+		})
+		AfterEach(func() {
+			newMirrorPeer := mirrorPeer.DeepCopy()
+			err := k8sClient.Delete(context.TODO(), newMirrorPeer, &client.DeleteOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = k8sClient.DeleteAllOf(context.TODO(), &clusterv1.ManagedCluster{}, &client.DeleteAllOfOptions{
+				ListOptions: client.ListOptions{
+					Namespace: "",
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+		})
+		It("should be able to read ManagedCluster object", func() {
+			By("providing valid ManagedCluster names", func() {
+
+				r := controllers.MirrorPeerReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				req := ctrl.Request{
+					NamespacedName: types.NamespacedName{
+						Name: "test-mirrorpeer",
+					},
+				}
+
+				_, err := r.Reconcile(context.TODO(), req)
+				Expect(err).NotTo(HaveOccurred())
+
 			})
 		})
 	})
