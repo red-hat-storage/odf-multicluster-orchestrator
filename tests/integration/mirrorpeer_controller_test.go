@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/gomega"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -38,6 +39,16 @@ var (
 			Name: "test-mirrorpeer",
 		},
 		// Spec to be filled manually for each individual case
+	}
+	ns11 = v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-provider-cluster1",
+		},
+	}
+	ns22 = v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-provider-cluster2",
+		},
 	}
 	mirrorPeerLookupKey = types.NamespacedName{Namespace: mirrorPeer.Namespace, Name: mirrorPeer.Name}
 )
@@ -238,6 +249,11 @@ var _ = Describe("MirrorPeerReconciler Reconcile", func() {
 			err = k8sClient.Create(context.TODO(), &managedcluster2, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 
+			err = k8sClient.Create(context.TODO(), &ns11, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Create(context.TODO(), &ns22, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
 			newMirrorPeer := mirrorPeer.DeepCopy()
 			newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
 				Items: []multiclusterv1alpha1.PeerRef{
@@ -270,6 +286,11 @@ var _ = Describe("MirrorPeerReconciler Reconcile", func() {
 					Namespace: "",
 				},
 			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = k8sClient.Delete(context.TODO(), &ns11, &client.DeleteOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Delete(context.TODO(), &ns22, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
 
 		})
