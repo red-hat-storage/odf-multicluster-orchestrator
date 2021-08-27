@@ -4,6 +4,7 @@ import (
 	"crypto/sha512"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
@@ -169,4 +170,20 @@ func CreatePeerRefFromSecret(secret *corev1.Secret) (multiclusterv1alpha1.PeerRe
 			Namespace: string(secret.Data[NamespaceKey])},
 	}
 	return retPeerRef, nil
+}
+
+func FindMatchingSecretWithPeerRef(peerRef multiclusterv1alpha1.PeerRef, secrets []corev1.Secret) *corev1.Secret {
+	var matchingSourceSecret *corev1.Secret
+	for _, eachSecret := range secrets {
+		secretPeerRef, err := CreatePeerRefFromSecret(&eachSecret)
+		// ignore any error and continue with the next
+		if err != nil {
+			continue
+		}
+		if reflect.DeepEqual(secretPeerRef, peerRef) {
+			matchingSourceSecret = &eachSecret
+			break
+		}
+	}
+	return matchingSourceSecret
 }

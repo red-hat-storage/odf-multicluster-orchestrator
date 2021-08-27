@@ -110,6 +110,24 @@ func processDestinationSecretUpdation(ctx context.Context, rc client.Client, des
 	return err
 }
 
+func processDestinationSecretCleanup(ctx context.Context, rc client.Client) error {
+	logger := log.FromContext(ctx)
+	allDestinationSecrets, err := fetchAllDestinationSecrets(ctx, rc, "")
+	if err != nil {
+		logger.Error(err, "Unable to get all the destination secrets")
+		return err
+	}
+	var anyError error
+	for _, eachDSecret := range allDestinationSecrets {
+		err = processDestinationSecretUpdation(ctx, rc, &eachDSecret)
+		if err != nil {
+			anyError = err
+			logger.Error(err, "Failed to update destination secret", "secret", eachDSecret)
+		}
+	}
+	return anyError
+}
+
 // processDeletedSecrets finds out which type of secret is deleted
 // and do appropriate action
 func processDeletedSecrets(ctx context.Context, rc client.Client, req types.NamespacedName) error {
@@ -267,4 +285,40 @@ func PeersConnectedToSecret(secret *corev1.Secret, mirrorPeers []multiclusterv1a
 		return nil, err
 	}
 	return PeersConnectedToPeerRef(sourcePeerRef, mirrorPeers), nil
+}
+
+// fetchAllInternalSecrets will get all the internal secrets in the namespace and with the provided label
+// if the namespace is empty, it will fetch from all the namespaces
+// if the label type is 'Ignore', it will fetch all the internal secrets (both source and destination)
+func fetchAllInternalSecrets(ctx context.Context, rc client.Client, namespace string, secretLabelType common.SecretLabelType) ([]corev1.Secret, error) {
+	var err error
+	var sourceSecretList corev1.SecretList
+	var clientListOptions []client.ListOption
+	if namespace != "" {
+		clientListOptions = append(clientListOptions, client.InNamespace(namespace))
+	}
+	if secretLabelType == "" {
+		return nil, errors.New("empty 'SecretLabelType' provided. please provide 'Ignore' label type")
+	}
+	var listLabelOption client.ListOption
+	if secretLabelType != common.IgnoreLabel {
+		listLabelOption = client.MatchingLabels(map[string]string{common.SecretLabelTypeKey: string(secretLabelType)})
+	} else {
+		// if the 'secretLabelType' is asking to ignore, then
+		// don't check the label value
+		// just check whether the secret has the internal label key
+		listLabelOption = client.HasLabels([]string{common.SecretLabelTypeKey})
+	}
+	clientListOptions = append(clientListOptions, listLabelOption)
+	// find all the secrets with the provided internal label
+	err = rc.List(ctx, &sourceSecretList, clientListOptions...)
+	return sourceSecretList.Items, err
+}
+
+func fetchAllSourceSecrets(ctx context.Context, rc client.Client, namespace string) ([]corev1.Secret, error) {
+	return fetchAllInternalSecrets(ctx, rc, namespace, common.SourceLabel)
+}
+
+func fetchAllDestinationSecrets(ctx context.Context, rc client.Client, namespace string) ([]corev1.Secret, error) {
+	return fetchAllInternalSecrets(ctx, rc, namespace, common.DestinationLabel)
 }
