@@ -67,6 +67,13 @@ rules:
   verbs:
   - '*'
 - apiGroups:
+  - ""
+  resources:
+  - events
+  - secrets
+  verbs:
+  - '*'
+- apiGroups:
   - multicluster.odf.openshift.io
   resources:
   - mirrorpeers
