@@ -20,6 +20,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type PhaseType string
+
+const (
+	ExchangingSecret PhaseType = "ExchangingSecret"
+	ExchangedSecret  PhaseType = "ExchangedSecret"
+)
+
 // StorageClusterRef holds a reference to a StorageCluster
 type StorageClusterRef struct {
 	Name      string `json:"name"`
@@ -47,6 +54,8 @@ type MirrorPeerSpec struct {
 
 // MirrorPeerStatus defines the observed state of MirrorPeer
 type MirrorPeerStatus struct {
+	Phase   PhaseType `json:"phase,omitempty"`
+	Message string    `json:"message,omitempty"`
 }
 
 //+kubebuilder:object:root=true

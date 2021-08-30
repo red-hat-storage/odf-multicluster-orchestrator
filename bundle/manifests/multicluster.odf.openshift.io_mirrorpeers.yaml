@@ -66,6 +66,11 @@ spec:
             type: object
           status:
             description: MirrorPeerStatus defines the observed state of MirrorPeer
+            properties:
+              message:
+                type: string
+              phase:
+                type: string
             type: object
         type: object
     served: true

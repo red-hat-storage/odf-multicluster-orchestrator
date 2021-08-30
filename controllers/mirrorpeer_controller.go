@@ -22,15 +22,20 @@ import (
 	tokenexchange "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -127,7 +132,34 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	err = processMirrorPeerSecretChanges(ctx, r.Client, mirrorPeer)
-	return ctrl.Result{}, err
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	tokensExchanged, err := r.checkTokenExchangeStatus(ctx, mirrorPeer)
+
+	if err != nil {
+		logger.Info("Error while exchanging tokens", "MirrorPeer", mirrorPeer)
+		mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangingSecret
+		mirrorPeer.Status.Message = err.Error()
+		statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
+		if statusErr != nil {
+			logger.Error(statusErr, "Error occured while updating the status of mirrorpeer", "MirrorPeer", mirrorPeer)
+		}
+		return ctrl.Result{}, err
+	}
+
+	if tokensExchanged {
+		logger.Info("Tokens exchanged", "MirrorPeer", mirrorPeer)
+		mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangedSecret
+		mirrorPeer.Status.Message = ""
+		statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
+		if statusErr != nil {
+			logger.Error(statusErr, "Error occured while updating the status of mirrorpeer", "MirrorPeer", mirrorPeer)
+		}
+		return ctrl.Result{}, nil
+	}
+
+	return ctrl.Result{}, nil
 }
 
 func processMirrorPeerSecretChanges(ctx context.Context, rc client.Client, mirrorPeerObj multiclusterv1alpha1.MirrorPeer) error {
@@ -161,9 +193,92 @@ func processMirrorPeerSecretChanges(ctx context.Context, rc client.Client, mirro
 	return anyErr
 }
 
+func (r *MirrorPeerReconciler) checkTokenExchangeStatus(ctx context.Context, mp multiclusterv1alpha1.MirrorPeer) (bool, error) {
+	logger := log.FromContext(ctx)
+
+	//TODO Add support for more peer refs when applicable
+	pr1 := mp.Spec.Items[0]
+	pr2 := mp.Spec.Items[1]
+
+	err := r.checkForSourceSecret(ctx, pr1)
+	if err != nil {
+		logger.Error(err, "Failed to find valid source secret", "PeerRef", pr1)
+		return false, err
+	}
+
+	err = r.checkForDestinationSecret(ctx, pr1, pr2.ClusterName)
+	if err != nil {
+		logger.Error(err, "Failed to find valid destination secret", "PeerRef", pr1)
+		return false, err
+	}
+
+	err = r.checkForSourceSecret(ctx, pr2)
+	if err != nil {
+		logger.Error(err, "Failed to find valid source secret", "PeerRef", pr2)
+		return false, err
+	}
+
+	err = r.checkForDestinationSecret(ctx, pr2, pr1.ClusterName)
+	if err != nil {
+		logger.Error(err, "Failed to find destination secret", "PeerRef", pr2)
+		return false, err
+	}
+
+	return true, nil
+}
+
+func (r *MirrorPeerReconciler) checkForSourceSecret(ctx context.Context, peerRef multiclusterv1alpha1.PeerRef) error {
+	logger := log.FromContext(ctx)
+	prSecretName := common.CreateUniqueSecretName(peerRef.ClusterName, peerRef.StorageClusterRef.Namespace, peerRef.StorageClusterRef.Name)
+	var peerSourceSecret corev1.Secret
+	err := r.Client.Get(ctx, types.NamespacedName{
+		Name: prSecretName,
+		// Source Namespace for the secret
+		Namespace: peerRef.ClusterName,
+	}, &peerSourceSecret)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			logger.Info("Source secret not found", "Secret", prSecretName)
+			return nil
+		}
+		return err
+	}
+	err = common.ValidateSourceSecret(&peerSourceSecret)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+func (r *MirrorPeerReconciler) checkForDestinationSecret(ctx context.Context, peerRef multiclusterv1alpha1.PeerRef, destNamespace string) error {
+	logger := log.FromContext(ctx)
+	prSecretName := common.CreateUniqueSecretName(peerRef.ClusterName, peerRef.StorageClusterRef.Namespace, peerRef.StorageClusterRef.Name)
+	var peerDestinationSecret corev1.Secret
+	err := r.Client.Get(ctx, types.NamespacedName{
+		Name: prSecretName,
+		// Destination Namespace for the secret
+		Namespace: destNamespace,
+	}, &peerDestinationSecret)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			logger.Info("Destination secret not found", "Secret", prSecretName)
+			return nil
+		}
+		return err
+	}
+	err = common.ValidateDestinationSecret(&peerDestinationSecret)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	mpPredicate := common.ComposePredicates(predicate.GenerationChangedPredicate{})
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&multiclusterv1alpha1.MirrorPeer{}).
+		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(mpPredicate)).
 		Complete(r)
 }
