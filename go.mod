@@ -3,13 +3,10 @@ module github.com/red-hat-storage/odf-multicluster-orchestrator
 go 1.16
 
 require (
-	cloud.google.com/go v0.81.0 // indirect
-	github.com/google/go-cmp v0.5.6 // indirect
-	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.14.0
-	github.com/openshift/api v3.9.1-0.20190924102528-32369d4db2ad+incompatible // indirect
 	github.com/openshift/library-go v0.0.0-20210727084322-8a96c0a97c06
+	github.com/openshift/ocs-operator v0.0.1-alpha2
 	github.com/rook/rook v1.7.0
 	github.com/spf13/cobra v1.1.3
 	github.com/stretchr/testify v1.7.0
