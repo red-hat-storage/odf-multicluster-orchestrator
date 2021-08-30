@@ -2,6 +2,7 @@ package addons
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -58,6 +59,14 @@ func getFakeTokenExchangeController(t *testing.T, hubResources, spokeResources [
 	}
 
 }
+
+func fakeSecretData(t *testing.T) []byte {
+	token := map[string][]byte{"token": []byte("fakeToken")}
+	tokenBytes, err := json.Marshal(token)
+	assert.NoError(t, err)
+	return tokenBytes
+}
+
 func TestGreenSecretSync(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -83,7 +92,7 @@ func TestGreenSecretSync(t *testing.T) {
 					Data: map[string][]byte{"namespace": []byte("spokeNS")},
 				},
 			},
-			errExpected:  false,
+			errExpected:  true,
 			syncExpected: false,
 		},
 		{
@@ -114,7 +123,10 @@ func TestGreenSecretSync(t *testing.T) {
 							common.SecretLabelTypeKey: string(common.DestinationLabel),
 						},
 					},
-					Data: map[string][]byte{"namespace": []byte("spokeNS")},
+					Data: map[string][]byte{
+						"namespace":   []byte("spokeNS"),
+						"secret-data": fakeSecretData(t),
+					},
 				},
 			},
 			spokeResources: []runtime.Object{
