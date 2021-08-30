@@ -21,6 +21,7 @@ import (
 
 	tokenexchange "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -125,7 +126,39 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	return ctrl.Result{}, nil
+	err = processMirrorPeerSecretChanges(ctx, r.Client, mirrorPeer)
+	return ctrl.Result{}, err
+}
+
+func processMirrorPeerSecretChanges(ctx context.Context, rc client.Client, mirrorPeerObj multiclusterv1alpha1.MirrorPeer) error {
+	logger := log.FromContext(ctx)
+	var anyErr error
+
+	for _, eachPeerRef := range mirrorPeerObj.Spec.Items {
+		sourceSecrets, err := fetchAllSourceSecrets(ctx, rc, eachPeerRef.ClusterName)
+		if err != nil {
+			logger.Error(err, "Unable to get a list of source secrets", "namespace", eachPeerRef.ClusterName)
+			anyErr = err
+			continue
+		}
+		// get the source secret associated with the PeerRef
+		matchingSourceSecret := common.FindMatchingSecretWithPeerRef(eachPeerRef, sourceSecrets)
+		// if no match found (ie; no source secret found); just continue
+		if matchingSourceSecret == nil {
+			continue
+		}
+		err = createOrUpdateDestinationSecretsFromSource(ctx, rc, matchingSourceSecret, mirrorPeerObj)
+		if err != nil {
+			logger.Error(err, "Error while updating Destination secrets", "source-secret", *matchingSourceSecret)
+			anyErr = err
+		}
+	}
+	if anyErr == nil {
+		// if there are no other errors,
+		// cleanup any other orphan destination secrets
+		anyErr = processDestinationSecretCleanup(ctx, rc)
+	}
+	return anyErr
 }
 
 // SetupWithManager sets up the controller with the Manager.
