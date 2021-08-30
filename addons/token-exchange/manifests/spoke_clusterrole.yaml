@@ -9,3 +9,6 @@ rules:
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
+- apiGroups: ["ceph.rook.io"]
+  resources: ["cephclusters"]
+  verbs: ["get", "list"]

@@ -153,6 +153,7 @@ func (o *ManagerOptions) runManager() {
 		return err
 	})
 
+	setupLog.Info("starting addon manager")
 	g.Go(func() error {
 		err := addonMgr.Start(ctx)
 		return err

@@ -157,6 +157,11 @@ func CreateUniqueName(params ...string) string {
 	return fmt.Sprintf("%x", sha512.Sum512([]byte(genStr)))
 }
 
+// CreateUniqueSecretName function creates a name of 40 chars using sha512 hex sum from the given parameters
+func CreateUniqueSecretName(managedCluster, storageClusterNamespace, storageClusterName string) string {
+	return CreateUniqueName(managedCluster, storageClusterNamespace, storageClusterName)[0:39]
+}
+
 // CreatePeerRefFromSecret function creates a 'PeerRef' object
 // from the internal secret details
 func CreatePeerRefFromSecret(secret *corev1.Secret) (multiclusterv1alpha1.PeerRef, error) {
