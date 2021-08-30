@@ -12,3 +12,6 @@ rules:
 - apiGroups: ["ceph.rook.io"]
   resources: ["cephclusters"]
   verbs: ["get", "list"]
+- apiGroups: ["storageclusters.ocs.openshift.io"]
+  resources: ["storageclusters"]
+  verbs: ["get", "update"]
