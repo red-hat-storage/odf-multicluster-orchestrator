@@ -2,6 +2,7 @@ package addons
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/openshift/library-go/pkg/controller/factory"
@@ -81,23 +82,24 @@ func (c *greenSecretTokenExchangeAgentController) sync(ctx context.Context, sync
 		return fmt.Errorf("failed to get the sercet %q in namespace %q in hub. Error %v", name, namespace, err)
 	}
 
-	if secret.GetLabels()[common.SecretLabelTypeKey] != string(common.DestinationLabel) {
-		klog.Infof("secret %q in namespace %q is not a green secret. Skip syncing with the spoke cluster", secret.Name, namespace)
-		return nil
+	if err := validateSecret(*secret); err != nil {
+		return fmt.Errorf("failed to validate secret %q", secret.Name)
+	}
+
+	data := make(map[string][]byte)
+	err = json.Unmarshal(secret.Data[common.SecretDataKey], &data)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal secret data for the secret %q in namespace %q. %v", secret.Name, secret.Namespace, err)
 	}
 
 	toNamespace := string(secret.Data["namespace"])
-	if toNamespace == "" {
-		return fmt.Errorf("missing storageCluster namespace info in secret %q in namespace %q", secret.Name, namespace)
-	}
-
 	newSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secret.Name,
 			Namespace: toNamespace,
 			Labels:    map[string]string{CreatedByLabelKey: CreatedByLabelValue},
 		},
-		Data: map[string][]byte{"secret-data": secret.Data[string(common.SecretDataKey)]},
+		Data: data,
 	}
 
 	// Create secrete on spoke cluster
@@ -107,6 +109,26 @@ func (c *greenSecretTokenExchangeAgentController) sync(ctx context.Context, sync
 	}
 
 	klog.Infof("successfully synced hub secret %q in managed clustr in namespace %q", newSecret.Name, toNamespace)
+
+	return nil
+}
+
+func validateSecret(secret corev1.Secret) error {
+	if secret.GetLabels()[common.SecretLabelTypeKey] != string(common.DestinationLabel) {
+		return fmt.Errorf("secret %q in namespace %q is not a green secret. Skip syncing with the spoke cluster", secret.Name, secret.Namespace)
+	}
+
+	if secret.Data == nil {
+		return fmt.Errorf("secret data not found for the secret %q in namespace %q", secret.Name, secret.Namespace)
+	}
+
+	if string(secret.Data["namespace"]) == "" {
+		return fmt.Errorf("missing storageCluster namespace info in secret %q in namespace %q", secret.Name, secret.Namespace)
+	}
+
+	if string(secret.Data[common.SecretDataKey]) == "" {
+		return fmt.Errorf("missing secret-data info in secret %q in namespace %q", secret.Name, secret.Namespace)
+	}
 
 	return nil
 }
