@@ -19,3 +19,6 @@ rules:
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]
   verbs: ["get", "list", "watch", "create", "update", "delete"]
+- apiGroups: ["ocs.openshift.io"]
+  resources: ["storageclusters"]
+  verbs: ["get", "list", "patch", "update"]
