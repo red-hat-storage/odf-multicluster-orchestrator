@@ -84,6 +84,16 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 		controllerContext.EventRecorder,
 	)
 
+	blueSecretAgent := newblueSecretTokenExchangeAgentController(
+		hubKubeClient,
+		hubKubeInformerFactory.Core().V1().Secrets(),
+		spokeKubeClient,
+		spokeKubeInformerFactory.Core().V1().Secrets(),
+		o.SpokeClusterName,
+		controllerContext.EventRecorder,
+		controllerContext.KubeConfig,
+	)
+
 	leaseUpdater := lease.NewLeaseUpdater(
 		spokeKubeClient,
 		TokenExchangeName,
@@ -93,6 +103,7 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 	go hubKubeInformerFactory.Start(ctx.Done())
 	go spokeKubeInformerFactory.Start(ctx.Done())
 	go greenSecretAgent.Run(ctx, 1)
+	go blueSecretAgent.Run(ctx, 1)
 	go leaseUpdater.Start(ctx)
 
 	<-ctx.Done()
