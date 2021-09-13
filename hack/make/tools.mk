@@ -73,3 +73,8 @@ endif
 KUBELINTER_BIN := $(CWD)/bin/kube-linter
 kubelinter-bin: ## Download kube-linter locally if necessary
 	$(call go-get-tool,$(KUBELINTER_BIN),golang.stackrox.io/kube-linter/cmd/kube-linter@0.2.2)
+
+.PHONY: setup-envtest-bin
+SETUP_ENVTEST_BIN := $(CWD)/bin/setup-envtest
+setup-envtest-bin: ## Download setup-envtest locally if necessary
+	$(call go-get-tool,$(SETUP_ENVTEST_BIN),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
