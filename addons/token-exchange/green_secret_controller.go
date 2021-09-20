@@ -59,6 +59,7 @@ func newgreenSecretTokenExchangeAgentController(
 	}
 
 	eventFilterFn := func(obj interface{}) bool {
+		fmt.Println("here")
 		metaObj, has := obj.(metav1.Object)
 		if !has {
 			return false

@@ -75,6 +75,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
+			logger.Info("test - ", "request", req)
 			logger.Info("Could not find MirrorPeer. Ignoring since object must have been deleted")
 			return ctrl.Result{}, nil
 		}
