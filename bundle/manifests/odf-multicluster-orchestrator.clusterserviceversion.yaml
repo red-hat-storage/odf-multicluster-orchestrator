@@ -8,6 +8,9 @@ metadata:
           "apiVersion": "multicluster.odf.openshift.io/v1alpha1",
           "kind": "MirrorPeer",
           "metadata": {
+            "labels": {
+              "control-plane": "odfmo-controller-manager"
+            },
             "name": "mirrorpeer-sample"
           },
           "spec": {
@@ -18,6 +21,8 @@ metadata:
     capabilities: Basic Install
     operators.operatorframework.io/builder: operator-sdk-v1.8.0+git
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
+  labels:
+    control-plane: odfmo-controller-manager
   name: odf-multicluster-orchestrator.v0.0.1
   namespace: placeholder
 spec:
@@ -155,12 +160,12 @@ spec:
           replicas: 1
           selector:
             matchLabels:
-              control-plane: controller-manager
+              control-plane: odfmo-controller-manager
           strategy: {}
           template:
             metadata:
               labels:
-                control-plane: controller-manager
+                control-plane: odfmo-controller-manager
             spec:
               containers:
               - args:
