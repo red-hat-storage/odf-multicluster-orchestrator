@@ -25,3 +25,6 @@ resources:
 #    # Update the indices in this path if adding or removing volumes in the manager's Deployment.
 #    - op: remove
 #      path: /spec/template/spec/volumes/0
+# Labels to add to all resources and selectors.
+commonLabels:
+ control-plane: odfmo-controller-manager
