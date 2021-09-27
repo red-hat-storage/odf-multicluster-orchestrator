@@ -107,6 +107,14 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 	logger.V(2).Info("All validations for MirrorPeer passed", "MirrorPeer", req.NamespacedName)
 
+	if mirrorPeer.Status.Phase == "" {
+		mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangingSecret
+		statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
+		if statusErr != nil {
+			logger.Error(statusErr, "Error occurred while updating the status of mirrorpeer", "MirrorPeer", mirrorPeer)
+		}
+	}
+
 	// Create or Update ManagedClusterAddon
 	for i := range mirrorPeer.Spec.Items {
 		managedClusterAddOn := addonapiv1alpha1.ManagedClusterAddOn{
@@ -138,12 +146,15 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	tokensExchanged, err := r.checkTokenExchangeStatus(ctx, mirrorPeer)
 
 	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			logger.Info("Secrets not found; Attempting to reconcile again")
+			return ctrl.Result{}, nil
+		}
 		logger.Info("Error while exchanging tokens", "MirrorPeer", mirrorPeer)
-		mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangingSecret
 		mirrorPeer.Status.Message = err.Error()
 		statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
 		if statusErr != nil {
-			logger.Error(statusErr, "Error occured while updating the status of mirrorpeer", "MirrorPeer", mirrorPeer)
+			logger.Error(statusErr, "Error occurred while updating the status of mirrorpeer", "MirrorPeer", mirrorPeer)
 		}
 		return ctrl.Result{}, err
 	}
@@ -236,13 +247,14 @@ func (r *MirrorPeerReconciler) checkForSourceSecret(ctx context.Context, peerRef
 		// Source Namespace for the secret
 		Namespace: peerRef.ClusterName,
 	}, &peerSourceSecret)
+
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.Info("Source secret not found", "Secret", prSecretName)
-			return nil
+			return err
 		}
-		return err
 	}
+
 	err = common.ValidateSourceSecret(&peerSourceSecret)
 	if err != nil {
 		return err
@@ -262,9 +274,8 @@ func (r *MirrorPeerReconciler) checkForDestinationSecret(ctx context.Context, pe
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.Info("Destination secret not found", "Secret", prSecretName)
-			return nil
+			return err
 		}
-		return err
 	}
 	err = common.ValidateDestinationSecret(&peerDestinationSecret)
 	if err != nil {
