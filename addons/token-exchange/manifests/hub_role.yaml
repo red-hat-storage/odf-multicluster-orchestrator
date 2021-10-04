@@ -4,6 +4,9 @@ metadata:
   name: open-cluster-management:token-exchange:agent
   namespace: {{ .ClusterName }}
 rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
 - apiGroups: ["addon.open-cluster-management.io"]
   resources: ["managedclusteraddons"]
   verbs: ["get", "list", "watch", "update", "patch"]
