@@ -4,6 +4,8 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.4.1
   creationTimestamp: null
+  labels:
+    control-plane: odfmo-controller-manager
   name: mirrorpeers.multicluster.odf.openshift.io
 spec:
   group: multicluster.odf.openshift.io
