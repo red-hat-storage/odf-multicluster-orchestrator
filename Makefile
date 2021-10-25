@@ -102,6 +102,9 @@ undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/confi
 bundle: manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
 	$(OSDK) generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	cd config/manifests/bases && $(KUSTOMIZE) edit add annotation --force 'olm.skipRange':"$(SKIP_RANGE)" && \
+		$(KUSTOMIZE) edit add patch --name odf-multicluster-orchestrator.v0.0.0 --kind ClusterServiceVersion\
+		--patch '[{"op": "replace", "path": "/spec/replaces", "value": "$(REPLACES)"}]'
 	export IMG=$(IMG) && $(KUSTOMIZE) build config/manifests | envsubst | $(OSDK) generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
 	$(OSDK) bundle validate ./bundle
 

@@ -50,3 +50,13 @@ CATALOG_IMG ?= $(IMAGE_REGISTRY)/$(REGISTRY_NAMESPACE)/$(CATALOG_IMAGE_NAME):$(I
 ifneq ($(origin CATALOG_BASE_IMG), undefined)
 FROM_INDEX_OPT := --from-index $(CATALOG_BASE_IMG)
 endif
+
+# Each CSV has a replaces parameter that indicates which Operator it replaces.
+# This builds a graph of CSVs that can be queried by OLM, and updates can be
+# shared between channels. Channels can be thought of as entry points into
+# the graph of updates:
+REPLACES ?=
+
+# Creating the New CatalogSource requires publishing CSVs that replace one Operator,
+# but can skip several. This can be accomplished using the skipRange annotation:
+SKIP_RANGE ?=
