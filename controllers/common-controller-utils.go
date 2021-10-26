@@ -134,9 +134,7 @@ func processDeletedSecrets(ctx context.Context, rc client.Client, req types.Name
 	var err error
 	logger := log.FromContext(ctx, "controller", "MirrorPeerController")
 	// get all the secrets with the same name
-	var secretList corev1.SecretList
-	var hasLabel client.HasLabels = []string{common.SecretLabelTypeKey}
-	err = rc.List(ctx, &secretList, &hasLabel)
+	allSecrets, err := fetchAllInternalSecrets(ctx, rc, "", common.IgnoreLabel)
 	if err != nil {
 		logger.Error(err, "Unable to get the list of secrets")
 		return err
@@ -146,7 +144,7 @@ func processDeletedSecrets(ctx context.Context, rc client.Client, req types.Name
 	// sourceSecretPointer will point to the source secret
 	var sourceSecretPointer *corev1.Secret
 	// append all the secrets which have the same requested name
-	for _, eachSecret := range secretList.Items {
+	for _, eachSecret := range allSecrets {
 		if eachSecret.Name == req.Name {
 			// check similarly named secret is present (or not)
 			if secretType := eachSecret.Labels[common.SecretLabelTypeKey]; secretType == string(common.SourceLabel) {
@@ -193,42 +191,9 @@ func processDeletedSecrets(ctx context.Context, rc client.Client, req types.Name
 		// in this section, one of the destination is removed
 		// action: use the source secret pointed by 'sourceSecretPointer'
 		// and restore the missing destination secret
-		allMirrorPeers, err := fetchAllMirrorPeers(ctx, rc)
+		err = createOrUpdateDestinationSecretsFromSource(ctx, rc, sourceSecretPointer)
 		if err != nil {
-			return err
-		}
-		var destPeerPointer *multiclusterv1alpha1.PeerRef
-		uniqueConnectedPeers, err := PeersConnectedToSecret(sourceSecretPointer, allMirrorPeers)
-		if err != nil {
-			logger.Error(err, "ConnectedPeer returned an error", "secret", sourceSecretPointer, "mirrorpeers", allMirrorPeers)
-			return err
-		}
-
-		for _, eachPeer := range uniqueConnectedPeers {
-			// compare the 'ClusterName' and requested 'Namespace'
-			// as the managed cluster name will be mapped to a
-			// namespace in HUB
-			if eachPeer.ClusterName == req.Namespace {
-				// break from the loop, as we found the PeerRef
-				// matching the destination 'namespace'
-				// PS: there will be only ONE destination
-				// (in a namespace) corresponding to a source
-				destPeerPointer = eachPeer.DeepCopy()
-				break
-			}
-		}
-		// check if we didn't find a mapping destination Peer
-		if destPeerPointer == nil {
-			// most probably source is deleted or connection in MirrorPeer CR has reset
-			// since 'logger' don't have a WARNING, printing this as an error,
-			// even though we are not returning any error
-			logger.Error(nil, "No Peers found for the provided request", "request", req, "source-secret", sourceSecretPointer, "existing-peers", uniqueConnectedPeers, "all-mirrorpeer-objs", allMirrorPeers)
-			return nil
-		}
-		namedPeerRef := NewNamedPeerRefWithSecretData(sourceSecretPointer, *destPeerPointer)
-		err = namedPeerRef.CreateOrUpdateDestinationSecret(ctx, rc)
-		if err != nil {
-			logger.Error(err, "Unable to update the destination secret", "PeerRef", *destPeerPointer)
+			logger.Error(err, "Unable to update the destination secret", "source-secret", sourceSecretPointer)
 			return err
 		}
 	}
