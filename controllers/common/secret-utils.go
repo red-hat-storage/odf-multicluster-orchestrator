@@ -27,6 +27,14 @@ const (
 	NamespaceKey                          = "namespace"
 	StorageClusterNameKey                 = "storage-cluster-name"
 	SecretDataKey                         = "secret-data"
+
+	// MCG keys
+	S3Endpoint         = "s3CompatibleEndpoint"
+	S3BucketName       = "s3Bucket"
+	S3ProfileName      = "s3ProfileName"
+	AwsAccessKeyId     = "AWS_ACCESS_KEY_ID"
+	AwsSecretAccessKey = "AWS_SECRET_ACCESS_KEY"
+	S3SecretPrefix     = "odr-s3secret"
 )
 
 var (
@@ -158,8 +166,8 @@ func CreateUniqueName(params ...string) string {
 }
 
 // CreateUniqueSecretName function creates a name of 40 chars using sha512 hex sum from the given parameters
-func CreateUniqueSecretName(managedCluster, storageClusterNamespace, storageClusterName string) string {
-	return CreateUniqueName(managedCluster, storageClusterNamespace, storageClusterName)[0:39]
+func CreateUniqueSecretName(managedCluster, namespace, name string) string {
+	return CreateUniqueName(managedCluster, namespace, name)[0:39]
 }
 
 // CreatePeerRefFromSecret function creates a 'PeerRef' object

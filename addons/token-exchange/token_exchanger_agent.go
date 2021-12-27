@@ -10,11 +10,9 @@ import (
 	"github.com/openshift/library-go/pkg/operator/resource/resourceapply"
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	corev1lister "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	"open-cluster-management.io/addon-framework/pkg/lease"
@@ -42,6 +40,7 @@ func NewAgentCommand() *cobra.Command {
 type AgentOptions struct {
 	HubKubeconfigFile string
 	SpokeClusterName  string
+	Namespace         string
 }
 
 // NewAgentOptions returns the flags with default value set
@@ -53,6 +52,7 @@ func (o *AgentOptions) AddFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 	flags.StringVar(&o.HubKubeconfigFile, "hub-kubeconfig", o.HubKubeconfigFile, "Location of kubeconfig file to connect to hub cluster.")
 	flags.StringVar(&o.SpokeClusterName, "cluster-name", o.SpokeClusterName, "Name of spoke cluster.")
+	flags.StringVar(&o.Namespace, "namespace", o.Namespace, "Agent install namespace.")
 }
 
 // RunAgent starts the controllers on agent to process work from hub.
@@ -90,7 +90,9 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 		hubKubeInformerFactory.Core().V1().Secrets(),
 		spokeKubeClient,
 		spokeKubeInformerFactory.Core().V1().Secrets(),
+		spokeKubeInformerFactory.Core().V1().ConfigMaps(),
 		o.SpokeClusterName,
+		o.Namespace,
 		controllerContext.EventRecorder,
 		controllerContext.KubeConfig,
 	)
@@ -109,17 +111,6 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 
 	<-ctx.Done()
 	return nil
-}
-
-func getSecret(lister corev1lister.SecretLister, name, namespace string) (*corev1.Secret, error) {
-	se, err := lister.Secrets(namespace).Get(name)
-	switch {
-	case errors.IsNotFound(err):
-		return nil, err
-	case err != nil:
-		return nil, err
-	}
-	return se, nil
 }
 
 func createSecret(client kubernetes.Interface, recorder events.Recorder, newSecret *corev1.Secret) error {

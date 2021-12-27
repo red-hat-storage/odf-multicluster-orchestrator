@@ -5,6 +5,7 @@ go 1.16
 require (
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.14.0
+	github.com/openshift/api v3.9.1-0.20190924102528-32369d4db2ad+incompatible
 	github.com/openshift/library-go v0.0.0-20210727084322-8a96c0a97c06
 	github.com/openshift/ocs-operator v0.0.1-alpha2
 	github.com/rook/rook v1.7.0
