@@ -15,3 +15,6 @@ rules:
 - apiGroups: ["ocs.openshift.io"]
   resources: ["storageclusters"]
   verbs: ["get", "update"]
+- apiGroups: ["route.openshift.io"]
+  resources: ["routes"]
+  verbs: ["get", "list"]
