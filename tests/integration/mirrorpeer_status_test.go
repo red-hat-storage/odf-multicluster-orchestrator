@@ -192,7 +192,7 @@ var _ = Describe("MirrorPeer Status Tests", func() {
 				Namespace: pr1.StorageClusterRef.Namespace,
 			}
 
-			sec1 := common.CreateSourceSecret(secretNN1, storageClusterNN1, []byte("SecretData1"))
+			sec1 := common.CreateSourceSecret(secretNN1, storageClusterNN1, []byte("SecretData1"), common.RookOrigin)
 
 			secretNN2 := types.NamespacedName{
 				Name:      common.CreateUniqueSecretName(pr2.ClusterName, pr2.StorageClusterRef.Namespace, pr2.StorageClusterRef.Name),
@@ -204,7 +204,7 @@ var _ = Describe("MirrorPeer Status Tests", func() {
 				Namespace: pr2.StorageClusterRef.Namespace,
 			}
 
-			sec2 := common.CreateSourceSecret(secretNN2, storageClusterNN2, []byte("SecretData2"))
+			sec2 := common.CreateSourceSecret(secretNN2, storageClusterNN2, []byte("SecretData2"), common.RookOrigin)
 
 			err = k8sClient.Create(context.TODO(), sec1, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())

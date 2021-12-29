@@ -27,6 +27,10 @@ const (
 	NamespaceKey                          = "namespace"
 	StorageClusterNameKey                 = "storage-cluster-name"
 	SecretDataKey                         = "secret-data"
+	SecretOriginKey                       = "secret-origin"
+
+	// rook
+	RookOrigin = "rook"
 )
 
 var (
@@ -158,7 +162,10 @@ func CreateUniqueName(params ...string) string {
 }
 
 // CreateUniqueSecretName function creates a name of 40 chars using sha512 hex sum from the given parameters
-func CreateUniqueSecretName(managedCluster, storageClusterNamespace, storageClusterName string) string {
+func CreateUniqueSecretName(managedCluster, storageClusterNamespace, storageClusterName string, prefix ...string) string {
+	if len(prefix) > 0 {
+		return CreateUniqueName(prefix[0], managedCluster, storageClusterNamespace, storageClusterName)[0:39]
+	}
 	return CreateUniqueName(managedCluster, storageClusterNamespace, storageClusterName)[0:39]
 }
 
