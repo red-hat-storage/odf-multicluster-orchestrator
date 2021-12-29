@@ -61,9 +61,9 @@ func newblueSecretTokenExchangeAgentController(
 	eventFilterFn := func(obj interface{}) bool {
 		isMatched := false
 		for _, handlerName := range handlers.GetWhitelistedHandlers() {
-			handler, err := handlers.GetSecretHandler(handlerName, c.spokeKubeConfig, c.spokeSecretLister, c.spokeConfigMapLister)
+			handler, err := handlers.GetSecretHandler(handlerName)
 			if handler != nil && err == nil {
-				isMatched = isMatched || handler.GetObjectFilter(obj)
+				isMatched = isMatched || handler.GetBlueSecretFilter(obj)
 			}
 		}
 		return isMatched
@@ -87,22 +87,13 @@ func (c *blueSecretTokenExchangeAgentController) sync(ctx context.Context, syncC
 	}
 
 	for _, handlerName := range handlers.GetWhitelistedHandlers() {
-		handler, err := handlers.GetSecretHandler(handlerName, c.spokeKubeConfig, c.spokeSecretLister, c.spokeConfigMapLister)
+		handler, err := handlers.GetSecretHandler(handlerName)
 		if err != nil {
 			return err
 		}
-		newSecret, err := handler.GenerateBlueSecret(name, namespace, c.clusterName, c.agentNamespace)
-		if newSecret == nil && err == nil {
-			// skip hanler which secret filter is not matched
-			continue
-		}
+		err = handler.CreateBlueSecret(name, namespace, c)
 		if err != nil {
 			return err
-		}
-
-		err = createSecret(c.hubKubeClient, c.recorder, newSecret)
-		if err != nil {
-			return fmt.Errorf("failed to sync managed cluster secret %q from namespace %v to the hub cluster in namespace %q err: %v", name, namespace, c.clusterName, err)
 		}
 	}
 

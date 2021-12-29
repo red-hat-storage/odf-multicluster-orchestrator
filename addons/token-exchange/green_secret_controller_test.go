@@ -8,6 +8,7 @@ import (
 
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
+	handlers "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange/handlers"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
@@ -156,7 +157,7 @@ func TestGreenSecretSync(t *testing.T) {
 			actualSecret, err := fakeCtrl.spokeKubeClient.CoreV1().Secrets("spokeNS").Get(context.TODO(), "test", metav1.GetOptions{})
 			if c.syncExpected {
 				assert.NoError(t, err)
-				assert.Equal(t, actualSecret.GetLabels()[CreatedByLabelKey], CreatedByLabelValue)
+				assert.Equal(t, actualSecret.GetLabels()[handlers.CreatedByLabelKey], handlers.CreatedByLabelValue)
 			} else {
 				assert.Error(t, err)
 			}

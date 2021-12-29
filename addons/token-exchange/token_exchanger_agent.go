@@ -2,14 +2,11 @@ package addons
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/openshift/library-go/pkg/controller/controllercmd"
-	"github.com/openshift/library-go/pkg/operator/events"
-	"github.com/openshift/library-go/pkg/operator/resource/resourceapply"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange/handlers"
 	"github.com/spf13/cobra"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -19,9 +16,7 @@ import (
 )
 
 const (
-	TokenExchangeName   = "tokenexchange"
-	CreatedByLabelKey   = "multicluster.odf.openshift.io/created-by"
-	CreatedByLabelValue = TokenExchangeName
+	TokenExchangeName = "tokenexchange"
 )
 
 func NewAgentCommand() *cobra.Command {
@@ -74,6 +69,10 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 		return err
 	}
 	hubKubeInformerFactory := informers.NewSharedInformerFactoryWithOptions(hubKubeClient, 10*time.Minute, informers.WithNamespace(o.SpokeClusterName))
+	err = handlers.RegisterHandler(controllerContext.KubeConfig)
+	if err != nil {
+		return err
+	}
 
 	greenSecretAgent := newgreenSecretTokenExchangeAgentController(
 		hubKubeClient,
@@ -81,6 +80,7 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 		spokeKubeClient,
 		spokeKubeInformerFactory.Core().V1().Secrets(),
 		o.SpokeClusterName,
+		o.Namespace,
 		controllerContext.KubeConfig,
 		controllerContext.EventRecorder,
 	)
@@ -109,14 +109,5 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 	go leaseUpdater.Start(ctx)
 
 	<-ctx.Done()
-	return nil
-}
-
-func createSecret(client kubernetes.Interface, recorder events.Recorder, newSecret *corev1.Secret) error {
-	_, _, err := resourceapply.ApplySecret(client.CoreV1(), recorder, newSecret)
-	if err != nil {
-		return fmt.Errorf("failed to apply secret %q in namespace %q. Error %v", newSecret.Name, newSecret.Namespace, err)
-	}
-
 	return nil
 }
