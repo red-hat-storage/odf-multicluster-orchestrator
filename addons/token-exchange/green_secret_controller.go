@@ -8,6 +8,7 @@ import (
 	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/events"
 	ocsv1 "github.com/openshift/ocs-operator/api/v1"
+	handlers "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange/handlers"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -84,7 +85,7 @@ func (c *greenSecretTokenExchangeAgentController) sync(ctx context.Context, sync
 		return nil
 	}
 
-	secret, err := getSecret(c.hubSecretLister, name, namespace)
+	secret, err := handlers.GetSecret(c.hubSecretLister, name, namespace)
 	if err != nil {
 		return fmt.Errorf("failed to get the sercet %q in namespace %q in hub. Error %v", name, namespace, err)
 	}
