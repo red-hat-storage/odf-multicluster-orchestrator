@@ -21,6 +21,7 @@ type greenSecretTokenExchangeAgentController struct {
 	spokeKubeClient   kubernetes.Interface
 	spokeSecretLister corev1lister.SecretLister
 	clusterName       string
+	agentNamespace    string
 	spokeKubeConfig   *rest.Config
 	recorder          events.Recorder
 }
@@ -31,6 +32,7 @@ func newgreenSecretTokenExchangeAgentController(
 	spokeKubeClient kubernetes.Interface,
 	spokeSecretInformers corev1informers.SecretInformer,
 	clusterName string,
+	agentNamespace string,
 	spokeKubeConfig *rest.Config,
 	recorder events.Recorder,
 ) factory.Controller {
@@ -40,6 +42,7 @@ func newgreenSecretTokenExchangeAgentController(
 		spokeKubeClient:   spokeKubeClient,
 		spokeSecretLister: spokeSecretInformers.Lister(),
 		clusterName:       clusterName,
+		agentNamespace:    agentNamespace,
 		spokeKubeConfig:   spokeKubeConfig,
 		recorder:          recorder,
 	}

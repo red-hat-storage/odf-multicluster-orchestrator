@@ -17,6 +17,7 @@ import (
 )
 
 type SecretLabelType string
+type SecretExchangeableType string
 
 const (
 	SourceLabel           SecretLabelType = "BLUE"
@@ -27,6 +28,20 @@ const (
 	NamespaceKey                          = "namespace"
 	StorageClusterNameKey                 = "storage-cluster-name"
 	SecretDataKey                         = "secret-data"
+	SecretOrigin                          = "secret-origin"
+
+	// rook
+	RookOrigin = "rook"
+
+	// s3
+	S3Origin           = "S3"
+	S3Endpoint         = "s3CompatibleEndpoint"
+	S3BucketName       = "s3Bucket"
+	S3ProfileName      = "s3ProfileName"
+	S3Region           = "s3Region"
+	AwsAccessKeyId     = "AWS_ACCESS_KEY_ID"
+	AwsSecretAccessKey = "AWS_SECRET_ACCESS_KEY"
+	S3SecretPrefix     = "odr-s3secret"
 )
 
 var (

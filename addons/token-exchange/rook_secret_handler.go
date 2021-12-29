@@ -69,10 +69,10 @@ func (r RookSecretHandler) createBlueSecret(name string, namespace string, c *bl
 	}
 
 	customData := map[string][]byte{
-		common.StorageClusterNameKey: []byte(sc),
+		common.SecretOrigin: []byte(common.RookOrigin),
 	}
 
-	newSecret, err := generateBlueSecret(secret, common.SourceLabel, sc, c.clusterName, customData)
+	newSecret, err := generateBlueSecret(secret, common.SourceLabel, sc, sc, c.clusterName, customData)
 	if err != nil {
 		return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: %v", secret.Name, secret.Namespace, c.clusterName, err)
 	}
@@ -81,6 +81,8 @@ func (r RookSecretHandler) createBlueSecret(name string, namespace string, c *bl
 	if err != nil {
 		return fmt.Errorf("failed to sync managed cluster secret %q from namespace %v to the hub cluster in namespace %q err: %v", name, namespace, c.clusterName, err)
 	}
+
+	klog.Infof("successfully synced managed cluster secret %q from namespace %v to the hub cluster in namespace %q", name, namespace, c.clusterName)
 
 	return nil
 }

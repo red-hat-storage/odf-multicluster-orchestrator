@@ -16,13 +16,15 @@ import (
 )
 
 type blueSecretTokenExchangeAgentController struct {
-	hubKubeClient     kubernetes.Interface
-	hubSecretLister   corev1lister.SecretLister
-	spokeKubeClient   kubernetes.Interface
-	spokeSecretLister corev1lister.SecretLister
-	clusterName       string
-	recorder          events.Recorder
-	spokeKubeConfig   *rest.Config
+	hubKubeClient        kubernetes.Interface
+	hubSecretLister      corev1lister.SecretLister
+	spokeKubeClient      kubernetes.Interface
+	spokeSecretLister    corev1lister.SecretLister
+	spokeConfigMapLister corev1lister.ConfigMapLister
+	clusterName          string
+	agentNamespace       string
+	recorder             events.Recorder
+	spokeKubeConfig      *rest.Config
 }
 
 func newblueSecretTokenExchangeAgentController(
@@ -30,18 +32,22 @@ func newblueSecretTokenExchangeAgentController(
 	hubSecretInformers corev1informers.SecretInformer,
 	spokeKubeClient kubernetes.Interface,
 	spokeSecretInformers corev1informers.SecretInformer,
+	spokeConfigMapInformers corev1informers.ConfigMapInformer,
 	clusterName string,
+	agentNamespace string,
 	recorder events.Recorder,
 	spokeKubeConfig *rest.Config,
 ) factory.Controller {
 	c := &blueSecretTokenExchangeAgentController{
-		hubKubeClient:     hubKubeClient,
-		hubSecretLister:   hubSecretInformers.Lister(),
-		spokeKubeClient:   spokeKubeClient,
-		spokeSecretLister: spokeSecretInformers.Lister(),
-		clusterName:       clusterName,
-		recorder:          recorder,
-		spokeKubeConfig:   spokeKubeConfig,
+		hubKubeClient:        hubKubeClient,
+		hubSecretLister:      hubSecretInformers.Lister(),
+		spokeKubeClient:      spokeKubeClient,
+		spokeSecretLister:    spokeSecretInformers.Lister(),
+		spokeConfigMapLister: spokeConfigMapInformers.Lister(),
+		clusterName:          clusterName,
+		agentNamespace:       agentNamespace,
+		recorder:             recorder,
+		spokeKubeConfig:      spokeKubeConfig,
 	}
 	klog.Infof("creating managed cluster to hub secret sync controller")
 
@@ -65,7 +71,7 @@ func newblueSecretTokenExchangeAgentController(
 	}
 
 	return factory.New().
-		WithFilteredEventsInformersQueueKeyFunc(queueKeyFn, eventFilterFn, spokeSecretInformers.Informer()).
+		WithFilteredEventsInformersQueueKeyFunc(queueKeyFn, eventFilterFn, spokeSecretInformers.Informer(), spokeConfigMapInformers.Informer()).
 		WithSync(c.sync).
 		ToController(fmt.Sprintf("managedcluster-secret-%s-controller", TokenExchangeName), recorder)
 }
@@ -91,8 +97,6 @@ func (c *blueSecretTokenExchangeAgentController) sync(ctx context.Context, syncC
 			return err
 		}
 	}
-
-	klog.Infof("successfully synced managed cluster secret %q from namespace %v to the hub cluster in namespace %q", name, namespace, c.clusterName)
 
 	return nil
 }

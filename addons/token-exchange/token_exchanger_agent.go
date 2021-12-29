@@ -79,6 +79,7 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 		spokeKubeClient,
 		spokeKubeInformerFactory.Core().V1().Secrets(),
 		o.SpokeClusterName,
+		controllerContext.OperatorNamespace,
 		controllerContext.KubeConfig,
 		controllerContext.EventRecorder,
 	)
@@ -88,7 +89,9 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 		hubKubeInformerFactory.Core().V1().Secrets(),
 		spokeKubeClient,
 		spokeKubeInformerFactory.Core().V1().Secrets(),
+		spokeKubeInformerFactory.Core().V1().ConfigMaps(),
 		o.SpokeClusterName,
+		controllerContext.OperatorNamespace,
 		controllerContext.EventRecorder,
 		controllerContext.KubeConfig,
 	)
