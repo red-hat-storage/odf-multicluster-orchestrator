@@ -69,7 +69,7 @@ func (r RookSecretHandler) createBlueSecret(name string, namespace string, c *bl
 	}
 
 	customData := map[string][]byte{
-		common.SecretOrigin: []byte(common.RookOrigin),
+		common.SecretOriginKey: []byte(common.RookOrigin),
 	}
 
 	newSecret, err := generateBlueSecret(secret, common.SourceLabel, sc, sc, c.clusterName, customData)
@@ -108,7 +108,7 @@ func (r RookSecretHandler) createGreenSecret(name string, namespace string, c *g
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secret.Name,
 			Namespace: toNamespace,
-			Labels:    map[string]string{CreatedByLabelKey: CreatedByLabelValue},
+			Labels:    map[string]string{common.CreatedByLabelKey: CreatedByLabelValue},
 		},
 		Data: data,
 	}

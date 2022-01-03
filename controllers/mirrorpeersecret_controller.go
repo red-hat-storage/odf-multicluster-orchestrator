@@ -83,6 +83,16 @@ func mirrorPeerSecretReconcile(ctx context.Context, rc client.Client, req ctrl.R
 			logger.Error(err, "Restoring destination secret failed", "secret", peerSecret)
 			return err
 		}
+	} else if common.IsSecretInternal(&peerSecret) {
+		if err := common.ValidateInternalSecret(&peerSecret, common.InternalLabel); err != nil {
+			logger.Error(err, "Provided internal secret is not valid", "secret", peerSecret)
+			return err
+		}
+		err = createOrUpdateSecretsFromInternalSecret(ctx, rc, &peerSecret)
+		if err != nil {
+			logger.Error(err, "Updating the secret from internal secret is failed", "secret", peerSecret)
+			return err
+		}
 	}
 	return nil
 }

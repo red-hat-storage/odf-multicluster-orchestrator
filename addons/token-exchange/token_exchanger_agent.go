@@ -16,7 +16,6 @@ import (
 
 const (
 	TokenExchangeName   = "tokenexchange"
-	CreatedByLabelKey   = "multicluster.odf.openshift.io/created-by"
 	CreatedByLabelValue = "tokenexchange"
 )
 

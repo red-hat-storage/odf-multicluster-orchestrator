@@ -2,15 +2,19 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -126,6 +130,105 @@ func processDestinationSecretCleanup(ctx context.Context, rc client.Client) erro
 		}
 	}
 	return anyError
+}
+
+func createOrUpdateS3Secret(ctx context.Context, rc client.Client, secret *corev1.Secret, data map[string][]byte) error {
+	logger := log.FromContext(ctx)
+
+	expectedSecret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secret.Name,
+			Namespace: common.OdrHubNamespace,
+			Labels: map[string]string{
+				common.CreatedByLabelKey: common.MirrorPeerSecret,
+			},
+		},
+		Type: common.SecretLabelTypeKey,
+		Data: map[string][]byte{
+			common.AwsAccessKeyId:     data[common.AwsAccessKeyId],
+			common.AwsSecretAccessKey: data[common.CreatedByLabelKey],
+		},
+	}
+
+	localSecret := corev1.Secret{}
+	namespacedName := types.NamespacedName{
+		Name:      secret.Name,
+		Namespace: common.OdrHubNamespace,
+	}
+	err := rc.Get(ctx, namespacedName, &localSecret)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			logger.Info("Creating a s3 secret", "secret", expectedSecret)
+			return rc.Create(ctx, &expectedSecret)
+		}
+		logger.Error(err, "Unable to get the s3 secret for secret name %q in namespace %q", secret.Name, common.OdrHubNamespace)
+		return err
+	}
+
+	// recieved a s3 secret, now compare
+	if !reflect.DeepEqual(expectedSecret.Data, localSecret.Data) {
+		logger.Info("Updating the s3 secret",
+			"current-data", localSecret.Data,
+			"expected-data", expectedSecret.Data)
+		_, err := controllerutil.CreateOrUpdate(ctx, rc, &localSecret, func() error {
+			localSecret.Data = expectedSecret.Data
+			return nil
+		})
+		return err
+	}
+	return nil
+}
+
+func createOrUpdateOdrConfig(ctx context.Context, rc client.Client, secret *corev1.Secret, data map[string][]byte) error {
+	logger := log.FromContext(ctx)
+	odrConfigMap := corev1.ConfigMap{}
+	namespacedName := types.NamespacedName{
+		Name:      common.OdrHubConfigName,
+		Namespace: common.OdrHubNamespace,
+	}
+	err := rc.Get(ctx, namespacedName, &odrConfigMap)
+	if err != nil {
+		logger.Error(err, "Unable to update DR config map %q in namespace %q", common.OdrHubConfigName, common.OdrHubNamespace)
+		return err
+	}
+
+	odfConfigData, ok := odrConfigMap.Data["ramen_manager_config.yaml"]
+	if !ok {
+		return fmt.Errorf("")
+	}
+	odfConfig := make(map[string]string)
+	err = json.Unmarshal([]byte(odfConfigData), &odfConfig)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal secret data for the secret %q in namespace %q. %v", secret.Name, secret.Namespace, err)
+	}
+
+	return nil
+}
+
+func createOrUpdateSecretsFromInternalSecret(ctx context.Context, rc client.Client, secret *corev1.Secret) error {
+	logger := log.FromContext(ctx)
+	data := make(map[string][]byte)
+	err := json.Unmarshal(secret.Data[common.SecretDataKey], &data)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal secret data for the secret %q in namespace %q. %v", secret.Name, secret.Namespace, err)
+	}
+
+	if string(secret.Data[common.SecretOriginKey]) == common.S3Origin {
+		if ok := common.ValidateS3Secret(data); !ok {
+			return fmt.Errorf("Invalid S3 secret format for secret name %q in namesapce %q", secret.Name, secret.Namespace)
+		}
+		err := createOrUpdateS3Secret(ctx, rc, secret, data)
+		if err != nil {
+			return err
+		}
+		err = createOrUpdateOdrConfig(ctx, rc, secret, data)
+		if err != nil {
+			return err
+		}
+		logger.Info("Successfully created s3 secret and config map with name %q in namespace %q", secret.Name, common.OdrHubNamespace)
+	}
+
+	return nil
 }
 
 // processDeletedSecrets finds out which type of secret is deleted

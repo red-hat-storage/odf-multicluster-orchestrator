@@ -47,8 +47,9 @@ func generateBlueSecret(secret *corev1.Secret, secretType common.SecretLabelType
 	}
 
 	data := map[string][]byte{
-		common.SecretDataKey: secretData,
-		common.NamespaceKey:  []byte(secret.Namespace),
+		common.SecretDataKey:         secretData,
+		common.NamespaceKey:          []byte(secret.Namespace),
+		common.StorageClusterNameKey: []byte(sc),
 	}
 
 	for key, value := range customData {

@@ -105,7 +105,7 @@ func (s S3SecretHandler) createBlueSecret(name string, namespace string, c *blue
 	}
 
 	customData := map[string][]byte{
-		common.SecretOrigin: []byte(common.S3Origin),
+		common.SecretOriginKey: []byte(common.S3Origin),
 	}
 
 	newSecret, err := generateBlueSecret(&s3Secret, common.InternalLabel, name, "", c.clusterName, customData)

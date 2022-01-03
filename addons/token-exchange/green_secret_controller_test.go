@@ -156,7 +156,7 @@ func TestGreenSecretSync(t *testing.T) {
 			actualSecret, err := fakeCtrl.spokeKubeClient.CoreV1().Secrets("spokeNS").Get(context.TODO(), "test", metav1.GetOptions{})
 			if c.syncExpected {
 				assert.NoError(t, err)
-				assert.Equal(t, actualSecret.GetLabels()[CreatedByLabelKey], CreatedByLabelValue)
+				assert.Equal(t, actualSecret.GetLabels()[common.CreatedByLabelKey], CreatedByLabelValue)
 			} else {
 				assert.Error(t, err)
 			}
