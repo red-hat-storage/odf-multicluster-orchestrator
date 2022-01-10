@@ -115,12 +115,13 @@ func getFakeRookBlueSecretExchangeController(t *testing.T) *blueSecretTokenExcha
 	}
 
 	return &blueSecretTokenExchangeAgentController{
-		hubKubeClient:     fakeHubKubeClient,
-		spokeKubeClient:   fakeSpokeKubeClient,
-		spokeSecretLister: fakeSpokeInformerFactory.Core().V1().Secrets().Lister(),
-		hubSecretLister:   fakeHubInformerFactory.Core().V1().Secrets().Lister(),
-		clusterName:       TestManagedClusterName,
-		recorder:          eventstesting.NewTestingEventRecorder(t),
+		hubKubeClient:        fakeHubKubeClient,
+		spokeKubeClient:      fakeSpokeKubeClient,
+		spokeSecretLister:    fakeSpokeInformerFactory.Core().V1().Secrets().Lister(),
+		hubSecretLister:      fakeHubInformerFactory.Core().V1().Secrets().Lister(),
+		spokeConfigMapLister: fakeSpokeInformerFactory.Core().V1().ConfigMaps().Lister(),
+		clusterName:          TestManagedClusterName,
+		recorder:             eventstesting.NewTestingEventRecorder(t),
 	}
 }
 
@@ -224,8 +225,7 @@ func TestRookGreenSecretSnyc(t *testing.T) {
 			if c.syncExpected {
 				actualSecret, err := fakeCtrl.spokeKubeClient.CoreV1().Secrets(TestStorageClusterNamespace).Get(context.TODO(), name, metav1.GetOptions{})
 				assert.NoError(t, err)
-				assert.Equal(t, actualSecret.GetLabels()[CreatedByLabelKey], TokenExchangeName)
-
+				assert.Equal(t, actualSecret.GetLabels()[common.CreatedByLabelKey], TokenExchangeName)
 				ctx := context.TODO()
 				sc := &ocsv1.StorageCluster{}
 				err = rookHandler.spokeClient.Get(ctx, types.NamespacedName{Name: TestStorageClusterName, Namespace: TestStorageClusterNamespace}, sc)

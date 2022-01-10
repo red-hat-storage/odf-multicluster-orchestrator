@@ -25,6 +25,17 @@ func getSecret(lister corev1lister.SecretLister, name, namespace string) (*corev
 	return se, nil
 }
 
+func getConfigMap(lister corev1lister.ConfigMapLister, name, namespace string) (*corev1.ConfigMap, error) {
+	confgMap, err := lister.ConfigMaps(namespace).Get(name)
+	switch {
+	case errors.IsNotFound(err):
+		return nil, err
+	case err != nil:
+		return nil, err
+	}
+	return confgMap, nil
+}
+
 func generateBlueSecret(secret *corev1.Secret, secretType common.SecretLabelType, uniqueName string, sc string, managedCluster string, customData map[string][]byte) (nsecret corev1.Secret, err error) {
 	if secret == nil {
 		return nsecret, fmt.Errorf("cannot create secret on the hub, source secret nil")

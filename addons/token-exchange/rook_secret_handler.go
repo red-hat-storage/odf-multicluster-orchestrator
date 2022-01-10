@@ -20,6 +20,7 @@ import (
 
 type rookSecretHandler struct {
 	spokeClient client.Client
+	hubClient   client.Client
 	rookClient  rookclient.Interface
 }
 
@@ -109,7 +110,7 @@ func (r rookSecretHandler) syncGreenSecret(name string, namespace string, c *gre
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secret.Name,
 			Namespace: toNamespace,
-			Labels:    map[string]string{CreatedByLabelKey: TokenExchangeName},
+			Labels:    map[string]string{common.CreatedByLabelKey: TokenExchangeName},
 		},
 		Data: data,
 	}

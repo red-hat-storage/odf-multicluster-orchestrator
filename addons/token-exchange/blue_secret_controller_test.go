@@ -112,6 +112,7 @@ func getFakeTokenExchangeController(t *testing.T, secretType common.SecretLabelT
 		fakeHubInformerFactory.Core().V1().Secrets(),
 		fakeSpokeKubeClient,
 		fakeSpokeInformerFactory.Core().V1().Secrets(),
+		fakeSpokeInformerFactory.Core().V1().ConfigMaps(),
 		"test",
 		eventstesting.NewTestingEventRecorder(t),
 		&rest.Config{},

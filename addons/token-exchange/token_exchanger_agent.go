@@ -16,7 +16,6 @@ import (
 
 const (
 	TokenExchangeName = "tokenexchange"
-	CreatedByLabelKey = "multicluster.odf.openshift.io/created-by"
 )
 
 func NewAgentCommand() *cobra.Command {
@@ -67,7 +66,7 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 		return err
 	}
 	hubKubeInformerFactory := informers.NewSharedInformerFactoryWithOptions(hubKubeClient, 10*time.Minute, informers.WithNamespace(o.SpokeClusterName))
-	err = registerHandler(controllerContext.KubeConfig)
+	err = registerHandler(controllerContext.KubeConfig, hubRestConfig)
 	if err != nil {
 		return err
 	}
@@ -87,6 +86,7 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 		hubKubeInformerFactory.Core().V1().Secrets(),
 		spokeKubeClient,
 		spokeKubeInformerFactory.Core().V1().Secrets(),
+		spokeKubeInformerFactory.Core().V1().ConfigMaps(),
 		o.SpokeClusterName,
 		controllerContext.EventRecorder,
 		controllerContext.KubeConfig,

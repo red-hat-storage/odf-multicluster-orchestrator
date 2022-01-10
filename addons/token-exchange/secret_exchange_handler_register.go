@@ -14,15 +14,19 @@ type SecretExchangeHandler struct {
 var secretExchangeHandler *SecretExchangeHandler
 
 // intialize secretExchangeHandler with handlers
-func registerHandler(spokeKubeConfig *rest.Config) error {
+func registerHandler(spokeKubeConfig *rest.Config, hubKubeConfig *rest.Config) error {
 	// rook specific client
 	rookClient, err := rookclient.NewForConfig(spokeKubeConfig)
 	if err != nil {
 		return fmt.Errorf("failed to add rook client: %v", err)
 	}
 
-	// a generic spoke client which is common between all handlers
+	// a generic client which is common between all handlers
 	genericSpokeClient, err := getClient(spokeKubeConfig)
+	if err != nil {
+		return err
+	}
+	genericHubClient, err := getClient(hubKubeConfig)
 	if err != nil {
 		return err
 	}
@@ -31,7 +35,12 @@ func registerHandler(spokeKubeConfig *rest.Config) error {
 		RegisteredHandlers: map[string]SecretExchangeHandlerInerface{
 			RookSecretHandlerName: rookSecretHandler{
 				spokeClient: genericSpokeClient,
+				hubClient:   genericHubClient,
 				rookClient:  rookClient,
+			},
+			S3SecretHandlerName: s3SecretHandler{
+				spokeClient: genericSpokeClient,
+				hubClient:   genericHubClient,
 			},
 		},
 	}

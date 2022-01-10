@@ -14,15 +14,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func fetchAllMirrorPeers(ctx context.Context, rc client.Client) ([]multiclusterv1alpha1.MirrorPeer, error) {
-	var mirrorPeerListObj multiclusterv1alpha1.MirrorPeerList
-	err := rc.List(ctx, &mirrorPeerListObj)
-	if err != nil {
-		return nil, err
-	}
-	return mirrorPeerListObj.Items, nil
-}
-
 // createOrUpdateDestinationSecretsFromSource updates all destination secrets
 // associated with this source secret.
 // If a list of MirrorPeer objects are provided, it will check
@@ -37,7 +28,7 @@ func createOrUpdateDestinationSecretsFromSource(ctx context.Context, rc client.C
 	}
 
 	if mirrorPeers == nil {
-		mirrorPeers, err = fetchAllMirrorPeers(ctx, rc)
+		mirrorPeers, err = common.FetchAllMirrorPeers(ctx, rc)
 		if err != nil {
 			logger.Error(err, "Unable to get the list of MirrorPeer objects")
 			return err
@@ -73,7 +64,7 @@ func processDestinationSecretUpdation(ctx context.Context, rc client.Client, des
 		logger.Error(err, "Destination secret validation failed", "secret", destSecret)
 		return err
 	}
-	mirrorPeers, err := fetchAllMirrorPeers(ctx, rc)
+	mirrorPeers, err := common.FetchAllMirrorPeers(ctx, rc)
 	if err != nil {
 		logger.Error(err, "Failed to get the list of MirrorPeer objects")
 		return err

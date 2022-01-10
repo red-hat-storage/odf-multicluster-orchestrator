@@ -78,7 +78,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		klog.Error(err, "Failed to get MirrorPeer")
 		return ctrl.Result{}, err
 	}
-	scr := r.getStorageClusterDetails(&mirrorPeer)
+	scr := getStorageClusterDetails(&mirrorPeer, r.SpokeClusterName)
 
 	err = r.enableCSIAddons(ctx, scr.Namespace)
 	if err != nil {
@@ -145,9 +145,9 @@ func (r *MirrorPeerReconciler) createS3(ctx context.Context, req ctrl.Request, m
 	return err
 }
 
-func (r *MirrorPeerReconciler) getStorageClusterDetails(mp *multiclusterv1alpha1.MirrorPeer) *multiclusterv1alpha1.StorageClusterRef {
+func getStorageClusterDetails(mp *multiclusterv1alpha1.MirrorPeer, spokeClusterName string) *multiclusterv1alpha1.StorageClusterRef {
 	for _, v := range mp.Spec.Items {
-		if v.ClusterName == r.SpokeClusterName {
+		if v.ClusterName == spokeClusterName {
 			return &v.StorageClusterRef
 		}
 	}
@@ -225,7 +225,7 @@ func (r *MirrorPeerReconciler) enableCSIAddons(ctx context.Context, namespace st
 }
 
 func (r *MirrorPeerReconciler) createVolumeReplicationClass(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer) error {
-	scr := r.getStorageClusterDetails(mp)
+	scr := getStorageClusterDetails(mp, r.SpokeClusterName)
 	params := make(map[string]string)
 	params[MirroringModeKey] = string(mp.Spec.Mode)
 	params[SchedulingIntervalKey] = mp.Spec.SchedulingInterval

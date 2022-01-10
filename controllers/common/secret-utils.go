@@ -1,6 +1,7 @@
 package common
 
 import (
+	"context"
 	"crypto/sha512"
 	"errors"
 	"fmt"
@@ -24,6 +25,7 @@ const (
 	InternalLabel         SecretLabelType = "INTERNAL"
 	IgnoreLabel           SecretLabelType = "IGNORE"
 	SecretLabelTypeKey                    = "multicluster.odf.openshift.io/secret-type"
+	CreatedByLabelKey                     = "multicluster.odf.openshift.io/created-by"
 	NamespaceKey                          = "namespace"
 	StorageClusterNameKey                 = "storage-cluster-name"
 	SecretDataKey                         = "secret-data"
@@ -31,6 +33,16 @@ const (
 
 	// rook
 	RookOrigin = "rook"
+
+	// s3
+	S3ProfilePrefix    = "s3profile"
+	S3Origin           = "S3"
+	S3Endpoint         = "s3CompatibleEndpoint"
+	S3BucketName       = "s3Bucket"
+	S3ProfileName      = "s3ProfileName"
+	S3Region           = "s3Region"
+	AwsAccessKeyId     = "AWS_ACCESS_KEY_ID"
+	AwsSecretAccessKey = "AWS_SECRET_ACCESS_KEY"
 )
 
 var (
@@ -198,4 +210,13 @@ func FindMatchingSecretWithPeerRef(peerRef multiclusterv1alpha1.PeerRef, secrets
 		}
 	}
 	return matchingSourceSecret
+}
+
+func FetchAllMirrorPeers(ctx context.Context, rc client.Client) ([]multiclusterv1alpha1.MirrorPeer, error) {
+	var mirrorPeerListObj multiclusterv1alpha1.MirrorPeerList
+	err := rc.List(ctx, &mirrorPeerListObj)
+	if err != nil {
+		return nil, err
+	}
+	return mirrorPeerListObj.Items, nil
 }
