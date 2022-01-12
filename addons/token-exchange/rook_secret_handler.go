@@ -13,7 +13,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -65,7 +64,7 @@ func (r rookSecretHandler) syncBlueSecret(name string, namespace string, c *blue
 	}
 
 	// fetch storage cluster name
-	sc, err := getStorageClusterFromRookSecret(c.spokeKubeConfig, secret, r.rookClient)
+	sc, err := getStorageClusterFromRookSecret(secret, r.rookClient)
 	if err != nil {
 		return fmt.Errorf("failed to get the storage cluster name from the secret %q in namespace %q in managed cluster. Error %v", name, namespace, err)
 	}
@@ -132,7 +131,7 @@ func (r rookSecretHandler) syncGreenSecret(name string, namespace string, c *gre
 	return nil
 }
 
-func getStorageClusterFromRookSecret(spokeKubeConfig *rest.Config, secret *corev1.Secret, rclient rookclient.Interface) (storageCluster string, err error) {
+func getStorageClusterFromRookSecret(secret *corev1.Secret, rclient rookclient.Interface) (storageCluster string, err error) {
 	for _, v := range secret.ObjectMeta.OwnerReferences {
 		if v.Kind != "CephCluster" {
 			continue

@@ -38,7 +38,6 @@ func init() {
 	utilruntime.Must(corev1.AddToScheme(mgrScheme))
 	utilruntime.Must(ocsv1.AddToScheme(mgrScheme))
 	utilruntime.Must(obv1alpha1.AddToScheme(mgrScheme))
-
 	utilruntime.Must(routev1.AddToScheme(mgrScheme))
 	//+kubebuilder:scaffold:scheme
 }

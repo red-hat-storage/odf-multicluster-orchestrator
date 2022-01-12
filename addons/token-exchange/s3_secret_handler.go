@@ -89,7 +89,7 @@ func (s s3SecretHandler) syncBlueSecret(name string, namespace string, c *blueSe
 
 	var storageClusterRef *v1alpha1.StorageClusterRef
 	for _, mirrorPeer := range mirrorPeers {
-		storageClusterRef = getStorageClusterDetails(&mirrorPeer, c.clusterName)
+		storageClusterRef = common.GetCurrentStorageClusterRef(&mirrorPeer, c.clusterName)
 		if storageClusterRef != nil {
 			break
 		}

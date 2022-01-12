@@ -78,7 +78,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		klog.Error(err, "Failed to get MirrorPeer")
 		return ctrl.Result{}, err
 	}
-	scr := getStorageClusterDetails(&mirrorPeer, r.SpokeClusterName)
+	scr := common.GetCurrentStorageClusterRef(&mirrorPeer, r.SpokeClusterName)
 
 	err = r.enableCSIAddons(ctx, scr.Namespace)
 	if err != nil {
@@ -90,7 +90,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, fmt.Errorf("failed to enable mirroring the storagecluster %q in namespace %q in managed cluster. Error %v", scr.Name, scr.Namespace, err)
 	}
 
-	err = r.createS3(ctx, req, mirrorPeer)
+	err = r.createS3(ctx, req, mirrorPeer, scr.Namespace)
 	if err != nil {
 		klog.Error(err, "Failed to create ODR S3 resources")
 		return ctrl.Result{}, err
@@ -103,7 +103,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	return ctrl.Result{}, nil
 }
 
-func (r *MirrorPeerReconciler) createS3(ctx context.Context, req ctrl.Request, mirrorPeer multiclusterv1alpha1.MirrorPeer) error {
+func (r *MirrorPeerReconciler) createS3(ctx context.Context, req ctrl.Request, mirrorPeer multiclusterv1alpha1.MirrorPeer, scNamespace string) error {
 	var err error
 
 	var peerAccumulator string
@@ -116,7 +116,7 @@ func (r *MirrorPeerReconciler) createS3(ctx context.Context, req ctrl.Request, m
 	// truncate to bucketGenerateName + "-" + first 12 (out of 20) byte representations of sha1 checksum
 	bucket := fmt.Sprintf("%s-%s", bucketGenerateName, hex.EncodeToString(checksum[:]))[0 : len(bucketGenerateName)+1+12]
 
-	namespace := common.GetEnv("ODR_NAMESPACE", common.RamenHubNamespace)
+	namespace := common.GetEnv("ODR_NAMESPACE", scNamespace)
 
 	noobaaOBC := &obv1alpha1.ObjectBucketClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -125,7 +125,7 @@ func (r *MirrorPeerReconciler) createS3(ctx context.Context, req ctrl.Request, m
 		},
 		Spec: obv1alpha1.ObjectBucketClaimSpec{
 			BucketName:       bucket,
-			StorageClassName: "openshift-storage.noobaa.io",
+			StorageClassName: namespace + ".noobaa.io",
 		},
 	}
 	err = r.SpokeClient.Get(ctx, types.NamespacedName{Name: bucket, Namespace: namespace}, noobaaOBC)
@@ -143,15 +143,6 @@ func (r *MirrorPeerReconciler) createS3(ctx context.Context, req ctrl.Request, m
 		}
 	}
 	return err
-}
-
-func getStorageClusterDetails(mp *multiclusterv1alpha1.MirrorPeer, spokeClusterName string) *multiclusterv1alpha1.StorageClusterRef {
-	for _, v := range mp.Spec.Items {
-		if v.ClusterName == spokeClusterName {
-			return &v.StorageClusterRef
-		}
-	}
-	return nil
 }
 
 func (r *MirrorPeerReconciler) enableMirroring(ctx context.Context, storageClusterName string, namespace string, mp *multiclusterv1alpha1.MirrorPeer) error {
@@ -225,7 +216,7 @@ func (r *MirrorPeerReconciler) enableCSIAddons(ctx context.Context, namespace st
 }
 
 func (r *MirrorPeerReconciler) createVolumeReplicationClass(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer) error {
-	scr := getStorageClusterDetails(mp, r.SpokeClusterName)
+	scr := common.GetCurrentStorageClusterRef(mp, r.SpokeClusterName)
 	params := make(map[string]string)
 	params[MirroringModeKey] = string(mp.Spec.Mode)
 	params[SchedulingIntervalKey] = mp.Spec.SchedulingInterval
