@@ -5,6 +5,7 @@ import (
 	"os"
 
 	replicationv1alpha1 "github.com/csi-addons/volume-replication-operator/api/v1alpha1"
+	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	ocsv1 "github.com/openshift/ocs-operator/api/v1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"golang.org/x/sync/errgroup"
@@ -35,6 +36,7 @@ func init() {
 
 	utilruntime.Must(corev1.AddToScheme(mgrScheme))
 	utilruntime.Must(ocsv1.AddToScheme(mgrScheme))
+	utilruntime.Must(obv1alpha1.AddToScheme(mgrScheme))
 	//+kubebuilder:scaffold:scheme
 }
 
