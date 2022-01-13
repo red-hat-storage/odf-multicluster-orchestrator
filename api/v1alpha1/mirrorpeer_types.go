@@ -21,10 +21,13 @@ import (
 )
 
 type PhaseType string
+type MirroringMode string
 
 const (
-	ExchangingSecret PhaseType = "ExchangingSecret"
-	ExchangedSecret  PhaseType = "ExchangedSecret"
+	ExchangingSecret PhaseType     = "ExchangingSecret"
+	ExchangedSecret  PhaseType     = "ExchangedSecret"
+	Snapshot         MirroringMode = "snapshot"
+	Journal          MirroringMode = "journal"
 )
 
 // StorageClusterRef holds a reference to a StorageCluster
@@ -46,10 +49,22 @@ type PeerRef struct {
 // MirrorPeerSpec defines the desired state of MirrorPeer
 type MirrorPeerSpec struct {
 	// Items is a list of PeerRef.
-
 	// +kubebuilder:validation:MaxItems=2
 	// +kubebuilder:validation:MinItems=2
 	Items []PeerRef `json:"items"`
+	//  The default MirroringMode is snapshot which is configured on the rbd images.
+	// +kubebuilder:validation:Enum=snapshot;journal
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=snapshot
+	Mode MirroringMode `json:"mirroringMode,omitempty"`
+	// The ReplicationSecretName contains the ceph user credentials to connect to ceph cluster for mirroring operations
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default="rook-csi-rbd-provisioner"
+	ReplicationSecretName string `json:"replicationSecretName,omitempty"`
+	// The SchedulingInterval in which the mirroring snapshot are taken
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default="5m"
+	SchedulingInterval string `json:"schedulingInterval,omitempty"`
 }
 
 // MirrorPeerStatus defines the observed state of MirrorPeer

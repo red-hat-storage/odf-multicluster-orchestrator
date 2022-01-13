@@ -106,6 +106,7 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 	go greenSecretAgent.Run(ctx, 1)
 	go blueSecretAgent.Run(ctx, 1)
 	go leaseUpdater.Start(ctx)
+	runManager(ctx, hubRestConfig, controllerContext.KubeConfig, o.SpokeClusterName)
 
 	<-ctx.Done()
 	return nil

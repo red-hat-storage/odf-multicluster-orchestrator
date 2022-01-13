@@ -11,7 +11,7 @@ rules:
   resources: ["pods", "namespaces"]
   verbs: ["get", "list"]
 - apiGroups: ["apps"]
-  resources: ["replicasets"]
+  resources: ["replicasets", "deployments"]
   verbs: ["get"]
 - apiGroups: ["", "events.k8s.io"]
   resources: ["events"]

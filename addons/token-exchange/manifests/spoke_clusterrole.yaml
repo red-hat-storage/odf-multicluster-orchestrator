@@ -15,3 +15,6 @@ rules:
 - apiGroups: ["ocs.openshift.io"]
   resources: ["storageclusters"]
   verbs: ["get", "update"]
+- apiGroups: ["replication.storage.openshift.io"]
+  resources: ["volumereplicationclasses"]
+  verbs: ["get", "list", "watch", "create", "update", "delete"]
