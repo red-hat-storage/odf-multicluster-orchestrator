@@ -6,3 +6,6 @@ rules:
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
+- apiGroups: ["multicluster.odf.openshift.io"]
+  resources: ["mirrorpeers"]
+  verbs: ["get", "list", "watch", "update"]

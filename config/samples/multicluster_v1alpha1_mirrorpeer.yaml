@@ -3,5 +3,15 @@ kind: MirrorPeer
 metadata:
   name: mirrorpeer-sample
 spec:
-  # Add fields here
-  foo: bar
+  items:
+    - clusterName: local-cluster
+      storageClusterRef:
+        name: ocs-storagecluster
+        namespace: openshift-storage
+    - clusterName: spoke-cluster
+      storageClusterRef:
+        name: ocs-storagecluster
+        namespace: openshift-storage
+  schedulingInterval: 5m
+  replicationSecretName: rook-csi-rbd-provisioner
+  mirroringMode: snapshot

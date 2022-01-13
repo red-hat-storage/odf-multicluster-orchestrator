@@ -37,6 +37,7 @@ spec:
             description: MirrorPeerSpec defines the desired state of MirrorPeer
             properties:
               items:
+                description: Items is a list of PeerRef.
                 items:
                   description: PeerRef holds a reference to a mirror peer
                   properties:
@@ -63,6 +64,24 @@ spec:
                 maxItems: 2
                 minItems: 2
                 type: array
+              mirroringMode:
+                default: snapshot
+                description: ' The default MirroringMode is snapshot which is configured
+                  on the rbd images.'
+                enum:
+                - snapshot
+                - journal
+                type: string
+              replicationSecretName:
+                default: rook-csi-rbd-provisioner
+                description: The ReplicationSecretName contains the ceph user credentials
+                  to connect to ceph cluster for mirroring operations
+                type: string
+              schedulingInterval:
+                default: 5m
+                description: The SchedulingInterval in which the mirroring snapshot
+                  are taken
+                type: string
             required:
             - items
             type: object

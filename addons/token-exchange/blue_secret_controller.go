@@ -107,7 +107,7 @@ func (c *blueSecretTokenExchangeAgentController) sync(ctx context.Context, syncC
 
 	sc, err := c.getStorageClusterFromRookSecret(secret)
 	if err != nil {
-		return fmt.Errorf("failed to get the storage cluster name from the sercet %q in namespace %q in managed cluster. Error %v", name, namespace, err)
+		return fmt.Errorf("failed to get the storage cluster name from the secret %q in namespace %q in managed cluster. Error %v", name, namespace, err)
 	}
 
 	newSecret, err := createBlueSecret(secret, sc, c.clusterName)

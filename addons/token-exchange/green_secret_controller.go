@@ -19,7 +19,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type greenSecretTokenExchangeAgentController struct {
@@ -129,12 +128,7 @@ func (c *greenSecretTokenExchangeAgentController) sync(ctx context.Context, sync
 func (c *greenSecretTokenExchangeAgentController) updateStorageCluster(secretName, storageClusterName, storageClusterNamespace string) error {
 	ctx := context.TODO()
 
-	scheme := runtime.NewScheme()
-	if err := ocsv1.AddToScheme(scheme); err != nil {
-		return fmt.Errorf("failed to add ocsv1 scheme to runtime scheme: %v", err)
-	}
-
-	cl, err := client.New(c.spokeKubeConfig, client.Options{Scheme: scheme})
+	cl, err := getClient(c.spokeKubeConfig)
 	if err != nil {
 		return err
 	}

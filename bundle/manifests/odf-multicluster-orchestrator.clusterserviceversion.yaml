@@ -14,7 +14,25 @@ metadata:
             "name": "mirrorpeer-sample"
           },
           "spec": {
-            "foo": "bar"
+            "items": [
+              {
+                "clusterName": "local-cluster",
+                "storageClusterRef": {
+                  "name": "ocs-storagecluster",
+                  "namespace": "openshift-storage"
+                }
+              },
+              {
+                "clusterName": "spoke-cluster",
+                "storageClusterRef": {
+                  "name": "ocs-storagecluster",
+                  "namespace": "openshift-storage"
+                }
+              }
+            ],
+            "mirroringMode": "snapshot",
+            "replicationSecretName": "rook-csi-rbd-provisioner",
+            "schedulingInterval": "5m"
           }
         }
       ]
