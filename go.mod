@@ -3,6 +3,7 @@ module github.com/red-hat-storage/odf-multicluster-orchestrator
 go 1.16
 
 require (
+	github.com/csi-addons/volume-replication-operator v0.2.0
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.14.0
 	github.com/openshift/library-go v0.0.0-20210727084322-8a96c0a97c06
@@ -11,13 +12,13 @@ require (
 	github.com/spf13/cobra v1.1.3
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	k8s.io/api v0.22.0-rc.0
-	k8s.io/apimachinery v0.22.0-rc.0
+	k8s.io/api v0.22.1
+	k8s.io/apimachinery v0.22.1
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/klog/v2 v2.9.0
 	open-cluster-management.io/addon-framework v0.0.0-20210709073210-719dbb79d275
 	open-cluster-management.io/api v0.0.0-20210727123024-41c7397e9f2d
-	sigs.k8s.io/controller-runtime v0.9.5
+	sigs.k8s.io/controller-runtime v0.9.6
 )
 
 replace (
