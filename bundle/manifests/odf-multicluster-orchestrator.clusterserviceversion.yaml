@@ -30,6 +30,7 @@ metadata:
                 }
               }
             ],
+            "manageS3": false,
             "mirroringMode": "snapshot",
             "replicationSecretName": "rook-csi-rbd-provisioner",
             "schedulingInterval": "5m"
@@ -127,6 +128,7 @@ spec:
         - apiGroups:
           - ""
           resources:
+          - configmaps
           - events
           - secrets
           verbs:

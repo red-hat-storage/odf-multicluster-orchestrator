@@ -64,6 +64,9 @@ spec:
                 maxItems: 2
                 minItems: 2
                 type: array
+              manageS3:
+                default: false
+                type: boolean
               mirroringMode:
                 default: snapshot
                 description: ' The default MirroringMode is snapshot which is configured
