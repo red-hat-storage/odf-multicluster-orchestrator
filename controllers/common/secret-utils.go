@@ -30,6 +30,7 @@ const (
 	StorageClusterNameKey                 = "storage-cluster-name"
 	SecretDataKey                         = "secret-data"
 	SecretOriginKey                       = "secret-origin"
+	MirrorPeerSecret                      = "mirrorpeersecret"
 
 	// rook
 	RookOrigin = "rook"
@@ -43,19 +44,23 @@ const (
 	S3Region           = "s3Region"
 	AwsAccessKeyId     = "AWS_ACCESS_KEY_ID"
 	AwsSecretAccessKey = "AWS_SECRET_ACCESS_KEY"
+
+	// ramen
+	RamenHubOperatorConfigName = "ramen-hub-operator-config"
 )
 
 var (
 	SourceOrDestinationPredicate = predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			return IsSecretSource(e.Object)
+			return IsSecretSource(e.Object) || IsSecretInternal(e.Object)
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			return IsSecretSource(e.Object) || IsSecretDestination(e.Object)
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			return (IsSecretSource(e.ObjectOld) && IsSecretSource(e.ObjectNew)) ||
-				(IsSecretDestination(e.ObjectOld) && IsSecretDestination(e.ObjectNew))
+				(IsSecretDestination(e.ObjectOld) && IsSecretDestination(e.ObjectNew)) ||
+				IsSecretInternal(e.ObjectOld) && IsSecretInternal(e.ObjectNew)
 		},
 		GenericFunc: func(_ event.GenericEvent) bool {
 			return false
@@ -89,6 +94,12 @@ func IsSecretDestination(obj client.Object) bool {
 	return isObjectASecretWithProvidedLabel(obj, SecretLabelTypeKey, string(DestinationLabel))
 }
 
+// IsSecretInternal returns true if the provided object is a secret with
+// Inernal label
+func IsSecretInternal(obj client.Object) bool {
+	return isObjectASecretWithProvidedLabel(obj, SecretLabelTypeKey, string(InternalLabel))
+}
+
 func ValidateInternalSecret(internalSecret *corev1.Secret, expectedLabel SecretLabelType) error {
 	if internalSecret == nil {
 		return errors.New("provided secret is 'nil'")
@@ -107,8 +118,10 @@ func ValidateInternalSecret(internalSecret *corev1.Secret, expectedLabel SecretL
 	// check whether all the keys are present in data
 	_, namespaceKeyOk := internalSecret.Data[NamespaceKey]
 	_, scNameKeyOk := internalSecret.Data[StorageClusterNameKey]
+	_, secretOriginKeyOk := internalSecret.Data[SecretOriginKey]
 	_, secretDataKeyOk := internalSecret.Data[SecretDataKey]
-	if !(namespaceKeyOk && scNameKeyOk && secretDataKeyOk) {
+
+	if !(namespaceKeyOk && secretDataKeyOk && secretOriginKeyOk && scNameKeyOk) {
 		return errors.New("expected data map keys are not present")
 	}
 	return nil
@@ -124,11 +137,21 @@ func ValidateDestinationSecret(sourceSecret *corev1.Secret) error {
 	return ValidateInternalSecret(sourceSecret, DestinationLabel)
 }
 
+func ValidateS3Secret(data map[string][]byte) bool {
+	_, s3ProfileName := data[S3ProfileName]
+	_, s3BucketNameOK := data[S3BucketName]
+	_, s3EndpointOk := data[S3Endpoint]
+	_, s3Region := data[S3Region]
+	_, awsAccessKeyIdOk := data[AwsAccessKeyId]
+	_, awsAccessKeyOk := data[AwsSecretAccessKey]
+	return s3ProfileName && s3BucketNameOK && s3EndpointOk && s3Region && awsAccessKeyIdOk && awsAccessKeyOk
+}
+
 // createInternalSecret a common function to create any type secret
 func createInternalSecret(secretNameAndNamespace types.NamespacedName,
 	storageClusterNameAndNamespace types.NamespacedName,
 	secretType SecretLabelType,
-	secretData []byte) *corev1.Secret {
+	secretData []byte, secretOrigin string) *corev1.Secret {
 	retSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretNameAndNamespace.Name,
@@ -142,6 +165,7 @@ func createInternalSecret(secretNameAndNamespace types.NamespacedName,
 			SecretDataKey:         secretData,
 			NamespaceKey:          []byte(storageClusterNameAndNamespace.Namespace),
 			StorageClusterNameKey: []byte(storageClusterNameAndNamespace.Name),
+			SecretOriginKey:       []byte(secretOrigin),
 		},
 	}
 	return retSecret
@@ -150,21 +174,24 @@ func createInternalSecret(secretNameAndNamespace types.NamespacedName,
 // CreateSourceSecret creates a source secret
 func CreateSourceSecret(secretNameAndNamespace types.NamespacedName,
 	storageClusterNameAndNamespace types.NamespacedName,
-	secretData []byte) *corev1.Secret {
+	secretData []byte, SecretOrigin string) *corev1.Secret {
 	return createInternalSecret(secretNameAndNamespace,
 		storageClusterNameAndNamespace,
 		SourceLabel,
-		secretData)
+		secretData,
+		SecretOrigin)
 }
 
 // CreateDestinationSecret creates a destination secret
 func CreateDestinationSecret(secretNameAndNamespace types.NamespacedName,
 	storageClusterNameAndNamespace types.NamespacedName,
-	secretData []byte) *corev1.Secret {
+	secretData []byte, secretOrigin string) *corev1.Secret {
 	return createInternalSecret(secretNameAndNamespace,
 		storageClusterNameAndNamespace,
 		DestinationLabel,
-		secretData)
+		secretData,
+		secretOrigin,
+	)
 }
 
 // CreateUniqueName function creates a sha512 hex sum from the given parameters

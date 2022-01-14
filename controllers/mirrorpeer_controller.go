@@ -138,6 +138,27 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
+	// update s3 profile when MirrorPeer changes
+	if mirrorPeer.Spec.ManageS3 {
+		for _, peerRef := range mirrorPeer.Spec.Items {
+			var s3Secret corev1.Secret
+			namespacedName := types.NamespacedName{
+				Name:      common.CreateUniqueSecretName(peerRef.ClusterName, peerRef.StorageClusterRef.Namespace, peerRef.StorageClusterRef.Name, common.S3ProfilePrefix),
+				Namespace: peerRef.ClusterName,
+			}
+			err = r.Client.Get(ctx, namespacedName, &s3Secret)
+			if err != nil {
+				logger.Error(err, "error in fetching s3 internal secret", "peerref", peerRef.ClusterName, "MirrorPeer", mirrorPeer)
+				return ctrl.Result{}, err
+			}
+			err = createOrUpdateSecretsFromInternalSecret(ctx, r.Client, &s3Secret, []multiclusterv1alpha1.MirrorPeer{mirrorPeer})
+			if err != nil {
+				logger.Error(err, "error in updating S3 profile", "peerref", peerRef.ClusterName, "MirrorPeer", mirrorPeer)
+				return ctrl.Result{}, err
+			}
+		}
+	}
+
 	err = processMirrorPeerSecretChanges(ctx, r.Client, mirrorPeer)
 	if err != nil {
 		return ctrl.Result{}, err
