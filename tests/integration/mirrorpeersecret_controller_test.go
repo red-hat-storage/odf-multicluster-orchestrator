@@ -91,7 +91,7 @@ func (mppp MirrorPeerPlusPlus) GetDummySourceSecrets(prefixName string) []corev1
 			Name:      eachPR.StorageClusterRef.Name,
 			Namespace: eachPR.StorageClusterRef.Namespace,
 		}
-		sourceSecret := common.CreateSourceSecret(secretNN, storageClusterNN, []byte("MySecretData1234"))
+		sourceSecret := common.CreateSourceSecret(secretNN, storageClusterNN, []byte("MySecretData1234"), common.RookOrigin)
 		sourceSecrets = append(sourceSecrets, *sourceSecret)
 	}
 	return sourceSecrets
@@ -463,7 +463,7 @@ var _ = Describe("MirrorPeerSecret Controller", func() {
 				}
 				sourceNN := types.NamespacedName{Name: "source-3", Namespace: newPeer.ClusterName}
 				storageClusterNN := types.NamespacedName{Name: newPeer.StorageClusterRef.Name, Namespace: newPeer.StorageClusterRef.Namespace}
-				newSource := common.CreateSourceSecret(sourceNN, storageClusterNN, []byte("new-secret-3"))
+				newSource := common.CreateSourceSecret(sourceNN, storageClusterNN, []byte("new-secret-3"), common.RookOrigin)
 				err = k8sClient.Create(ctx, newSource)
 				Expect(err).To(BeNil())
 				err = k8sClient.Update(ctx, &mirrorPR)

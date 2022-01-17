@@ -2,26 +2,23 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 
+	rmn "github.com/ramendr/ramen/api/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
+	yaml "gopkg.in/yaml.v2"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-func fetchAllMirrorPeers(ctx context.Context, rc client.Client) ([]multiclusterv1alpha1.MirrorPeer, error) {
-	var mirrorPeerListObj multiclusterv1alpha1.MirrorPeerList
-	err := rc.List(ctx, &mirrorPeerListObj)
-	if err != nil {
-		return nil, err
-	}
-	return mirrorPeerListObj.Items, nil
-}
 
 // createOrUpdateDestinationSecretsFromSource updates all destination secrets
 // associated with this source secret.
@@ -37,7 +34,7 @@ func createOrUpdateDestinationSecretsFromSource(ctx context.Context, rc client.C
 	}
 
 	if mirrorPeers == nil {
-		mirrorPeers, err = fetchAllMirrorPeers(ctx, rc)
+		mirrorPeers, err = common.FetchAllMirrorPeers(ctx, rc)
 		if err != nil {
 			logger.Error(err, "Unable to get the list of MirrorPeer objects")
 			return err
@@ -73,7 +70,7 @@ func processDestinationSecretUpdation(ctx context.Context, rc client.Client, des
 		logger.Error(err, "Destination secret validation failed", "secret", destSecret)
 		return err
 	}
-	mirrorPeers, err := fetchAllMirrorPeers(ctx, rc)
+	mirrorPeers, err := common.FetchAllMirrorPeers(ctx, rc)
 	if err != nil {
 		logger.Error(err, "Failed to get the list of MirrorPeer objects")
 		return err
@@ -126,6 +123,204 @@ func processDestinationSecretCleanup(ctx context.Context, rc client.Client) erro
 		}
 	}
 	return anyError
+}
+
+func createOrUpdateRamenS3Secret(ctx context.Context, rc client.Client, secret *corev1.Secret, data map[string][]byte, ramenHubNamespace string) error {
+	logger := log.FromContext(ctx)
+
+	// convert aws s3 secret from s3 origin secret into ramen secret
+	expectedSecret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secret.Name,
+			Namespace: ramenHubNamespace,
+			Labels: map[string]string{
+				common.CreatedByLabelKey: common.MirrorPeerSecret,
+			},
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			common.AwsAccessKeyId:     data[common.AwsAccessKeyId],
+			common.AwsSecretAccessKey: data[common.AwsSecretAccessKey],
+		},
+	}
+
+	localSecret := corev1.Secret{}
+	namespacedName := types.NamespacedName{
+		Name:      secret.Name,
+		Namespace: ramenHubNamespace,
+	}
+	err := rc.Get(ctx, namespacedName, &localSecret)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			// creating new s3 secret on ramen openshift-dr-system namespace
+			logger.Info("Creating a s3 secret", "secret", expectedSecret)
+			return rc.Create(ctx, &expectedSecret)
+		}
+		logger.Error(err, "unable to fetch the s3 secret", "secret", secret.Name, "namespace", ramenHubNamespace)
+		return err
+	}
+
+	if !reflect.DeepEqual(expectedSecret.Data, localSecret.Data) {
+		// updating existing s3 secret on ramen openshift-dr-system namespace
+		logger.Info("Updating the s3 secret", "secret", expectedSecret.Name, "namespace", ramenHubNamespace)
+		_, err := controllerutil.CreateOrUpdate(ctx, rc, &localSecret, func() error {
+			localSecret.Data = expectedSecret.Data
+			return nil
+		})
+		return err
+	}
+
+	// no changes
+	return nil
+}
+
+func isS3ProfileManagedPeerRef(clusterPeerRef multiclusterv1alpha1.PeerRef, mirrorPeers []multiclusterv1alpha1.MirrorPeer) bool {
+	for _, mirrorpeer := range mirrorPeers {
+		for _, peerRef := range mirrorpeer.Spec.Items {
+			if reflect.DeepEqual(clusterPeerRef, peerRef) && (mirrorpeer.Spec.ManageS3) {
+				// found mirror peer with ManageS3 spec enabled
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret *corev1.Secret, data map[string][]byte, mirrorPeers []multiclusterv1alpha1.MirrorPeer, ramenHubNamespace string) error {
+	logger := log.FromContext(ctx)
+
+	clusterPeerRef, err := common.CreatePeerRefFromSecret(secret)
+	if err != nil {
+		logger.Error(err, "unable to create peerref", "secret", secret.Name, "namespace", secret.Namespace)
+		return err
+	}
+	if mirrorPeers == nil {
+		mirrorPeers, err = common.FetchAllMirrorPeers(ctx, rc)
+	}
+	if err != nil {
+		logger.Error(err, "unable to get the list of MirrorPeer objects")
+		return err
+	}
+
+	// filter mirror peer using clusterPeerRef
+	if !isS3ProfileManagedPeerRef(clusterPeerRef, mirrorPeers) {
+		// ManageS3 is disabled on MirrorPeer spec, skip ramen hub operator config update
+		return nil
+	}
+
+	// converting s3 bucket config into ramen s3 profile
+	expectedS3Profile := rmn.S3StoreProfile{
+		S3ProfileName:        string(data[common.S3ProfileName]),
+		S3Bucket:             string(data[common.S3BucketName]),
+		S3Region:             string(data[common.S3Region]),
+		S3CompatibleEndpoint: string(data[common.S3Endpoint]),
+		// referenceing ramen secret
+		S3SecretRef: corev1.SecretReference{
+			Name:      secret.Name,
+			Namespace: ramenHubNamespace,
+		},
+	}
+
+	// fetch ramen hub operator configmap
+	currentRamenConfigMap := corev1.ConfigMap{}
+	namespacedName := types.NamespacedName{
+		Name:      common.RamenHubOperatorConfigName,
+		Namespace: ramenHubNamespace,
+	}
+	err = rc.Get(ctx, namespacedName, &currentRamenConfigMap)
+	if err != nil {
+		logger.Error(err, "unable to fetch DR hub operator config", "config", common.RamenHubOperatorConfigName, "namespace", ramenHubNamespace)
+		return err
+	}
+
+	// extract ramen manager config str from configmap
+	ramenConfigData, ok := currentRamenConfigMap.Data["ramen_manager_config.yaml"]
+	if !ok {
+		return fmt.Errorf("DR hub operator config data is empty for the config %q in namespace %q", common.RamenHubOperatorConfigName, ramenHubNamespace)
+	}
+
+	// converting ramen manager config str into RamenConfig
+	ramenConfig := rmn.RamenConfig{}
+	err = yaml.Unmarshal([]byte(ramenConfigData), &ramenConfig)
+	if err != nil {
+		logger.Error(err, "failed to unmarshal DR hub operator config data", "config", common.RamenHubOperatorConfigName, "namespace", ramenHubNamespace)
+		return err
+	}
+
+	isUpdated := false
+	for i, currentS3Profile := range ramenConfig.S3StoreProfiles {
+		if currentS3Profile.S3ProfileName == expectedS3Profile.S3ProfileName {
+
+			if reflect.DeepEqual(expectedS3Profile, currentS3Profile) {
+				// no change detected on already exiting s3 profile in RamenConfig
+				return nil
+			}
+			// changes deducted on existing s3 profile
+			ramenConfig.S3StoreProfiles[i] = expectedS3Profile
+			isUpdated = true
+			break
+		}
+	}
+
+	if !isUpdated {
+		// new s3 profile is deducted
+		ramenConfig.S3StoreProfiles = append(ramenConfig.S3StoreProfiles, expectedS3Profile)
+	}
+
+	// converting RamenConfig into ramen manager config str
+	ramenConfigDataStr, err := yaml.Marshal(ramenConfig)
+	if err != nil {
+		logger.Error(err, "failed to marshal DR hub operator config data", "config", common.RamenHubOperatorConfigName, "namespace", ramenHubNamespace)
+		return err
+	}
+
+	// update ramen hub operator configmap
+	logger.Info("Updating DR hub operator config with S3 profile", common.RamenHubOperatorConfigName, expectedS3Profile.S3ProfileName)
+	_, err = controllerutil.CreateOrUpdate(ctx, rc, &currentRamenConfigMap, func() error {
+		// attach ramen manager config str into configmap
+		currentRamenConfigMap.Data["ramen_manager_config.yaml"] = string(ramenConfigDataStr)
+		return nil
+	})
+
+	return err
+}
+
+func createOrUpdateSecretsFromInternalSecret(ctx context.Context, rc client.Client, secret *corev1.Secret, mirrorPeers []multiclusterv1alpha1.MirrorPeer) error {
+	logger := log.FromContext(ctx)
+
+	if err := common.ValidateInternalSecret(secret, common.InternalLabel); err != nil {
+		logger.Error(err, "Provided internal secret is not valid", "secret", secret)
+		return err
+	}
+
+	data := make(map[string][]byte)
+	err := json.Unmarshal(secret.Data[common.SecretDataKey], &data)
+	if err != nil {
+		logger.Error(err, "failed to unmarshal secret data", "secret", secret.Name, "namespace", secret.Namespace)
+		return err
+	}
+
+	if string(secret.Data[common.SecretOriginKey]) == common.S3Origin {
+		if ok := common.ValidateS3Secret(data); !ok {
+			return fmt.Errorf("invalid S3 secret format for secret name %q in namesapce %q", secret.Name, secret.Namespace)
+		}
+
+		namespace := common.GetEnv("ODR_NAMESPACE", common.RamenHubNamespace)
+
+		// S3 origin secret has two part 1. s3 bucket secret 2. s3 bucket config
+		// create ramen s3 secret using s3 bucket secret
+		err := createOrUpdateRamenS3Secret(ctx, rc, secret, data, namespace)
+		if err != nil {
+			return err
+		}
+		// update ramen hub operator config using s3 bucket config and ramen s3 secret reference
+		err = updateRamenHubOperatorConfig(ctx, rc, secret, data, mirrorPeers, namespace)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // processDeletedSecrets finds out which type of secret is deleted

@@ -14,4 +14,5 @@ spec:
         namespace: openshift-storage
   schedulingInterval: 5m
   replicationSecretName: rook-csi-rbd-provisioner
+  manageS3: false
   mirroringMode: snapshot

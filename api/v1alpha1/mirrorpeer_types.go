@@ -65,6 +65,9 @@ type MirrorPeerSpec struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default="5m"
 	SchedulingInterval string `json:"schedulingInterval,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=false
+	ManageS3 bool `json:"manageS3,omitempty"`
 }
 
 // MirrorPeerStatus defines the observed state of MirrorPeer

@@ -39,7 +39,7 @@ type MirrorPeerSecretReconciler struct {
 
 //+kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers/status,verbs=get
-//+kubebuilder:rbac:groups=core,resources=secrets;events,verbs=*
+//+kubebuilder:rbac:groups=core,resources=secrets;events;configmaps,verbs=*
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -81,6 +81,12 @@ func mirrorPeerSecretReconcile(ctx context.Context, rc client.Client, req ctrl.R
 		err = processDestinationSecretUpdation(ctx, rc, &peerSecret)
 		if err != nil {
 			logger.Error(err, "Restoring destination secret failed", "secret", peerSecret)
+			return err
+		}
+	} else if common.IsSecretInternal(&peerSecret) {
+		err = createOrUpdateSecretsFromInternalSecret(ctx, rc, &peerSecret, nil)
+		if err != nil {
+			logger.Error(err, "Updating the secret from internal secret is failed", "secret", peerSecret)
 			return err
 		}
 	}
