@@ -1,6 +1,7 @@
 package common
 
 import (
+	"fmt"
 	"os"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
@@ -11,13 +12,13 @@ const (
 	BucketGenerateName = "odrbucket"
 )
 
-func GetCurrentStorageClusterRef(mp *multiclusterv1alpha1.MirrorPeer, spokeClusterName string) *multiclusterv1alpha1.StorageClusterRef {
+func GetCurrentStorageClusterRef(mp *multiclusterv1alpha1.MirrorPeer, spokeClusterName string) (*multiclusterv1alpha1.StorageClusterRef, error) {
 	for _, v := range mp.Spec.Items {
 		if v.ClusterName == spokeClusterName {
-			return &v.StorageClusterRef
+			return &v.StorageClusterRef, nil
 		}
 	}
-	return nil
+	return nil, fmt.Errorf("StorageClusterRef for cluster %s under mirrorpeer %s not found", spokeClusterName, mp.Name)
 }
 
 func GetEnv(key, defaultValue string) string {
