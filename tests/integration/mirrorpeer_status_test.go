@@ -237,7 +237,7 @@ var _ = Describe("MirrorPeer Status Tests", func() {
 				}, &mp)
 				Expect(err).NotTo(HaveOccurred())
 				return mp.Status.Phase
-			}, 20*time.Second, 2*time.Second).Should(Equal(multiclusterv1alpha1.ExchangedSecret))
+			}, 5*time.Minute, 2*time.Second).Should(Equal(multiclusterv1alpha1.ExchangedSecret))
 
 		})
 	})
