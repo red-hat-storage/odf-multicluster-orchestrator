@@ -78,7 +78,11 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		klog.Error(err, "Failed to get MirrorPeer")
 		return ctrl.Result{}, err
 	}
-	scr := common.GetCurrentStorageClusterRef(&mirrorPeer, r.SpokeClusterName)
+	scr, err := common.GetCurrentStorageClusterRef(&mirrorPeer, r.SpokeClusterName)
+	if err != nil {
+		klog.Error(err, "Failed to get current storage cluster ref")
+		return ctrl.Result{}, err
+	}
 
 	err = r.enableCSIAddons(ctx, scr.Namespace)
 	if err != nil {
@@ -216,7 +220,11 @@ func (r *MirrorPeerReconciler) enableCSIAddons(ctx context.Context, namespace st
 }
 
 func (r *MirrorPeerReconciler) createVolumeReplicationClass(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer) error {
-	scr := common.GetCurrentStorageClusterRef(mp, r.SpokeClusterName)
+	scr, err := common.GetCurrentStorageClusterRef(mp, r.SpokeClusterName)
+	if err != nil {
+		klog.Error(err, "Failed to get current storage cluster ref")
+		return err
+	}
 	params := make(map[string]string)
 	params[MirroringModeKey] = string(mp.Spec.Mode)
 	params[SchedulingIntervalKey] = mp.Spec.SchedulingInterval
@@ -236,7 +244,7 @@ func (r *MirrorPeerReconciler) createVolumeReplicationClass(ctx context.Context,
 			Name: "odf-rbd-volumereplicationclass",
 		},
 	}
-	err := r.SpokeClient.Get(ctx, types.NamespacedName{
+	err = r.SpokeClient.Get(ctx, types.NamespacedName{
 		Name: found.Name,
 	}, found)
 
