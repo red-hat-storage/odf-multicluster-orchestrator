@@ -89,14 +89,15 @@ func (s s3SecretHandler) syncBlueSecret(name string, namespace string, c *blueSe
 
 	var storageClusterRef *v1alpha1.StorageClusterRef
 	for _, mirrorPeer := range mirrorPeers {
-		storageClusterRef = common.GetCurrentStorageClusterRef(&mirrorPeer, c.clusterName)
-		if storageClusterRef != nil {
+		storageClusterRef, err = common.GetCurrentStorageClusterRef(&mirrorPeer, c.clusterName)
+		if err == nil {
 			break
 		}
 	}
 
 	if storageClusterRef == nil {
-		return fmt.Errorf("failed to find storage cluster ref using spoke cluster name %s from mirrorpeers ", c.clusterName)
+		klog.Error("failed to find storage cluster ref using spoke cluster name %s from mirrorpeers ", c.clusterName)
+		return err
 	}
 
 	// fetch s3 endpoint
