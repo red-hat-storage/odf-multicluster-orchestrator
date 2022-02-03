@@ -111,6 +111,8 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
 		if statusErr != nil {
 			logger.Error(statusErr, "Error occurred while updating the status of mirrorpeer", "MirrorPeer", mirrorPeer)
+			// Requeue, but don't throw
+			return ctrl.Result{Requeue: true}, nil
 		}
 	}
 
@@ -168,7 +170,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.Info("Secrets not found; Attempting to reconcile again")
-			return ctrl.Result{}, nil
+			return ctrl.Result{Requeue: true}, nil
 		}
 		logger.Info("Error while exchanging tokens", "MirrorPeer", mirrorPeer)
 		mirrorPeer.Status.Message = err.Error()
@@ -186,11 +188,13 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
 		if statusErr != nil {
 			logger.Error(statusErr, "Error occured while updating the status of mirrorpeer", "MirrorPeer", mirrorPeer)
+			// Requeue, but don't throw
+			return ctrl.Result{Requeue: true}, nil
 		}
 		return ctrl.Result{}, nil
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{Requeue: true}, nil
 }
 
 func processMirrorPeerSecretChanges(ctx context.Context, rc client.Client, mirrorPeerObj multiclusterv1alpha1.MirrorPeer) error {
