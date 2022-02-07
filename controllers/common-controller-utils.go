@@ -10,7 +10,6 @@ import (
 	rmn "github.com/ramendr/ramen/api/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
-	yaml "gopkg.in/yaml.v2"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	yaml "sigs.k8s.io/yaml"
 )
 
 // createOrUpdateDestinationSecretsFromSource updates all destination secrets
