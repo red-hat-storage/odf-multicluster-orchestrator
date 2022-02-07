@@ -15,7 +15,6 @@ require (
 	github.com/spf13/cobra v1.1.3
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.22.1
 	k8s.io/apimachinery v0.22.1
 	k8s.io/client-go v12.0.0+incompatible
@@ -23,6 +22,7 @@ require (
 	open-cluster-management.io/addon-framework v0.0.0-20210709073210-719dbb79d275
 	open-cluster-management.io/api v0.0.0-20210727123024-41c7397e9f2d
 	sigs.k8s.io/controller-runtime v0.9.6
+	sigs.k8s.io/yaml v1.3.0
 
 )
 
