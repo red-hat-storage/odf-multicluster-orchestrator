@@ -28,6 +28,8 @@ const (
 	S3BucketRegion            = "BUCKET_REGION"
 	S3RouteName               = "s3"
 	DefaultS3EndpointProtocol = "https"
+	// DefaultS3Region is used as a placeholder when region information is not provided by NooBaa
+	DefaultS3Region = "noobaa"
 )
 
 func getFilterCondition(ownerReferences []metav1.OwnerReference, name string, blueSecretMatchString string) bool {
@@ -107,6 +109,10 @@ func (s s3SecretHandler) syncBlueSecret(name string, namespace string, c *blueSe
 		return fmt.Errorf("failed to get the s3 endpoint in namespace %q in managed cluster. Error %v", namespace, err)
 	}
 
+	s3Region := configMap.Data[S3BucketRegion]
+	if s3Region == "" {
+		s3Region = DefaultS3Region
+	}
 	// s3 secret
 	s3Secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -117,7 +123,7 @@ func (s s3SecretHandler) syncBlueSecret(name string, namespace string, c *blueSe
 		Data: map[string][]byte{
 			common.S3ProfileName:      []byte(fmt.Sprintf("%s-%s-%s", common.S3ProfilePrefix, c.clusterName, storageClusterRef.Name)),
 			common.S3BucketName:       []byte(configMap.Data[S3BucketName]),
-			common.S3Region:           []byte(configMap.Data[S3BucketRegion]),
+			common.S3Region:           []byte(s3Region),
 			common.S3Endpoint:         []byte(fmt.Sprintf("%s://%s", DefaultS3EndpointProtocol, route.Spec.Host)),
 			common.AwsSecretAccessKey: []byte(secret.Data[common.AwsSecretAccessKey]),
 			common.AwsAccessKeyId:     []byte(secret.Data[common.AwsAccessKeyId]),
