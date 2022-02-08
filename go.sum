@@ -1966,8 +1966,8 @@ github.com/quasilyte/go-ruleguard v0.2.0/go.mod h1:2RT/tf0Ce0UDj5y243iWKosQogJd8
 github.com/quasilyte/regex/syntax v0.0.0-20200407221936-30656e2c4a95/go.mod h1:rlzQ04UMyJXu/aOvhd8qT+hvDrFpiwqp8MRXDY9szc0=
 github.com/quasilyte/regex/syntax v0.0.0-20200805063351-8f842688393c/go.mod h1:rlzQ04UMyJXu/aOvhd8qT+hvDrFpiwqp8MRXDY9szc0=
 github.com/quobyte/api v0.1.2/go.mod h1:jL7lIHrmqQ7yh05OJ+eEEdHr0u/kmT1Ff9iHd+4H6VI=
-github.com/ramendr/ramen v0.0.0-20220114120954-238a9a87a098 h1:EBLxgp7QqzM8X3n60FXpWaC2F9BxkKYPpeIFa0QzROI=
-github.com/ramendr/ramen v0.0.0-20220114120954-238a9a87a098/go.mod h1:MlNNTieEMzemaNg0Ye3TRnISmINl5ofYnRLuQ81urPA=
+github.com/ramendr/ramen v0.0.0-20220201125512-ff29bf0d3dbb h1:KtrwYmJEddUZzT9EmKAiPbflncTtPIC75z27sWCbqEw=
+github.com/ramendr/ramen v0.0.0-20220201125512-ff29bf0d3dbb/go.mod h1:ZSiV2uBaZJCLjEewmvHrXlbq5C6AzqVictDiFQ0436g=
 github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a/go.mod h1:bCqnVzQkZxMG4s8nGwiZ5l3QUCyqpo9Y+/ZMZ9VjZe4=
 github.com/rickb777/date v1.12.5-0.20200422084442-6300e543c4d9/go.mod h1:L8WrssTzvgYw34/Ppa0JpJfI7KKXZ2cVGI6Djt0brUU=
 github.com/rickb777/plural v1.2.0/go.mod h1:UdpyWFCGbo3mvK3f/PfZOAOrkjzJlYN/sD46XNWJ+Es=
