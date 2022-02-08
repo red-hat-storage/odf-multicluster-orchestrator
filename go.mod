@@ -10,7 +10,7 @@ require (
 	github.com/openshift/api v3.9.1-0.20191111211345-a27ff30ebf09+incompatible
 	github.com/openshift/library-go v0.0.0-20210727084322-8a96c0a97c06
 	github.com/openshift/ocs-operator v0.0.1-alpha2
-	github.com/ramendr/ramen v0.0.0-20220114120954-238a9a87a098
+	github.com/ramendr/ramen v0.0.0-20220201125512-ff29bf0d3dbb
 	github.com/rook/rook v1.7.0
 	github.com/spf13/cobra v1.1.3
 	github.com/stretchr/testify v1.7.0
