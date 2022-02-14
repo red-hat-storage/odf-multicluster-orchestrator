@@ -44,6 +44,8 @@ type MirrorPeerReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+const hubRecoveryLabel = "cluster.open-cluster-management.io/backup"
+
 //+kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers/finalizers,verbs=update
@@ -105,6 +107,30 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 	logger.V(2).Info("All validations for MirrorPeer passed", "MirrorPeer", req.NamespacedName)
+
+	mirrorPeerCopy := mirrorPeer.DeepCopy()
+	if mirrorPeerCopy.Labels == nil {
+		mirrorPeerCopy.Labels = make(map[string]string)
+	}
+
+	if val, ok := mirrorPeerCopy.Labels[hubRecoveryLabel]; !ok || val != "resource" {
+		logger.Info("Adding label to mirrorpeer for disaster recovery")
+		mirrorPeerCopy.Labels[hubRecoveryLabel] = "resource"
+		err = r.Client.Update(ctx, mirrorPeerCopy)
+
+		if k8serrors.IsConflict(err) {
+			logger.Info("MirrorPeer is being updated by another process. Retrying", "MirrorPeer", mirrorPeerCopy.Name)
+			return ctrl.Result{Requeue: true}, nil
+		} else if k8serrors.IsNotFound(err) {
+			logger.Info("MirrorPeer no longer exists. Ignoring since object must have been deleted", "MirrorPeer", mirrorPeerCopy.Name)
+			return ctrl.Result{}, nil
+		} else if err != nil {
+			logger.Info("Warning: Failed to update mirrorpeer", "MirrorPeer", mirrorPeerCopy.Name, "Error", err)
+		} else {
+			logger.Info("Successfully added label to mirrorpeer for disaster recovery", "MirrorPeer", mirrorPeerCopy.Name)
+			return ctrl.Result{Requeue: true}, nil
+		}
+	}
 
 	if mirrorPeer.Status.Phase == "" {
 		mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangingSecret
