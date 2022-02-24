@@ -1,3 +1,4 @@
+//go:build unit
 // +build unit
 
 /*
@@ -91,5 +92,15 @@ func TestMirrorPeerReconcilerReconcile(t *testing.T) {
 	_, err := r.Reconcile(ctx, req)
 	if err != nil {
 		t.Errorf("MirrorPeerReconciler Reconcile() failed. Error: %s", err)
+	}
+
+	var mp multiclusterv1alpha1.MirrorPeer
+	err = r.Get(ctx, req.NamespacedName, &mp)
+	if err != nil {
+		t.Errorf("Failed to get MirrorPeer. Error: %s", err)
+	}
+
+	if val, ok := mp.Labels[hubRecoveryLabel]; !ok || val != "resource" {
+		t.Errorf("MirrorPeer.Labels[%s] is not set correctly. Expected: %s, Actual: %s", hubRecoveryLabel, "resource", val)
 	}
 }
