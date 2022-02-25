@@ -29,7 +29,7 @@ func createOrUpdateDestinationSecretsFromSource(ctx context.Context, rc client.C
 	logger := log.FromContext(ctx)
 	err := common.ValidateSourceSecret(sourceSecret)
 	if err != nil {
-		logger.Error(err, "Updating secrets failed. Invalid secret type.", "secret", sourceSecret)
+		logger.Error(err, "Updating secrets failed. Invalid secret type.", "secret", sourceSecret.Name, "namespace", sourceSecret.Namespace)
 		return err
 	}
 
@@ -44,10 +44,10 @@ func createOrUpdateDestinationSecretsFromSource(ctx context.Context, rc client.C
 
 	uniqueConnectedPeers, err := PeersConnectedToSecret(sourceSecret, mirrorPeers)
 	if err != nil {
-		logger.Error(err, "ConnectedPeers returned an error", "secret", sourceSecret, "mirrorpeers", mirrorPeers)
+		logger.Error(err, "ConnectedPeers returned an error", "secret", sourceSecret.Name, "namespace", sourceSecret.Namespace, "mirrorpeers", mirrorPeers)
 		return err
 	}
-	logger.V(2).Info("Listing all the Peers connected to the Source", "SourceSecret", sourceSecret, "#connected-peers", len(uniqueConnectedPeers))
+	logger.V(2).Info("Listing all the Peers connected to the Source", "SourceSecret", sourceSecret.Name, "namespace", sourceSecret.Namespace, "connected-peers-length", len(uniqueConnectedPeers))
 
 	// anyErr will have the last found error
 	var anyErr error
@@ -55,7 +55,7 @@ func createOrUpdateDestinationSecretsFromSource(ctx context.Context, rc client.C
 		namedPeerRef := NewNamedPeerRefWithSecretData(sourceSecret, eachConnectedPeer)
 		err := namedPeerRef.CreateOrUpdateDestinationSecret(ctx, rc)
 		if err != nil {
-			logger.Error(err, "Unable to update the destination secret", "PeerRef", eachConnectedPeer)
+			logger.Error(err, "Unable to update the destination secret", "secret", sourceSecret.Name, "namespace", sourceSecret.Namespace, "PeerRef", eachConnectedPeer)
 			anyErr = err
 		}
 	}
@@ -67,7 +67,7 @@ func processDestinationSecretUpdation(ctx context.Context, rc client.Client, des
 	logger := log.FromContext(ctx)
 	err := common.ValidateDestinationSecret(destSecret)
 	if err != nil {
-		logger.Error(err, "Destination secret validation failed", "secret", destSecret)
+		logger.Error(err, "Destination secret validation failed", "secret", destSecret.Name, "namespace", destSecret.Namespace)
 		return err
 	}
 	mirrorPeers, err := common.FetchAllMirrorPeers(ctx, rc)
@@ -77,7 +77,7 @@ func processDestinationSecretUpdation(ctx context.Context, rc client.Client, des
 	}
 	uniqueConnectedPeers, err := PeersConnectedToSecret(destSecret, mirrorPeers)
 	if err != nil {
-		logger.Error(err, "Failed to get the peers connected to the secret", "secret", destSecret)
+		logger.Error(err, "Failed to get the peers connected to the secret", "secret", destSecret.Name, "namespace", destSecret.Namespace)
 		return err
 	}
 	var connectedSource *corev1.Secret
@@ -89,7 +89,7 @@ func processDestinationSecretUpdation(ctx context.Context, rc client.Client, des
 			if k8serrors.IsNotFound(err) {
 				continue
 			}
-			logger.Error(err, "Unexpected error while finding the source secret", "peer-ref", eachConnectedPeer, "secret", destSecret)
+			logger.Error(err, "Unexpected error while finding the source secret", "peer-ref", eachConnectedPeer, "secret", destSecret.Name, "namespace", destSecret.Namespace)
 			return err
 		}
 		if common.IsSecretSource(&connectedSecret) {
@@ -99,7 +99,7 @@ func processDestinationSecretUpdation(ctx context.Context, rc client.Client, des
 	}
 
 	if connectedSource == nil {
-		logger.Error(nil, "No connected source found. Removing the dangling destination secret", "secret", destSecret)
+		logger.Error(nil, "No connected source found. Removing the dangling destination secret", "secret", destSecret.Name, "namespace", destSecret.Namespace)
 		err = rc.Delete(ctx, destSecret)
 		return err
 	}
@@ -119,7 +119,7 @@ func processDestinationSecretCleanup(ctx context.Context, rc client.Client) erro
 		err = processDestinationSecretUpdation(ctx, rc, &eachDSecret)
 		if err != nil {
 			anyError = err
-			logger.Error(err, "Failed to update destination secret", "secret", eachDSecret)
+			logger.Error(err, "Failed to update destination secret", "secret", eachDSecret.Name, "namespace", eachDSecret.Namespace)
 		}
 	}
 	return anyError
@@ -153,7 +153,7 @@ func createOrUpdateRamenS3Secret(ctx context.Context, rc client.Client, secret *
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			// creating new s3 secret on ramen openshift-dr-system namespace
-			logger.Info("Creating a s3 secret", "secret", expectedSecret)
+			logger.Info("Creating a s3 secret", "secret", expectedSecret.Name, "namespace", expectedSecret.Namespace)
 			return rc.Create(ctx, &expectedSecret)
 		}
 		logger.Error(err, "unable to fetch the s3 secret", "secret", secret.Name, "namespace", ramenHubNamespace)
@@ -289,7 +289,7 @@ func createOrUpdateSecretsFromInternalSecret(ctx context.Context, rc client.Clie
 	logger := log.FromContext(ctx)
 
 	if err := common.ValidateInternalSecret(secret, common.InternalLabel); err != nil {
-		logger.Error(err, "Provided internal secret is not valid", "secret", secret)
+		logger.Error(err, "Provided internal secret is not valid", "secret", secret.Name, "namespace", secret.Namespace)
 		return err
 	}
 
@@ -348,7 +348,7 @@ func processDeletedSecrets(ctx context.Context, rc client.Client, req types.Name
 				// secrets of same name.
 				if sourceSecretPointer != nil {
 					err = errors.New("multiple source secrets detected")
-					logger.Error(err, "Cannot have more than one source secrets with the same name", "request", req, "source-secret", *sourceSecretPointer)
+					logger.Error(err, "Cannot have more than one source secrets with the same name", "request", req, "source-secret", sourceSecretPointer.Name, "namespace", sourceSecretPointer.Namespace)
 					return err
 				}
 				sourceSecretPointer = eachSecret.DeepCopy()
@@ -358,7 +358,7 @@ func processDeletedSecrets(ctx context.Context, rc client.Client, req types.Name
 		}
 	}
 
-	logger.V(2).Info("List of secrets with requested name", "secret-name", req.Name, "secretlist", sameNamedDestinationSecrets, "#secrets", len(sameNamedDestinationSecrets))
+	logger.V(2).Info("List of secrets with requested name", "secret-name", req.Name, "secret-length", len(sameNamedDestinationSecrets))
 
 	if sourceSecretPointer == nil {
 		// if there is neither source secret nor any other similarly named secrets,
@@ -366,13 +366,13 @@ func processDeletedSecrets(ctx context.Context, rc client.Client, req types.Name
 		if len(sameNamedDestinationSecrets) == 0 {
 			return nil
 		}
-		logger.Info("A SOURCE secret deletion detected", "secret-name", req.Name)
+		logger.Info("A SOURCE secret deletion detected", "secret-name", req.Name, "namespace", req.Namespace)
 		var anyErr error
 		// if source secret is not present, remove all the destinations|GREENs
 		for _, eachDestSecret := range sameNamedDestinationSecrets {
 			err = rc.Delete(ctx, &eachDestSecret)
 			if err != nil {
-				logger.Error(err, "Deletion failed", "secret", eachDestSecret)
+				logger.Error(err, "Deletion failed", "secret", eachDestSecret.Name, "namespace", eachDestSecret.Namespace)
 				anyErr = err
 			}
 		}
@@ -382,13 +382,13 @@ func processDeletedSecrets(ctx context.Context, rc client.Client, req types.Name
 			return anyErr
 		}
 	} else {
-		logger.Info("A DESTINATION secret deletion detected", "secret-name", req.Name)
+		logger.Info("A DESTINATION secret deletion detected", "secret-name", req.Name, "namespace", req.Namespace)
 		// in this section, one of the destination is removed
 		// action: use the source secret pointed by 'sourceSecretPointer'
 		// and restore the missing destination secret
 		err = createOrUpdateDestinationSecretsFromSource(ctx, rc, sourceSecretPointer)
 		if err != nil {
-			logger.Error(err, "Unable to update the destination secret", "source-secret", sourceSecretPointer)
+			logger.Error(err, "Unable to update the destination secret", "source-secret", sourceSecretPointer.Name, "namespace", sourceSecretPointer.Namespace)
 			return err
 		}
 	}

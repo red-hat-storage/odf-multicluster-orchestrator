@@ -113,7 +113,7 @@ func (nPR *NamedPeerRefWithSecretData) CreateOrUpdateDestinationSecret(ctx conte
 	err = nPR.GetAssociatedSecret(ctx, rc, &currentDest)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			logger.Info("Creating destination secret", "secret", expectedDest)
+			logger.Info("Creating destination secret", "secret", expectedDest.Name, "namespace", expectedDest.Namespace)
 			return rc.Create(ctx, expectedDest)
 		}
 		logger.Error(err, "Unable to get the destination secret", "destination-ref", nPR.PeerRef)
@@ -122,9 +122,7 @@ func (nPR *NamedPeerRefWithSecretData) CreateOrUpdateDestinationSecret(ctx conte
 
 	// recieved a destination secret, now compare
 	if !reflect.DeepEqual(expectedDest.Data, currentDest.Data) {
-		logger.Info("Updating the destination secret",
-			"current-data", currentDest.Data,
-			"expected-data", expectedDest.Data)
+		logger.Info("Updating the destination secret", "secret", currentDest.Name, "namespace", currentDest.Namespace)
 		_, err := controllerutil.CreateOrUpdate(ctx, rc, &currentDest, func() error {
 			currentDest.Data = expectedDest.Data
 			return nil
