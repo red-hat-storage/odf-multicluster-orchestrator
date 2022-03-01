@@ -242,7 +242,7 @@ func processMirrorPeerSecretChanges(ctx context.Context, rc client.Client, mirro
 		}
 		err = createOrUpdateDestinationSecretsFromSource(ctx, rc, matchingSourceSecret, mirrorPeerObj)
 		if err != nil {
-			logger.Error(err, "Error while updating Destination secrets", "source-secret", *matchingSourceSecret)
+			logger.Error(err, "Error while updating Destination secrets", "source-secret", matchingSourceSecret.Name, "namespace", matchingSourceSecret.Namespace)
 			anyErr = err
 		}
 	}

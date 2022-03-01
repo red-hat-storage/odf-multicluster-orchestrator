@@ -68,25 +68,25 @@ func mirrorPeerSecretReconcile(ctx context.Context, rc client.Client, req ctrl.R
 	}
 	if common.IsSecretSource(&peerSecret) {
 		if err := common.ValidateSourceSecret(&peerSecret); err != nil {
-			logger.Error(err, "Provided source secret is not valid", "secret", peerSecret)
+			logger.Error(err, "Provided source secret is not valid", "secret", peerSecret.Name, "namespace", peerSecret.Namespace)
 			return err
 		}
 		err = createOrUpdateDestinationSecretsFromSource(ctx, rc, &peerSecret)
 		if err != nil {
-			logger.Error(err, "Updating the destination secret failed", "secret", peerSecret)
+			logger.Error(err, "Updating the destination secret failed", "secret", peerSecret.Name, "namespace", peerSecret.Namespace)
 			return err
 		}
 	} else if common.IsSecretDestination(&peerSecret) {
 		// a destination secret updation happened
 		err = processDestinationSecretUpdation(ctx, rc, &peerSecret)
 		if err != nil {
-			logger.Error(err, "Restoring destination secret failed", "secret", peerSecret)
+			logger.Error(err, "Restoring destination secret failed", "secret", peerSecret.Name, "namespace", peerSecret.Namespace)
 			return err
 		}
 	} else if common.IsSecretInternal(&peerSecret) {
 		err = createOrUpdateSecretsFromInternalSecret(ctx, rc, &peerSecret, nil)
 		if err != nil {
-			logger.Error(err, "Updating the secret from internal secret is failed", "secret", peerSecret)
+			logger.Error(err, "Updating the secret from internal secret is failed", "secret", peerSecret.Name, "namespace", peerSecret.Namespace)
 			return err
 		}
 	}
