@@ -188,6 +188,11 @@ spec:
               labels:
                 control-plane: odfmo-controller-manager
             spec:
+              tolerations:
+                - effect: NoSchedule
+                  key: node.ocs.openshift.io/storage
+                  operator: Equal
+                  value: "true"
               containers:
               - args:
                 - manager
