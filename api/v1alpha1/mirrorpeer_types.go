@@ -24,10 +24,8 @@ type PhaseType string
 type MirroringMode string
 
 const (
-	ExchangingSecret PhaseType     = "ExchangingSecret"
-	ExchangedSecret  PhaseType     = "ExchangedSecret"
-	Snapshot         MirroringMode = "snapshot"
-	Journal          MirroringMode = "journal"
+	ExchangingSecret PhaseType = "ExchangingSecret"
+	ExchangedSecret  PhaseType = "ExchangedSecret"
 )
 
 // StorageClusterRef holds a reference to a StorageCluster
@@ -52,19 +50,11 @@ type MirrorPeerSpec struct {
 	// +kubebuilder:validation:MaxItems=2
 	// +kubebuilder:validation:MinItems=2
 	Items []PeerRef `json:"items"`
-	//  The default MirroringMode is snapshot which is configured on the rbd images.
-	// +kubebuilder:validation:Enum=snapshot;journal
+
+	// SchedulingIntervals is a list of intervals at which mirroring snapshots are taken
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:default=snapshot
-	Mode MirroringMode `json:"mirroringMode,omitempty"`
-	// The ReplicationSecretName contains the ceph user credentials to connect to ceph cluster for mirroring operations
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default="rook-csi-rbd-provisioner"
-	ReplicationSecretName string `json:"replicationSecretName,omitempty"`
-	// The SchedulingInterval in which the mirroring snapshot are taken
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default="5m"
-	SchedulingInterval string `json:"schedulingInterval,omitempty"`
+	SchedulingIntervals []string `json:"schedulingIntervals,omitempty"`
+
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=false
 	ManageS3 bool `json:"manageS3,omitempty"`

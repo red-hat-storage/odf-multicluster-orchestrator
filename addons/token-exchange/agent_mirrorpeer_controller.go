@@ -21,6 +21,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"regexp"
 
 	replicationv1alpha1 "github.com/csi-addons/volume-replication-operator/api/v1alpha1"
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
@@ -36,7 +37,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -50,14 +50,17 @@ type MirrorPeerReconciler struct {
 }
 
 const (
-	RookCSIEnableKey              = "CSI_ENABLE_OMAP_GENERATOR"
-	RookVolumeRepKey              = "CSI_ENABLE_VOLUME_REPLICATION"
-	MirroringModeKey              = "mirroringMode"
-	SchedulingIntervalKey         = "schedulingInterval"
-	ReplicationSecretNameKey      = "replication.storage.openshift.io/replication-secret-name"
-	ReplicationSecretNamespaceKey = "replication.storage.openshift.io/replication-secret-namespace"
-	ProvisionerTemplate           = "%s.rbd.csi.ceph.com"
-	RookConfigMapName             = "rook-ceph-operator-config"
+	RookCSIEnableKey                      = "CSI_ENABLE_OMAP_GENERATOR"
+	RookVolumeRepKey                      = "CSI_ENABLE_VOLUME_REPLICATION"
+	MirroringModeKey                      = "mirroringMode"
+	SchedulingIntervalKey                 = "schedulingInterval"
+	ReplicationSecretNameKey              = "replication.storage.openshift.io/replication-secret-name"
+	ReplicationSecretNamespaceKey         = "replication.storage.openshift.io/replication-secret-namespace"
+	RBDProvisionerTemplate                = "%s.rbd.csi.ceph.com"
+	RookConfigMapName                     = "rook-ceph-operator-config"
+	RBDVolumeReplicationClassNameTemplate = "rbd-volumereplicationclass-%v"
+	RBDReplicationSecretName              = "rook-csi-rbd-provisioner"
+	DefaultMirroringMode                  = "snapshot"
 )
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -100,9 +103,9 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	err = r.createVolumeReplicationClass(ctx, &mirrorPeer)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create volumereplicationclass: %v", err)
+	errs := r.createVolumeReplicationClass(ctx, &mirrorPeer)
+	if len(errs) > 0 {
+		return ctrl.Result{}, fmt.Errorf("few failures occured while creating VolumeReplicationClasses: %v", errs)
 	}
 	return ctrl.Result{}, nil
 }
@@ -219,49 +222,77 @@ func (r *MirrorPeerReconciler) enableCSIAddons(ctx context.Context, namespace st
 	return nil
 }
 
-func (r *MirrorPeerReconciler) createVolumeReplicationClass(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer) error {
+/*
+  validateSchedulingInterval checks if the scheduling interval is valid and ending with a 'm' or 'h' or 'd'
+  else it will return error.
+*/
+func validateSchedulingInterval(interval string) error {
+	re := regexp.MustCompile(`^\d+[mhd]$`)
+	if re.MatchString(interval) {
+		return nil
+	}
+	return fmt.Errorf("invalid scheduling interval %q. interval should have suffix 'm|h|d' ", interval)
+}
+
+func (r *MirrorPeerReconciler) createVolumeReplicationClass(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer) []error {
 	scr, err := common.GetCurrentStorageClusterRef(mp, r.SpokeClusterName)
+	var errs []error
 	if err != nil {
 		klog.Error(err, "Failed to get current storage cluster ref")
-		return err
+		errs = append(errs, err)
 	}
-	params := make(map[string]string)
-	params[MirroringModeKey] = string(mp.Spec.Mode)
-	params[SchedulingIntervalKey] = mp.Spec.SchedulingInterval
-	params[ReplicationSecretNameKey] = mp.Spec.ReplicationSecretName
-	params[ReplicationSecretNamespaceKey] = scr.Namespace
-	vrc := &replicationv1alpha1.VolumeReplicationClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "odf-rbd-volumereplicationclass",
-		},
-		Spec: replicationv1alpha1.VolumeReplicationClassSpec{
-			Provisioner: fmt.Sprintf(ProvisionerTemplate, scr.Namespace),
-			Parameters:  params,
-		},
+	if len(errs) > 0 {
+		return errs
 	}
-	found := &replicationv1alpha1.VolumeReplicationClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "odf-rbd-volumereplicationclass",
-		},
-	}
-	err = r.SpokeClient.Get(ctx, types.NamespacedName{
-		Name: found.Name,
-	}, found)
+	for _, interval := range mp.Spec.SchedulingIntervals {
+		err = validateSchedulingInterval(interval)
+		if err != nil {
+			klog.Error(err, "Failed to validate scheduling interval")
+			errs = append(errs, err)
+			continue
+		}
+		params := make(map[string]string)
+		params[MirroringModeKey] = DefaultMirroringMode
+		params[SchedulingIntervalKey] = interval
+		params[ReplicationSecretNameKey] = RBDReplicationSecretName
+		params[ReplicationSecretNamespaceKey] = scr.Namespace
+		vrcName := fmt.Sprintf(RBDVolumeReplicationClassNameTemplate, common.FnvHash(interval))
+		found := &replicationv1alpha1.VolumeReplicationClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: vrcName,
+			},
+		}
+		err = r.SpokeClient.Get(ctx, types.NamespacedName{
+			Name: found.Name,
+		}, found)
 
-	if err != nil && !errors.IsNotFound(err) {
-		return err
+		switch {
+		case err == nil:
+			klog.Infof("VolumeReplicationClass already exists: %s", vrcName)
+			continue
+		case !errors.IsNotFound(err):
+			klog.Error(err, "Failed to get VolumeReplicationClass: %s", vrcName)
+			errs = append(errs, err)
+			continue
+		}
+		vrc := replicationv1alpha1.VolumeReplicationClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: vrcName,
+			},
+			Spec: replicationv1alpha1.VolumeReplicationClassSpec{
+				Parameters:  params,
+				Provisioner: fmt.Sprintf(RBDProvisionerTemplate, scr.Namespace),
+			},
+		}
+		err = r.SpokeClient.Create(ctx, &vrc)
+		if err != nil {
+			klog.Error(err, "Failed to create VolumeReplicationClass: %s", vrcName)
+			errs = append(errs, err)
+			continue
+		}
+		klog.Infof("VolumeReplicationClass created: %s", vrcName)
 	}
-	op, err := controllerutil.CreateOrUpdate(ctx, r.SpokeClient, found, func() error {
-		found.Spec = vrc.Spec
-		return nil
-	})
-	if err != nil {
-		klog.Error(err, "Failed to create/update volume replication class")
-		return err
-	} else {
-		klog.Info("Volume replication class successfully ", op)
-	}
-	return nil
+	return errs
 }
 
 func (r *MirrorPeerReconciler) hasSpokeCluster(obj client.Object) bool {
