@@ -1,0 +1,5 @@
+dependencies:
+- type: olm.package
+  value:
+    packageName: ${RAMEN_HUB_PACKAGE_NAME}
+    version: ${RAMEN_VERSION}
