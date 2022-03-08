@@ -3,12 +3,12 @@ package addons
 import (
 	"context"
 	"fmt"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"testing"
 
 	replicationv1alpha1 "github.com/csi-addons/volume-replication-operator/api/v1alpha1"
 	ocsv1 "github.com/openshift/ocs-operator/api/v1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -73,7 +73,7 @@ func TestMirrorPeerReconcile(t *testing.T) {
 	for i, pr := range mirrorpeer1.Spec.Items {
 		secretNames := make([]string, 0)
 		for _, ref := range oppositePeerRefsArray[i] {
-			secretNames = append(secretNames, common.CreateUniqueSecretName(ref.ClusterName, ref.StorageClusterRef.Namespace, ref.StorageClusterRef.Name))
+			secretNames = append(secretNames, utils.CreateUniqueSecretName(ref.ClusterName, ref.StorageClusterRef.Namespace, ref.StorageClusterRef.Name))
 		}
 		storageCluster := ocsv1.StorageCluster{
 			ObjectMeta: metav1.ObjectMeta{
@@ -150,7 +150,7 @@ func TestMirrorPeerReconcile(t *testing.T) {
 	for _, reconciler := range reconcilers {
 		// For each schedulingInterval in MirrorPeer, check if the corresponding VolumeReplicationClass has been created.
 		for _, interval := range mirrorpeer1.Spec.SchedulingIntervals {
-			vrcName := fmt.Sprintf(RBDVolumeReplicationClassNameTemplate, common.FnvHash(interval))
+			vrcName := fmt.Sprintf(RBDVolumeReplicationClassNameTemplate, utils.FnvHash(interval))
 			found := &replicationv1alpha1.VolumeReplicationClass{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: vrcName,

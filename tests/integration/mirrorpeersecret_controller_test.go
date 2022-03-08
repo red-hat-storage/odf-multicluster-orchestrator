@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 /*
@@ -32,7 +33,7 @@ import (
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -91,7 +92,7 @@ func (mppp MirrorPeerPlusPlus) GetDummySourceSecrets(prefixName string) []corev1
 			Name:      eachPR.StorageClusterRef.Name,
 			Namespace: eachPR.StorageClusterRef.Namespace,
 		}
-		sourceSecret := common.CreateSourceSecret(secretNN, storageClusterNN, []byte("MySecretData1234"), common.RookOrigin)
+		sourceSecret := utils.CreateSourceSecret(secretNN, storageClusterNN, []byte("MySecretData1234"), utils.OriginMap["RookOrigin"])
 		sourceSecrets = append(sourceSecrets, *sourceSecret)
 	}
 	return sourceSecrets
@@ -107,7 +108,7 @@ var _ = Describe("MirrorPeerSecret Controller", func() {
 	var getSourceSecrets = func(ctx context.Context, rc client.Client) ([]corev1.Secret, error) {
 		var sourceList corev1.SecretList
 		var hasSourceLabel client.MatchingLabels = make(client.MatchingLabels)
-		hasSourceLabel[common.SecretLabelTypeKey] = string(common.SourceLabel)
+		hasSourceLabel[utils.SecretLabelTypeKey] = string(utils.SourceLabel)
 		err := rc.List(ctx, &sourceList, hasSourceLabel)
 		return sourceList.Items, err
 	}
@@ -224,7 +225,7 @@ var _ = Describe("MirrorPeerSecret Controller", func() {
 
 				newSecretData := "My-New-Secret-Data-123"
 				for i, eachSource := range sourceSecrets {
-					eachSource.Data[common.SecretDataKey] = []byte(fmt.Sprintf("%s-%d", newSecretData, i))
+					eachSource.Data[utils.SecretDataKey] = []byte(fmt.Sprintf("%s-%d", newSecretData, i))
 					err := k8sClient.Update(ctx, &eachSource)
 					Expect(err).To(BeNil())
 					time.Sleep(500 * time.Millisecond)
@@ -247,7 +248,7 @@ var _ = Describe("MirrorPeerSecret Controller", func() {
 						destNN := types.NamespacedName{Name: eachSource.Name, Namespace: eachPeer.ClusterName}
 						err = k8sClient.Get(ctx, destNN, &destSecret)
 						Expect(err).To(BeNil())
-						Expect(destSecret.Data[common.SecretDataKey]).To(BeEquivalentTo(eachSource.Data[common.SecretDataKey]))
+						Expect(destSecret.Data[utils.SecretDataKey]).To(BeEquivalentTo(eachSource.Data[utils.SecretDataKey]))
 					}
 				}
 			})
@@ -311,7 +312,7 @@ var _ = Describe("MirrorPeerSecret Controller", func() {
 						destNN := types.NamespacedName{Namespace: eachPeer.ClusterName, Name: eachSource.Name}
 						err := k8sClient.Get(ctx, destNN, &destSecret)
 						Expect(err).To(BeNil())
-						destSecret.Data[common.SecretDataKey] = []byte(fmt.Sprintf("something-new-%d", i))
+						destSecret.Data[utils.SecretDataKey] = []byte(fmt.Sprintf("something-new-%d", i))
 						err = k8sClient.Update(ctx, &destSecret)
 						Expect(err).To(BeNil())
 					}
@@ -334,8 +335,8 @@ var _ = Describe("MirrorPeerSecret Controller", func() {
 						destNN := types.NamespacedName{Namespace: eachPeer.ClusterName, Name: eachSource.Name}
 						err := k8sClient.Get(ctx, destNN, &destSecret)
 						Expect(err).To(BeNil())
-						Expect(destSecret.Data[common.SecretDataKey]).
-							To(BeEquivalentTo(eachSource.Data[common.SecretDataKey]))
+						Expect(destSecret.Data[utils.SecretDataKey]).
+							To(BeEquivalentTo(eachSource.Data[utils.SecretDataKey]))
 					}
 				}
 			})
@@ -382,8 +383,8 @@ var _ = Describe("MirrorPeerSecret Controller", func() {
 						destNN := types.NamespacedName{Namespace: eachPeer.ClusterName, Name: eachSource.Name}
 						err := k8sClient.Get(ctx, destNN, &destSecret)
 						Expect(err).To(BeNil())
-						Expect(destSecret.Data[common.SecretDataKey]).
-							To(BeEquivalentTo(eachSource.Data[common.SecretDataKey]))
+						Expect(destSecret.Data[utils.SecretDataKey]).
+							To(BeEquivalentTo(eachSource.Data[utils.SecretDataKey]))
 					}
 				}
 			})
@@ -463,7 +464,7 @@ var _ = Describe("MirrorPeerSecret Controller", func() {
 				}
 				sourceNN := types.NamespacedName{Name: "source-3", Namespace: newPeer.ClusterName}
 				storageClusterNN := types.NamespacedName{Name: newPeer.StorageClusterRef.Name, Namespace: newPeer.StorageClusterRef.Namespace}
-				newSource := common.CreateSourceSecret(sourceNN, storageClusterNN, []byte("new-secret-3"), common.RookOrigin)
+				newSource := utils.CreateSourceSecret(sourceNN, storageClusterNN, []byte("new-secret-3"), utils.OriginMap["RookOrigin"])
 				err = k8sClient.Create(ctx, newSource)
 				Expect(err).To(BeNil())
 				err = k8sClient.Update(ctx, &mirrorPR)
@@ -481,7 +482,7 @@ var _ = Describe("MirrorPeerSecret Controller", func() {
 				for _, eachPeer := range mirrorPeerPP.Spec.Items {
 					var sourceList corev1.SecretList
 					var hasSourceLabel client.MatchingLabels = make(client.MatchingLabels)
-					hasSourceLabel[common.SecretLabelTypeKey] = string(common.SourceLabel)
+					hasSourceLabel[utils.SecretLabelTypeKey] = string(utils.SourceLabel)
 					var inNamespace client.InNamespace = client.InNamespace(eachPeer.ClusterName)
 					err := k8sClient.List(ctx, &sourceList, hasSourceLabel, inNamespace)
 					Expect(err).To(BeNil())
@@ -494,9 +495,9 @@ var _ = Describe("MirrorPeerSecret Controller", func() {
 						var destSecret corev1.Secret
 						err := k8sClient.Get(ctx, destNN, &destSecret)
 						Expect(err).To(BeNil())
-						Expect(destSecret.Data[common.SecretDataKey]).To(BeEquivalentTo(sourceSecret.Data[common.SecretDataKey]))
-						Expect(destSecret.Labels).To(HaveKey(common.SecretLabelTypeKey))
-						Expect(destSecret.Labels[common.SecretLabelTypeKey]).To(BeEquivalentTo(common.DestinationLabel))
+						Expect(destSecret.Data[utils.SecretDataKey]).To(BeEquivalentTo(sourceSecret.Data[utils.SecretDataKey]))
+						Expect(destSecret.Labels).To(HaveKey(utils.SecretLabelTypeKey))
+						Expect(destSecret.Labels[utils.SecretLabelTypeKey]).To(BeEquivalentTo(utils.DestinationLabel))
 					}
 				}
 			})
@@ -509,11 +510,11 @@ var _ = Describe("MirrorPeerSecret Controller", func() {
 
 				var destList corev1.SecretList
 				var hasDestinationLabel client.MatchingLabels = make(client.MatchingLabels)
-				hasDestinationLabel[common.SecretLabelTypeKey] = string(common.DestinationLabel)
+				hasDestinationLabel[utils.SecretLabelTypeKey] = string(utils.DestinationLabel)
 				err = k8sClient.List(ctx, &destList, hasDestinationLabel)
 				Expect(err).To(BeNil())
 				for _, eachDestSecret := range destList.Items {
-					peerRef, err := common.CreatePeerRefFromSecret(&eachDestSecret)
+					peerRef, err := utils.CreatePeerRefFromSecret(&eachDestSecret)
 					Expect(err).To(BeNil())
 					connectedPeers := controllers.PeersConnectedToPeerRef(peerRef, mpList.Items)
 					Expect(connectedPeers).NotTo(BeEmpty())
@@ -524,7 +525,7 @@ var _ = Describe("MirrorPeerSecret Controller", func() {
 					}
 					var hasSourceLabel client.MatchingLabels = make(client.MatchingLabels)
 					Expect(err).To(BeNil())
-					hasSourceLabel[common.SecretLabelTypeKey] = string(common.SourceLabel)
+					hasSourceLabel[utils.SecretLabelTypeKey] = string(utils.SourceLabel)
 
 					sourceListOptions = append(sourceListOptions, hasSourceLabel)
 					var allConnectedSources corev1.SecretList
@@ -548,7 +549,7 @@ var _ = Describe("MirrorPeerSecret Controller", func() {
 		By("removing the Source secrets", func() {
 			var sourceList corev1.SecretList
 			var hasSourceLabel client.MatchingLabels = make(client.MatchingLabels)
-			hasSourceLabel[common.SecretLabelTypeKey] = string(common.SourceLabel)
+			hasSourceLabel[utils.SecretLabelTypeKey] = string(utils.SourceLabel)
 			err := k8sClient.List(ctx, &sourceList, hasSourceLabel)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -573,7 +574,7 @@ var _ = Describe("MirrorPeerSecret Controller", func() {
 			time.Sleep(1 * time.Second)
 			var destList corev1.SecretList
 			var hasDestLabel client.MatchingLabels = make(client.MatchingLabels)
-			hasDestLabel[common.SecretLabelTypeKey] = string(common.DestinationLabel)
+			hasDestLabel[utils.SecretLabelTypeKey] = string(utils.DestinationLabel)
 			err := k8sClient.List(ctx, &destList, hasDestLabel)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(destList.Items).To(BeEmpty())

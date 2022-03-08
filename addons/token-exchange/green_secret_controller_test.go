@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -51,7 +51,7 @@ func TestGreenSecretSync(t *testing.T) {
 		},
 	}
 	registerFakeSecretHandler()
-	fakeCtrl := getFakeTokenExchangeController(t, common.DestinationLabel)
+	fakeCtrl := getFakeTokenExchangeController(t, utils.DestinationLabel)
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			err := fakeCtrl.Sync(context.TODO(), NewFakeSyncContext(t, c.namespaceName))

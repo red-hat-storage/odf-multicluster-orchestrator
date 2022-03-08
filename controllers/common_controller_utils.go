@@ -9,7 +9,7 @@ import (
 
 	rmn "github.com/ramendr/ramen/api/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,14 +27,14 @@ import (
 // If no MirrorPeers are provided, it will fetch all the MirrorPeers in the HUB.
 func createOrUpdateDestinationSecretsFromSource(ctx context.Context, rc client.Client, sourceSecret *corev1.Secret, mirrorPeers ...multiclusterv1alpha1.MirrorPeer) error {
 	logger := log.FromContext(ctx)
-	err := common.ValidateSourceSecret(sourceSecret)
+	err := utils.ValidateSourceSecret(sourceSecret)
 	if err != nil {
 		logger.Error(err, "Updating secrets failed. Invalid secret type.", "secret", sourceSecret.Name, "namespace", sourceSecret.Namespace)
 		return err
 	}
 
 	if mirrorPeers == nil {
-		mirrorPeers, err = common.FetchAllMirrorPeers(ctx, rc)
+		mirrorPeers, err = utils.FetchAllMirrorPeers(ctx, rc)
 		if err != nil {
 			logger.Error(err, "Unable to get the list of MirrorPeer objects")
 			return err
@@ -65,12 +65,12 @@ func createOrUpdateDestinationSecretsFromSource(ctx context.Context, rc client.C
 
 func processDestinationSecretUpdation(ctx context.Context, rc client.Client, destSecret *corev1.Secret) error {
 	logger := log.FromContext(ctx)
-	err := common.ValidateDestinationSecret(destSecret)
+	err := utils.ValidateDestinationSecret(destSecret)
 	if err != nil {
 		logger.Error(err, "Destination secret validation failed", "secret", destSecret.Name, "namespace", destSecret.Namespace)
 		return err
 	}
-	mirrorPeers, err := common.FetchAllMirrorPeers(ctx, rc)
+	mirrorPeers, err := utils.FetchAllMirrorPeers(ctx, rc)
 	if err != nil {
 		logger.Error(err, "Failed to get the list of MirrorPeer objects")
 		return err
@@ -92,7 +92,7 @@ func processDestinationSecretUpdation(ctx context.Context, rc client.Client, des
 			logger.Error(err, "Unexpected error while finding the source secret", "peer-ref", eachConnectedPeer, "secret", destSecret.Name, "namespace", destSecret.Namespace)
 			return err
 		}
-		if common.IsSecretSource(&connectedSecret) {
+		if utils.IsSecretSource(&connectedSecret) {
 			connectedSource = connectedSecret.DeepCopy()
 			break
 		}
@@ -134,13 +134,13 @@ func createOrUpdateRamenS3Secret(ctx context.Context, rc client.Client, secret *
 			Name:      secret.Name,
 			Namespace: ramenHubNamespace,
 			Labels: map[string]string{
-				common.CreatedByLabelKey: common.MirrorPeerSecret,
+				utils.CreatedByLabelKey: utils.MirrorPeerSecret,
 			},
 		},
 		Type: corev1.SecretTypeOpaque,
 		Data: map[string][]byte{
-			common.AwsAccessKeyId:     data[common.AwsAccessKeyId],
-			common.AwsSecretAccessKey: data[common.AwsSecretAccessKey],
+			utils.AwsAccessKeyId:     data[utils.AwsAccessKeyId],
+			utils.AwsSecretAccessKey: data[utils.AwsSecretAccessKey],
 		},
 	}
 
@@ -189,13 +189,13 @@ func isS3ProfileManagedPeerRef(clusterPeerRef multiclusterv1alpha1.PeerRef, mirr
 func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret *corev1.Secret, data map[string][]byte, mirrorPeers []multiclusterv1alpha1.MirrorPeer, ramenHubNamespace string) error {
 	logger := log.FromContext(ctx)
 
-	clusterPeerRef, err := common.CreatePeerRefFromSecret(secret)
+	clusterPeerRef, err := utils.CreatePeerRefFromSecret(secret)
 	if err != nil {
 		logger.Error(err, "unable to create peerref", "secret", secret.Name, "namespace", secret.Namespace)
 		return err
 	}
 	if mirrorPeers == nil {
-		mirrorPeers, err = common.FetchAllMirrorPeers(ctx, rc)
+		mirrorPeers, err = utils.FetchAllMirrorPeers(ctx, rc)
 	}
 	if err != nil {
 		logger.Error(err, "unable to get the list of MirrorPeer objects")
@@ -210,10 +210,10 @@ func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret 
 
 	// converting s3 bucket config into ramen s3 profile
 	expectedS3Profile := rmn.S3StoreProfile{
-		S3ProfileName:        string(data[common.S3ProfileName]),
-		S3Bucket:             string(data[common.S3BucketName]),
-		S3Region:             string(data[common.S3Region]),
-		S3CompatibleEndpoint: string(data[common.S3Endpoint]),
+		S3ProfileName:        string(data[utils.S3ProfileName]),
+		S3Bucket:             string(data[utils.S3BucketName]),
+		S3Region:             string(data[utils.S3Region]),
+		S3CompatibleEndpoint: string(data[utils.S3Endpoint]),
 		// referenceing ramen secret
 		S3SecretRef: corev1.SecretReference{
 			Name:      secret.Name,
@@ -224,26 +224,26 @@ func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret 
 	// fetch ramen hub operator configmap
 	currentRamenConfigMap := corev1.ConfigMap{}
 	namespacedName := types.NamespacedName{
-		Name:      common.RamenHubOperatorConfigName,
+		Name:      utils.RamenHubOperatorConfigName,
 		Namespace: ramenHubNamespace,
 	}
 	err = rc.Get(ctx, namespacedName, &currentRamenConfigMap)
 	if err != nil {
-		logger.Error(err, "unable to fetch DR hub operator config", "config", common.RamenHubOperatorConfigName, "namespace", ramenHubNamespace)
+		logger.Error(err, "unable to fetch DR hub operator config", "config", utils.RamenHubOperatorConfigName, "namespace", ramenHubNamespace)
 		return err
 	}
 
 	// extract ramen manager config str from configmap
 	ramenConfigData, ok := currentRamenConfigMap.Data["ramen_manager_config.yaml"]
 	if !ok {
-		return fmt.Errorf("DR hub operator config data is empty for the config %q in namespace %q", common.RamenHubOperatorConfigName, ramenHubNamespace)
+		return fmt.Errorf("DR hub operator config data is empty for the config %q in namespace %q", utils.RamenHubOperatorConfigName, ramenHubNamespace)
 	}
 
 	// converting ramen manager config str into RamenConfig
 	ramenConfig := rmn.RamenConfig{}
 	err = yaml.Unmarshal([]byte(ramenConfigData), &ramenConfig)
 	if err != nil {
-		logger.Error(err, "failed to unmarshal DR hub operator config data", "config", common.RamenHubOperatorConfigName, "namespace", ramenHubNamespace)
+		logger.Error(err, "failed to unmarshal DR hub operator config data", "config", utils.RamenHubOperatorConfigName, "namespace", ramenHubNamespace)
 		return err
 	}
 
@@ -270,12 +270,12 @@ func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret 
 	// converting RamenConfig into ramen manager config str
 	ramenConfigDataStr, err := yaml.Marshal(ramenConfig)
 	if err != nil {
-		logger.Error(err, "failed to marshal DR hub operator config data", "config", common.RamenHubOperatorConfigName, "namespace", ramenHubNamespace)
+		logger.Error(err, "failed to marshal DR hub operator config data", "config", utils.RamenHubOperatorConfigName, "namespace", ramenHubNamespace)
 		return err
 	}
 
 	// update ramen hub operator configmap
-	logger.Info("Updating DR hub operator config with S3 profile", common.RamenHubOperatorConfigName, expectedS3Profile.S3ProfileName)
+	logger.Info("Updating DR hub operator config with S3 profile", utils.RamenHubOperatorConfigName, expectedS3Profile.S3ProfileName)
 	_, err = controllerutil.CreateOrUpdate(ctx, rc, &currentRamenConfigMap, func() error {
 		// attach ramen manager config str into configmap
 		currentRamenConfigMap.Data["ramen_manager_config.yaml"] = string(ramenConfigDataStr)
@@ -288,24 +288,24 @@ func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret 
 func createOrUpdateSecretsFromInternalSecret(ctx context.Context, rc client.Client, secret *corev1.Secret, mirrorPeers []multiclusterv1alpha1.MirrorPeer) error {
 	logger := log.FromContext(ctx)
 
-	if err := common.ValidateInternalSecret(secret, common.InternalLabel); err != nil {
+	if err := utils.ValidateInternalSecret(secret, utils.InternalLabel); err != nil {
 		logger.Error(err, "Provided internal secret is not valid", "secret", secret.Name, "namespace", secret.Namespace)
 		return err
 	}
 
 	data := make(map[string][]byte)
-	err := json.Unmarshal(secret.Data[common.SecretDataKey], &data)
+	err := json.Unmarshal(secret.Data[utils.SecretDataKey], &data)
 	if err != nil {
 		logger.Error(err, "failed to unmarshal secret data", "secret", secret.Name, "namespace", secret.Namespace)
 		return err
 	}
 
-	if string(secret.Data[common.SecretOriginKey]) == common.S3Origin {
-		if ok := common.ValidateS3Secret(data); !ok {
+	if string(secret.Data[utils.SecretOriginKey]) == utils.OriginMap["S3Origin"] {
+		if ok := utils.ValidateS3Secret(data); !ok {
 			return fmt.Errorf("invalid S3 secret format for secret name %q in namesapce %q", secret.Name, secret.Namespace)
 		}
 
-		namespace := common.GetEnv("ODR_NAMESPACE", common.RamenHubNamespace)
+		namespace := utils.GetEnv("ODR_NAMESPACE", utils.RamenHubNamespace)
 
 		// S3 origin secret has two part 1. s3 bucket secret 2. s3 bucket config
 		// create ramen s3 secret using s3 bucket secret
@@ -329,7 +329,7 @@ func processDeletedSecrets(ctx context.Context, rc client.Client, req types.Name
 	var err error
 	logger := log.FromContext(ctx, "controller", "MirrorPeerController")
 	// get all the secrets with the same name
-	allSecrets, err := fetchAllInternalSecrets(ctx, rc, "", common.IgnoreLabel)
+	allSecrets, err := fetchAllInternalSecrets(ctx, rc, "", utils.IgnoreLabel)
 	if err != nil {
 		logger.Error(err, "Unable to get the list of secrets")
 		return err
@@ -342,7 +342,7 @@ func processDeletedSecrets(ctx context.Context, rc client.Client, req types.Name
 	for _, eachSecret := range allSecrets {
 		if eachSecret.Name == req.Name {
 			// check similarly named secret is present (or not)
-			if secretType := eachSecret.Labels[common.SecretLabelTypeKey]; secretType == string(common.SourceLabel) {
+			if secretType := eachSecret.Labels[utils.SecretLabelTypeKey]; secretType == string(utils.SourceLabel) {
 				// if 'sourceSecretPointer' already points to a source secret,
 				// it is an error. We should not have TWO source
 				// secrets of same name.
@@ -424,7 +424,7 @@ func PeersConnectedToPeerRef(sourcePeerRef multiclusterv1alpha1.PeerRef, mirrorP
 		if len(connectedPeers) > 0 {
 			// add the PeerRef s into a map, to keep only the unique ones
 			for _, eachPeerRef := range connectedPeers {
-				mapKey := common.CreateUniqueName(eachPeerRef.ClusterName, eachPeerRef.StorageClusterRef.Namespace, eachPeerRef.StorageClusterRef.Name)
+				mapKey := utils.CreateUniqueName(eachPeerRef.ClusterName, eachPeerRef.StorageClusterRef.Namespace, eachPeerRef.StorageClusterRef.Name)
 				uniquePeerRefMap[mapKey] = eachPeerRef
 			}
 		}
@@ -440,7 +440,7 @@ func PeersConnectedToPeerRef(sourcePeerRef multiclusterv1alpha1.PeerRef, mirrorP
 // PeersConnectedToSecret return unique PeerRefs associated with the secret
 func PeersConnectedToSecret(secret *corev1.Secret, mirrorPeers []multiclusterv1alpha1.MirrorPeer) ([]multiclusterv1alpha1.PeerRef, error) {
 	// create a PeerRef object from the given source secret
-	sourcePeerRef, err := common.CreatePeerRefFromSecret(secret)
+	sourcePeerRef, err := utils.CreatePeerRefFromSecret(secret)
 	if err != nil {
 		return nil, err
 	}
@@ -450,7 +450,7 @@ func PeersConnectedToSecret(secret *corev1.Secret, mirrorPeers []multiclusterv1a
 // fetchAllInternalSecrets will get all the internal secrets in the namespace and with the provided label
 // if the namespace is empty, it will fetch from all the namespaces
 // if the label type is 'Ignore', it will fetch all the internal secrets (both source and destination)
-func fetchAllInternalSecrets(ctx context.Context, rc client.Client, namespace string, secretLabelType common.SecretLabelType) ([]corev1.Secret, error) {
+func fetchAllInternalSecrets(ctx context.Context, rc client.Client, namespace string, secretLabelType utils.SecretLabelType) ([]corev1.Secret, error) {
 	var err error
 	var sourceSecretList corev1.SecretList
 	var clientListOptions []client.ListOption
@@ -461,13 +461,13 @@ func fetchAllInternalSecrets(ctx context.Context, rc client.Client, namespace st
 		return nil, errors.New("empty 'SecretLabelType' provided. please provide 'Ignore' label type")
 	}
 	var listLabelOption client.ListOption
-	if secretLabelType != common.IgnoreLabel {
-		listLabelOption = client.MatchingLabels(map[string]string{common.SecretLabelTypeKey: string(secretLabelType)})
+	if secretLabelType != utils.IgnoreLabel {
+		listLabelOption = client.MatchingLabels(map[string]string{utils.SecretLabelTypeKey: string(secretLabelType)})
 	} else {
 		// if the 'secretLabelType' is asking to ignore, then
 		// don't check the label value
 		// just check whether the secret has the internal label key
-		listLabelOption = client.HasLabels([]string{common.SecretLabelTypeKey})
+		listLabelOption = client.HasLabels([]string{utils.SecretLabelTypeKey})
 	}
 	clientListOptions = append(clientListOptions, listLabelOption)
 	// find all the secrets with the provided internal label
@@ -476,9 +476,9 @@ func fetchAllInternalSecrets(ctx context.Context, rc client.Client, namespace st
 }
 
 func fetchAllSourceSecrets(ctx context.Context, rc client.Client, namespace string) ([]corev1.Secret, error) {
-	return fetchAllInternalSecrets(ctx, rc, namespace, common.SourceLabel)
+	return fetchAllInternalSecrets(ctx, rc, namespace, utils.SourceLabel)
 }
 
 func fetchAllDestinationSecrets(ctx context.Context, rc client.Client, namespace string) ([]corev1.Secret, error) {
-	return fetchAllInternalSecrets(ctx, rc, namespace, common.DestinationLabel)
+	return fetchAllInternalSecrets(ctx, rc, namespace, utils.DestinationLabel)
 }

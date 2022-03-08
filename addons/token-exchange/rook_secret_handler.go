@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"os"
 	"strings"
 
 	ocsv1 "github.com/openshift/ocs-operator/api/v1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
 	rookclient "github.com/rook/rook/pkg/client/clientset/versioned"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,7 +46,7 @@ func (rookSecretHandler) getBlueSecretFilter(obj interface{}) bool {
 func (rookSecretHandler) getGreenSecretFilter(obj interface{}) bool {
 	metaObj, has := obj.(metav1.Object)
 	if has {
-		return metaObj.GetLabels()[common.SecretLabelTypeKey] == string(common.DestinationLabel)
+		return metaObj.GetLabels()[utils.SecretLabelTypeKey] == string(utils.DestinationLabel)
 	}
 	return false
 }
@@ -70,10 +70,10 @@ func (r rookSecretHandler) syncBlueSecret(name string, namespace string, c *blue
 	}
 
 	customData := map[string][]byte{
-		common.SecretOriginKey: []byte(common.RookOrigin),
+		utils.SecretOriginKey: []byte(utils.OriginMap["RookOrigin"]),
 	}
 
-	newSecret, err := generateBlueSecret(secret, common.SourceLabel, common.CreateUniqueSecretName(c.clusterName, secret.Namespace, sc), sc, c.clusterName, customData)
+	newSecret, err := generateBlueSecret(secret, utils.SourceLabel, utils.CreateUniqueSecretName(c.clusterName, secret.Namespace, sc), sc, c.clusterName, customData)
 	if err != nil {
 		return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: %v", secret.Name, secret.Namespace, c.clusterName, err)
 	}
@@ -99,7 +99,7 @@ func (r rookSecretHandler) syncGreenSecret(name string, namespace string, c *gre
 	}
 
 	data := make(map[string][]byte)
-	err = json.Unmarshal(secret.Data[common.SecretDataKey], &data)
+	err = json.Unmarshal(secret.Data[utils.SecretDataKey], &data)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal secret data for the secret %q in namespace %q. %v", secret.Name, secret.Namespace, err)
 	}
@@ -109,7 +109,7 @@ func (r rookSecretHandler) syncGreenSecret(name string, namespace string, c *gre
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secret.Name,
 			Namespace: toNamespace,
-			Labels:    map[string]string{common.CreatedByLabelKey: TokenExchangeName},
+			Labels:    map[string]string{utils.CreatedByLabelKey: TokenExchangeName},
 		},
 		Data: data,
 	}
@@ -122,7 +122,7 @@ func (r rookSecretHandler) syncGreenSecret(name string, namespace string, c *gre
 
 	klog.Infof("successfully synced hub secret %q in managed cluster in namespace %q", newSecret.Name, toNamespace)
 
-	storageClusterName := string(secret.Data[common.StorageClusterNameKey])
+	storageClusterName := string(secret.Data[utils.StorageClusterNameKey])
 	err = updateStorageCluster(newSecret.Name, storageClusterName, toNamespace, r.spokeClient)
 	if err != nil {
 		return fmt.Errorf("failed to update secret name %q in the storageCluster %q in namespace %q. %v", newSecret.Name, storageClusterName, toNamespace, err)

@@ -11,7 +11,7 @@ import (
 	routev1 "github.com/openshift/api/route/v1"
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,15 +75,15 @@ func fakeClientForS3Secret(t *testing.T) client.Client {
 
 func getFakeS3Secret() map[string][]byte {
 	return map[string][]byte{
-		common.AwsAccessKeyId:     []byte(TestAwsAccessKeyId),
-		common.AwsSecretAccessKey: []byte(TestAwssecretaccesskey),
+		utils.AwsAccessKeyId:     []byte(TestAwsAccessKeyId),
+		utils.AwsSecretAccessKey: []byte(TestAwssecretaccesskey),
 	}
 }
 
 func getFakeS3ConfigMap() map[string]string {
 	return map[string]string{
 		S3BucketName:   TestS3BucketName,
-		S3BucketRegion: common.S3Region,
+		S3BucketRegion: utils.S3Region,
 	}
 }
 
@@ -178,31 +178,31 @@ func getFakeS3BlueSecretExchangeController(t *testing.T) *blueSecretTokenExchang
 func getExpectedS3BlueSecret(t *testing.T) *corev1.Secret {
 	secretData, err := json.Marshal(
 		map[string][]byte{
-			common.AwsAccessKeyId:     []byte(TestAwsAccessKeyId),
-			common.AwsSecretAccessKey: []byte(TestAwssecretaccesskey),
-			common.S3BucketName:       []byte(TestS3BucketName),
-			common.S3Endpoint:         []byte(fmt.Sprintf("https://%s", TestS3RouteHost)),
-			common.S3Region:           []byte(common.S3Region),
-			common.S3ProfileName:      []byte(fmt.Sprintf("%s-%s-%s", common.S3ProfilePrefix, TestManagedClusterName, StorageClusterName)),
+			utils.AwsAccessKeyId:     []byte(TestAwsAccessKeyId),
+			utils.AwsSecretAccessKey: []byte(TestAwssecretaccesskey),
+			utils.S3BucketName:       []byte(TestS3BucketName),
+			utils.S3Endpoint:         []byte(fmt.Sprintf("https://%s", TestS3RouteHost)),
+			utils.S3Region:           []byte(utils.S3Region),
+			utils.S3ProfileName:      []byte(fmt.Sprintf("%s-%s-%s", utils.S3ProfilePrefix, TestManagedClusterName, StorageClusterName)),
 		},
 	)
 	assert.NoError(t, err)
 
 	data := map[string][]byte{
-		common.SecretDataKey:         secretData,
-		common.NamespaceKey:          []byte(StorageClusterNamespace),
-		common.StorageClusterNameKey: []byte(StorageClusterName),
-		common.SecretOriginKey:       []byte(common.S3Origin),
+		utils.SecretDataKey:         secretData,
+		utils.NamespaceKey:          []byte(StorageClusterNamespace),
+		utils.StorageClusterNameKey: []byte(StorageClusterName),
+		utils.SecretOriginKey:       []byte(utils.OriginMap["S3Origin"]),
 	}
 	expectedSecret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      common.CreateUniqueSecretName(TestManagedClusterName, StorageClusterNamespace, StorageClusterName, common.S3ProfilePrefix),
+			Name:      utils.CreateUniqueSecretName(TestManagedClusterName, StorageClusterNamespace, StorageClusterName, utils.S3ProfilePrefix),
 			Namespace: TestManagedClusterName,
 			Labels: map[string]string{
-				common.SecretLabelTypeKey: string(common.InternalLabel),
+				utils.SecretLabelTypeKey: string(utils.InternalLabel),
 			},
 		},
-		Type: common.SecretLabelTypeKey,
+		Type: utils.SecretLabelTypeKey,
 		Data: data,
 	}
 
@@ -260,7 +260,7 @@ func TestS3BlueSecretSnyc(t *testing.T) {
 				assert.NoError(t, err)
 			}
 			if c.syncExpected {
-				actualSecret, err := fakeCtrl.hubKubeClient.CoreV1().Secrets(TestManagedClusterName).Get(context.TODO(), common.CreateUniqueSecretName(TestManagedClusterName, StorageClusterNamespace, StorageClusterName, common.S3ProfilePrefix), metav1.GetOptions{})
+				actualSecret, err := fakeCtrl.hubKubeClient.CoreV1().Secrets(TestManagedClusterName).Get(context.TODO(), utils.CreateUniqueSecretName(TestManagedClusterName, StorageClusterNamespace, StorageClusterName, utils.S3ProfilePrefix), metav1.GetOptions{})
 				assert.NoError(t, err)
 				assert.True(t, reflect.DeepEqual(getExpectedS3BlueSecret(t), actualSecret))
 			} else {

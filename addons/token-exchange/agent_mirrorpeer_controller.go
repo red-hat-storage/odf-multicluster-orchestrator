@@ -27,7 +27,7 @@ import (
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	ocsv1 "github.com/openshift/ocs-operator/api/v1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -81,7 +81,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		klog.Error(err, "Failed to get MirrorPeer")
 		return ctrl.Result{}, err
 	}
-	scr, err := common.GetCurrentStorageClusterRef(&mirrorPeer, r.SpokeClusterName)
+	scr, err := utils.GetCurrentStorageClusterRef(&mirrorPeer, r.SpokeClusterName)
 	if err != nil {
 		klog.Error(err, "Failed to get current storage cluster ref")
 		return ctrl.Result{}, err
@@ -119,11 +119,11 @@ func (r *MirrorPeerReconciler) createS3(ctx context.Context, req ctrl.Request, m
 	}
 	checksum := sha1.Sum([]byte(peerAccumulator))
 
-	bucketGenerateName := common.BucketGenerateName
+	bucketGenerateName := utils.BucketGenerateName
 	// truncate to bucketGenerateName + "-" + first 12 (out of 20) byte representations of sha1 checksum
 	bucket := fmt.Sprintf("%s-%s", bucketGenerateName, hex.EncodeToString(checksum[:]))[0 : len(bucketGenerateName)+1+12]
 
-	namespace := common.GetEnv("ODR_NAMESPACE", scNamespace)
+	namespace := utils.GetEnv("ODR_NAMESPACE", scNamespace)
 
 	noobaaOBC := &obv1alpha1.ObjectBucketClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -187,7 +187,7 @@ func getOppositePeerRefs(mp *multiclusterv1alpha1.MirrorPeer, spokeClusterName s
 }
 func hasRequiredSecret(peerSecrets []string, oppositePeerRef []multiclusterv1alpha1.PeerRef) bool {
 	for _, pr := range oppositePeerRef {
-		sec := common.CreateUniqueSecretName(pr.ClusterName, pr.StorageClusterRef.Namespace, pr.StorageClusterRef.Name)
+		sec := utils.CreateUniqueSecretName(pr.ClusterName, pr.StorageClusterRef.Namespace, pr.StorageClusterRef.Name)
 		if !contains(peerSecrets, sec) {
 			return false
 		}
@@ -235,7 +235,7 @@ func validateSchedulingInterval(interval string) error {
 }
 
 func (r *MirrorPeerReconciler) createVolumeReplicationClass(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer) []error {
-	scr, err := common.GetCurrentStorageClusterRef(mp, r.SpokeClusterName)
+	scr, err := utils.GetCurrentStorageClusterRef(mp, r.SpokeClusterName)
 	var errs []error
 	if err != nil {
 		klog.Error(err, "Failed to get current storage cluster ref")
@@ -256,7 +256,7 @@ func (r *MirrorPeerReconciler) createVolumeReplicationClass(ctx context.Context,
 		params[SchedulingIntervalKey] = interval
 		params[ReplicationSecretNameKey] = RBDReplicationSecretName
 		params[ReplicationSecretNamespaceKey] = scr.Namespace
-		vrcName := fmt.Sprintf(RBDVolumeReplicationClassNameTemplate, common.FnvHash(interval))
+		vrcName := fmt.Sprintf(RBDVolumeReplicationClassNameTemplate, utils.FnvHash(interval))
 		found := &replicationv1alpha1.VolumeReplicationClass{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: vrcName,
@@ -325,7 +325,7 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		},
 	}
 
-	mpPredicate := common.ComposePredicates(predicate.GenerationChangedPredicate{}, mirrorPeerSpokeClusterPredicate)
+	mpPredicate := utils.ComposePredicates(predicate.GenerationChangedPredicate{}, mirrorPeerSpokeClusterPredicate)
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(mpPredicate)).
 		Complete(r)

@@ -18,10 +18,9 @@ package controllers
 
 import (
 	"context"
-
 	tokenexchange "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -171,7 +170,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		for _, peerRef := range mirrorPeer.Spec.Items {
 			var s3Secret corev1.Secret
 			namespacedName := types.NamespacedName{
-				Name:      common.CreateUniqueSecretName(peerRef.ClusterName, peerRef.StorageClusterRef.Namespace, peerRef.StorageClusterRef.Name, common.S3ProfilePrefix),
+				Name:      utils.CreateUniqueSecretName(peerRef.ClusterName, peerRef.StorageClusterRef.Namespace, peerRef.StorageClusterRef.Name, utils.S3ProfilePrefix),
 				Namespace: peerRef.ClusterName,
 			}
 			err = r.Client.Get(ctx, namespacedName, &s3Secret)
@@ -235,7 +234,7 @@ func processMirrorPeerSecretChanges(ctx context.Context, rc client.Client, mirro
 			continue
 		}
 		// get the source secret associated with the PeerRef
-		matchingSourceSecret := common.FindMatchingSecretWithPeerRef(eachPeerRef, sourceSecrets)
+		matchingSourceSecret := utils.FindMatchingSecretWithPeerRef(eachPeerRef, sourceSecrets)
 		// if no match found (ie; no source secret found); just continue
 		if matchingSourceSecret == nil {
 			continue
@@ -290,7 +289,7 @@ func (r *MirrorPeerReconciler) checkTokenExchangeStatus(ctx context.Context, mp 
 
 func (r *MirrorPeerReconciler) checkForSourceSecret(ctx context.Context, peerRef multiclusterv1alpha1.PeerRef) error {
 	logger := log.FromContext(ctx)
-	prSecretName := common.CreateUniqueSecretName(peerRef.ClusterName, peerRef.StorageClusterRef.Namespace, peerRef.StorageClusterRef.Name)
+	prSecretName := utils.CreateUniqueSecretName(peerRef.ClusterName, peerRef.StorageClusterRef.Namespace, peerRef.StorageClusterRef.Name)
 	var peerSourceSecret corev1.Secret
 	err := r.Client.Get(ctx, types.NamespacedName{
 		Name: prSecretName,
@@ -305,7 +304,7 @@ func (r *MirrorPeerReconciler) checkForSourceSecret(ctx context.Context, peerRef
 		}
 	}
 
-	err = common.ValidateSourceSecret(&peerSourceSecret)
+	err = utils.ValidateSourceSecret(&peerSourceSecret)
 	if err != nil {
 		return err
 	}
@@ -314,7 +313,7 @@ func (r *MirrorPeerReconciler) checkForSourceSecret(ctx context.Context, peerRef
 }
 func (r *MirrorPeerReconciler) checkForDestinationSecret(ctx context.Context, peerRef multiclusterv1alpha1.PeerRef, destNamespace string) error {
 	logger := log.FromContext(ctx)
-	prSecretName := common.CreateUniqueSecretName(peerRef.ClusterName, peerRef.StorageClusterRef.Namespace, peerRef.StorageClusterRef.Name)
+	prSecretName := utils.CreateUniqueSecretName(peerRef.ClusterName, peerRef.StorageClusterRef.Namespace, peerRef.StorageClusterRef.Name)
 	var peerDestinationSecret corev1.Secret
 	err := r.Client.Get(ctx, types.NamespacedName{
 		Name: prSecretName,
@@ -327,7 +326,7 @@ func (r *MirrorPeerReconciler) checkForDestinationSecret(ctx context.Context, pe
 			return err
 		}
 	}
-	err = common.ValidateDestinationSecret(&peerDestinationSecret)
+	err = utils.ValidateDestinationSecret(&peerDestinationSecret)
 	if err != nil {
 		return err
 	}
@@ -338,7 +337,7 @@ func (r *MirrorPeerReconciler) checkForDestinationSecret(ctx context.Context, pe
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	mpPredicate := common.ComposePredicates(predicate.GenerationChangedPredicate{})
+	mpPredicate := utils.ComposePredicates(predicate.GenerationChangedPredicate{})
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(mpPredicate)).
 		Complete(r)
