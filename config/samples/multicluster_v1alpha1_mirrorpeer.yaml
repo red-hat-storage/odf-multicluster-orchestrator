@@ -12,7 +12,5 @@ spec:
       storageClusterRef:
         name: ocs-storagecluster
         namespace: openshift-storage
-  schedulingInterval: 5m
-  replicationSecretName: rook-csi-rbd-provisioner
+  schedulingIntervals: ["5m"]
   manageS3: false
-  mirroringMode: snapshot
