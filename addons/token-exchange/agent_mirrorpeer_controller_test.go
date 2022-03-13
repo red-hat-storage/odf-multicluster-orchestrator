@@ -2,6 +2,7 @@ package addons
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	replicationv1alpha1 "github.com/csi-addons/volume-replication-operator/api/v1alpha1"
@@ -15,46 +16,61 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+type ReconcilerStorageCluster struct {
+	r  MirrorPeerReconciler
+	sc ocsv1.StorageCluster
+}
+
 var (
-	mirrorpeer = multiclusterv1alpha1.MirrorPeer{
+	mpItems = []multiclusterv1alpha1.PeerRef{
+		{
+			ClusterName: "cluster1",
+			StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
+				Name:      "test-storagecluster",
+				Namespace: "test-namespace",
+			},
+		},
+		{
+			ClusterName: "cluster2",
+			StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
+				Name:      "test-storagecluster",
+				Namespace: "test-namespace",
+			},
+		},
+	}
+	mirrorpeer1 = multiclusterv1alpha1.MirrorPeer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "mirrorpeer",
+			Name: "mirrorpeer-with-proper-scheduling-intervals",
 		},
 		Spec: multiclusterv1alpha1.MirrorPeerSpec{
-			Items: []multiclusterv1alpha1.PeerRef{
-				{
-					ClusterName: "cluster1",
-					StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
-						Name:      "test-storagecluster",
-						Namespace: "test-namespace",
-					},
-				},
-				{
-					ClusterName: "cluster2",
-					StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
-						Name:      "test-storagecluster",
-						Namespace: "test-namespace",
-					},
-				},
-			},
-			SchedulingInterval:    "10m",
-			ReplicationSecretName: "my-super-secret-credentials",
-			Mode:                  "journal",
+			Items:               mpItems,
+			SchedulingIntervals: []string{"10m", "5m", "30m", "1h", "5m"},
+		},
+	}
+	mirrorpeer2 = multiclusterv1alpha1.MirrorPeer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "mirrorpeer-with-invalid-scheduling-intervals",
+		},
+		Spec: multiclusterv1alpha1.MirrorPeerSpec{
+			Items:               mpItems,
+			SchedulingIntervals: []string{"1p", "2o", "3h", "4hh", "5md"},
 		},
 	}
 )
 
-func TestMirrorPeerReconcilerReconcile(t *testing.T) {
+func TestMirrorPeerReconcile(t *testing.T) {
+	ctx := context.TODO()
 	scheme := mgrScheme
-	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer).Build()
+	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer1, &mirrorpeer2).Build()
 	oppositePeerRefsArray := make([][]multiclusterv1alpha1.PeerRef, 0)
 	// Quick iteration to get peer refs
-	for _, pr := range mirrorpeer.Spec.Items {
-		peerRefs := getOppositePeerRefs(&mirrorpeer, pr.ClusterName)
+	for _, pr := range mirrorpeer1.Spec.Items {
+		peerRefs := getOppositePeerRefs(&mirrorpeer1, pr.ClusterName)
 		oppositePeerRefsArray = append(oppositePeerRefsArray, peerRefs)
 	}
 
-	for i, pr := range mirrorpeer.Spec.Items {
+	reconcilers := make([]ReconcilerStorageCluster, 0)
+	for i, pr := range mirrorpeer1.Spec.Items {
 		secretNames := make([]string, 0)
 		for _, ref := range oppositePeerRefsArray[i] {
 			secretNames = append(secretNames, common.CreateUniqueSecretName(ref.ClusterName, ref.StorageClusterRef.Namespace, ref.StorageClusterRef.Name))
@@ -85,7 +101,6 @@ func TestMirrorPeerReconcilerReconcile(t *testing.T) {
 		rcm.Data[RookVolumeRepKey] = "false"
 
 		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&storageCluster, &rcm).Build()
-		ctx := context.TODO()
 
 		r := MirrorPeerReconciler{
 			HubClient:        fakeHubClient,
@@ -96,10 +111,9 @@ func TestMirrorPeerReconcilerReconcile(t *testing.T) {
 
 		req := ctrl.Request{
 			NamespacedName: types.NamespacedName{
-				Name: "mirrorpeer",
+				Name: mirrorpeer1.Name,
 			},
 		}
-
 		_, err := r.Reconcile(ctx, req)
 		if err != nil {
 			t.Errorf("MirrorPeerReconciler Reconcile() failed. Error: %s", err)
@@ -114,7 +128,7 @@ func TestMirrorPeerReconcilerReconcile(t *testing.T) {
 		}
 
 		if foundRcm.Data[RookCSIEnableKey] != "true" || foundRcm.Data[RookVolumeRepKey] != "true" {
-			t.Errorf("Error: %s", err)
+			t.Errorf("Values for %s and %s in %s are not set correctly", RookCSIEnableKey, RookVolumeRepKey, foundRcm.Name)
 		}
 
 		var foundSc ocsv1.StorageCluster
@@ -127,18 +141,48 @@ func TestMirrorPeerReconcilerReconcile(t *testing.T) {
 			t.Errorf("Mirroring not enabled; Error: %s", err)
 		}
 
-		var foundVrc replicationv1alpha1.VolumeReplicationClass
-		err = fakeSpokeClient.Get(ctx, types.NamespacedName{Name: "odf-rbd-volumereplicationclass"}, &foundVrc)
-		if err != nil {
-			t.Errorf("Failed to get volumereplicationclass odf-rbd-volumereplicationclass Error: %s", err)
+		reconcilers = append(reconcilers, ReconcilerStorageCluster{
+			r:  r,
+			sc: foundSc,
+		})
+	}
+
+	for _, reconciler := range reconcilers {
+		// For each schedulingInterval in MirrorPeer, check if the corresponding VolumeReplicationClass has been created.
+		for _, interval := range mirrorpeer1.Spec.SchedulingIntervals {
+			vrcName := fmt.Sprintf(RBDVolumeReplicationClassNameTemplate, common.FnvHash(interval))
+			found := &replicationv1alpha1.VolumeReplicationClass{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: vrcName,
+				},
+			}
+			err := reconciler.r.SpokeClient.Get(ctx, types.NamespacedName{
+				Name: found.Name,
+			}, found)
+
+			if err != nil {
+				t.Errorf("Failed to get VolumeReplicationClass %s Error: %s", found.Name, err)
+			}
+
+			if found.Spec.Provisioner != fmt.Sprintf(RBDProvisionerTemplate, reconciler.sc.Namespace) &&
+				found.Spec.Parameters[ReplicationSecretNameKey] != RBDReplicationSecretName ||
+				found.Spec.Parameters[MirroringModeKey] != DefaultMirroringMode {
+				t.Errorf("VolumeReplicatonClass not created or updated properly; Please check Provisioner, Parameters and MirroringMode")
+				break
+			}
 		}
 
-		if foundVrc.Spec.Parameters[SchedulingIntervalKey] != mirrorpeer.Spec.SchedulingInterval ||
-			foundVrc.Spec.Parameters[ReplicationSecretNameKey] != mirrorpeer.Spec.ReplicationSecretName ||
-			foundVrc.Spec.Parameters[MirroringModeKey] != string(mirrorpeer.Spec.Mode) {
-			t.Errorf("VolumeReplicatonClass not created or updated properly; Error: %s", err)
-		}
+		_, err := reconciler.r.Reconcile(ctx, ctrl.Request{
+			NamespacedName: types.NamespacedName{
+				Name: mirrorpeer2.Name,
+			},
+		})
 
+		// On reconciling mirrorpeer2 with invalid scheduling intervals, the err should not be nil (because of validation)
+		// This may be caused by other reconciliation errors too but since both mirrorpeers have same items, it should have been long caught by the checks above !
+		if err == nil {
+			t.Errorf("MirrorPeerReconciler Reconcile() should have failed. Error: %s", err)
+		}
 	}
 
 }

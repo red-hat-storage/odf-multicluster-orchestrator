@@ -67,24 +67,12 @@ spec:
               manageS3:
                 default: false
                 type: boolean
-              mirroringMode:
-                default: snapshot
-                description: ' The default MirroringMode is snapshot which is configured
-                  on the rbd images.'
-                enum:
-                - snapshot
-                - journal
-                type: string
-              replicationSecretName:
-                default: rook-csi-rbd-provisioner
-                description: The ReplicationSecretName contains the ceph user credentials
-                  to connect to ceph cluster for mirroring operations
-                type: string
-              schedulingInterval:
-                default: 5m
-                description: The SchedulingInterval in which the mirroring snapshot
-                  are taken
-                type: string
+              schedulingIntervals:
+                description: SchedulingIntervals is a list of intervals at which mirroring
+                  snapshots are taken
+                items:
+                  type: string
+                type: array
             required:
             - items
             type: object
