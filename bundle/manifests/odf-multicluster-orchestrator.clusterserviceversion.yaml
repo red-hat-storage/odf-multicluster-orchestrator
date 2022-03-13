@@ -31,9 +31,9 @@ metadata:
               }
             ],
             "manageS3": false,
-            "mirroringMode": "snapshot",
-            "replicationSecretName": "rook-csi-rbd-provisioner",
-            "schedulingInterval": "5m"
+            "schedulingIntervals": [
+              "5m"
+            ]
           }
         }
       ]
