@@ -1,3 +1,4 @@
+//go:build unit
 // +build unit
 
 /*
@@ -28,7 +29,7 @@ import (
 
 	rmn "github.com/ramendr/ramen/api/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -87,31 +88,31 @@ func fakeMirrorPeers(manageS3 bool) []multiclusterv1alpha1.MirrorPeer {
 func fakeS3InternalSecret(t *testing.T, clusterName string) *corev1.Secret {
 	secretData, err := json.Marshal(
 		map[string][]byte{
-			common.AwsAccessKeyId:     []byte(TestAwsAccessKeyId),
-			common.AwsSecretAccessKey: []byte(TestAwssecretaccesskey),
-			common.S3BucketName:       []byte(TestS3BucketName),
-			common.S3Endpoint:         []byte(TestS3RouteHost),
-			common.S3Region:           []byte(""),
-			common.S3ProfileName:      []byte(fmt.Sprintf("%s-%s-%s", common.S3ProfilePrefix, clusterName, StorageClusterName)),
+			utils.AwsAccessKeyId:     []byte(TestAwsAccessKeyId),
+			utils.AwsSecretAccessKey: []byte(TestAwssecretaccesskey),
+			utils.S3BucketName:       []byte(TestS3BucketName),
+			utils.S3Endpoint:         []byte(TestS3RouteHost),
+			utils.S3Region:           []byte(""),
+			utils.S3ProfileName:      []byte(fmt.Sprintf("%s-%s-%s", utils.S3ProfilePrefix, clusterName, StorageClusterName)),
 		},
 	)
 	assert.NoError(t, err)
 
 	data := map[string][]byte{
-		common.SecretDataKey:         secretData,
-		common.NamespaceKey:          []byte(StorageClusterNamespace),
-		common.StorageClusterNameKey: []byte(StorageClusterName),
-		common.SecretOriginKey:       []byte(common.S3Origin),
+		utils.SecretDataKey:         secretData,
+		utils.NamespaceKey:          []byte(StorageClusterNamespace),
+		utils.StorageClusterNameKey: []byte(StorageClusterName),
+		utils.SecretOriginKey:       []byte(utils.OriginMap["S3Origin"]),
 	}
 	expectedSecret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      common.CreateUniqueSecretName(clusterName, StorageClusterNamespace, StorageClusterName, common.S3ProfilePrefix),
+			Name:      utils.CreateUniqueSecretName(clusterName, StorageClusterNamespace, StorageClusterName, utils.S3ProfilePrefix),
 			Namespace: clusterName,
 			Labels: map[string]string{
-				common.SecretLabelTypeKey: string(common.InternalLabel),
+				utils.SecretLabelTypeKey: string(utils.InternalLabel),
 			},
 		},
-		Type: common.SecretLabelTypeKey,
+		Type: utils.SecretLabelTypeKey,
 		Data: data,
 	}
 
@@ -133,8 +134,8 @@ func getFakeClient(t *testing.T, mgrScheme *runtime.Scheme) client.Client {
 	obj := []runtime.Object{
 		&corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      common.RamenHubOperatorConfigName,
-				Namespace: common.RamenHubNamespace,
+				Name:      utils.RamenHubOperatorConfigName,
+				Namespace: utils.RamenHubNamespace,
 			},
 			Data: map[string]string{
 				"ramen_manager_config.yaml": string(emptyConfig),
@@ -142,7 +143,7 @@ func getFakeClient(t *testing.T, mgrScheme *runtime.Scheme) client.Client {
 		},
 		&corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      common.RamenHubOperatorConfigName,
+				Name:      utils.RamenHubOperatorConfigName,
 				Namespace: "namespace1",
 			},
 			Data: map[string]string{
@@ -151,7 +152,7 @@ func getFakeClient(t *testing.T, mgrScheme *runtime.Scheme) client.Client {
 		},
 		&corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      common.RamenHubOperatorConfigName,
+				Name:      utils.RamenHubOperatorConfigName,
 				Namespace: "namespace2",
 			},
 			Data: map[string]string{
@@ -165,7 +166,7 @@ func getFakeClient(t *testing.T, mgrScheme *runtime.Scheme) client.Client {
 func getRamenConfig(t *testing.T, ctx context.Context, fakeClient client.Client, ramenNamespace string) rmn.RamenConfig {
 	currentRamenConfigMap := corev1.ConfigMap{}
 	namespacedName := types.NamespacedName{
-		Name:      common.RamenHubOperatorConfigName,
+		Name:      utils.RamenHubOperatorConfigName,
 		Namespace: ramenNamespace,
 	}
 	err := fakeClient.Get(ctx, namespacedName, &currentRamenConfigMap)
@@ -181,7 +182,7 @@ func getRamenConfig(t *testing.T, ctx context.Context, fakeClient client.Client,
 func getRamenS3Secret(secretName string, ctx context.Context, fakeClient client.Client, ramenNamespace string) (corev1.Secret, error) {
 	ramenSecret := corev1.Secret{}
 	namespacedName := types.NamespacedName{
-		Name:      common.CreateUniqueSecretName(secretName, StorageClusterNamespace, StorageClusterName, common.S3ProfilePrefix),
+		Name:      utils.CreateUniqueSecretName(secretName, StorageClusterNamespace, StorageClusterName, utils.S3ProfilePrefix),
 		Namespace: ramenNamespace,
 	}
 	err := fakeClient.Get(ctx, namespacedName, &ramenSecret)
@@ -193,22 +194,22 @@ func getRamenS3Secret(secretName string, ctx context.Context, fakeClient client.
 func getS3Profile(ramenNamespace string, sourceManagedClusterName string, destinationManagedClusterName string) []rmn.S3StoreProfile {
 	return []rmn.S3StoreProfile{
 		{
-			S3ProfileName:        fmt.Sprintf("%s-%s-%s", common.S3ProfilePrefix, sourceManagedClusterName, StorageClusterName),
+			S3ProfileName:        fmt.Sprintf("%s-%s-%s", utils.S3ProfilePrefix, sourceManagedClusterName, StorageClusterName),
 			S3Bucket:             TestS3BucketName,
 			S3CompatibleEndpoint: TestS3RouteHost,
 			S3Region:             "",
 			S3SecretRef: corev1.SecretReference{
-				Name:      common.CreateUniqueSecretName(sourceManagedClusterName, StorageClusterNamespace, StorageClusterName, common.S3ProfilePrefix),
+				Name:      utils.CreateUniqueSecretName(sourceManagedClusterName, StorageClusterNamespace, StorageClusterName, utils.S3ProfilePrefix),
 				Namespace: ramenNamespace,
 			},
 		},
 		{
-			S3ProfileName:        fmt.Sprintf("%s-%s-%s", common.S3ProfilePrefix, destinationManagedClusterName, StorageClusterName),
+			S3ProfileName:        fmt.Sprintf("%s-%s-%s", utils.S3ProfilePrefix, destinationManagedClusterName, StorageClusterName),
 			S3Bucket:             TestS3BucketName,
 			S3CompatibleEndpoint: TestS3RouteHost,
 			S3Region:             "",
 			S3SecretRef: corev1.SecretReference{
-				Name:      common.CreateUniqueSecretName(destinationManagedClusterName, StorageClusterNamespace, StorageClusterName, common.S3ProfilePrefix),
+				Name:      utils.CreateUniqueSecretName(destinationManagedClusterName, StorageClusterNamespace, StorageClusterName, utils.S3ProfilePrefix),
 				Namespace: ramenNamespace,
 			},
 		},
@@ -223,8 +224,8 @@ func expectedRamenConfig(ramenNamespace string, source, destination string) rmn.
 
 func expectedRamenSecretData() map[string][]byte {
 	return map[string][]byte{
-		common.AwsAccessKeyId:     []byte(TestAwsAccessKeyId),
-		common.AwsSecretAccessKey: []byte(TestAwssecretaccesskey),
+		utils.AwsAccessKeyId:     []byte(TestAwsAccessKeyId),
+		utils.AwsSecretAccessKey: []byte(TestAwssecretaccesskey),
 	}
 }
 
@@ -237,13 +238,13 @@ func TestMirrorPeerSecretReconcile(t *testing.T) {
 	}{
 		{
 			name:            "Managing S3 Profile disabled",
-			ramenNamespace:  common.RamenHubNamespace,
+			ramenNamespace:  utils.RamenHubNamespace,
 			manageS3:        false,
 			ignoreS3Profile: true,
 		},
 		{
 			name:            "Creating new S3 Profile in empty Ramen Config",
-			ramenNamespace:  common.RamenHubNamespace,
+			ramenNamespace:  utils.RamenHubNamespace,
 			manageS3:        true,
 			ignoreS3Profile: false,
 		},

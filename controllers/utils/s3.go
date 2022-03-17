@@ -1,4 +1,4 @@
-package common
+package utils
 
 import (
 	"fmt"
@@ -10,6 +10,18 @@ import (
 const (
 	RamenHubNamespace  = "openshift-dr-system"
 	BucketGenerateName = "odrbucket"
+
+	// s3
+	S3ProfilePrefix    = "s3profile"
+	S3Endpoint         = "s3CompatibleEndpoint"
+	S3BucketName       = "s3Bucket"
+	S3ProfileName      = "s3ProfileName"
+	S3Region           = "s3Region"
+	AwsAccessKeyId     = "AWS_ACCESS_KEY_ID"
+	AwsSecretAccessKey = "AWS_SECRET_ACCESS_KEY"
+
+	// ramen
+	RamenHubOperatorConfigName = "ramen-hub-operator-config"
 )
 
 func GetCurrentStorageClusterRef(mp *multiclusterv1alpha1.MirrorPeer, spokeClusterName string) (*multiclusterv1alpha1.StorageClusterRef, error) {

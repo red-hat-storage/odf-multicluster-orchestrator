@@ -8,7 +8,7 @@ import (
 
 	routev1 "github.com/openshift/api/route/v1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -45,7 +45,7 @@ func getFilterCondition(ownerReferences []metav1.OwnerReference, name string, bl
 func (s3SecretHandler) getBlueSecretFilter(obj interface{}) bool {
 	blueSecretMatchString := os.Getenv("S3_EXCHANGE_SOURCE_SECRET_STRING_MATCH")
 	if blueSecretMatchString == "" {
-		blueSecretMatchString = common.BucketGenerateName
+		blueSecretMatchString = utils.BucketGenerateName
 	}
 	if s, ok := obj.(*corev1.Secret); ok {
 		return getFilterCondition(s.OwnerReferences, s.ObjectMeta.Name, blueSecretMatchString)
@@ -84,14 +84,14 @@ func (s s3SecretHandler) syncBlueSecret(name string, namespace string, c *blueSe
 		return nil
 	}
 
-	mirrorPeers, err := common.FetchAllMirrorPeers(context.TODO(), s.hubClient)
+	mirrorPeers, err := utils.FetchAllMirrorPeers(context.TODO(), s.hubClient)
 	if err != nil {
 		return err
 	}
 
 	var storageClusterRef *v1alpha1.StorageClusterRef
 	for _, mirrorPeer := range mirrorPeers {
-		storageClusterRef, err = common.GetCurrentStorageClusterRef(&mirrorPeer, c.clusterName)
+		storageClusterRef, err = utils.GetCurrentStorageClusterRef(&mirrorPeer, c.clusterName)
 		if err == nil {
 			break
 		}
@@ -119,22 +119,22 @@ func (s s3SecretHandler) syncBlueSecret(name string, namespace string, c *blueSe
 			Name:      name,
 			Namespace: storageClusterRef.Namespace,
 		},
-		Type: common.SecretLabelTypeKey,
+		Type: utils.SecretLabelTypeKey,
 		Data: map[string][]byte{
-			common.S3ProfileName:      []byte(fmt.Sprintf("%s-%s-%s", common.S3ProfilePrefix, c.clusterName, storageClusterRef.Name)),
-			common.S3BucketName:       []byte(configMap.Data[S3BucketName]),
-			common.S3Region:           []byte(s3Region),
-			common.S3Endpoint:         []byte(fmt.Sprintf("%s://%s", DefaultS3EndpointProtocol, route.Spec.Host)),
-			common.AwsSecretAccessKey: []byte(secret.Data[common.AwsSecretAccessKey]),
-			common.AwsAccessKeyId:     []byte(secret.Data[common.AwsAccessKeyId]),
+			utils.S3ProfileName:      []byte(fmt.Sprintf("%s-%s-%s", utils.S3ProfilePrefix, c.clusterName, storageClusterRef.Name)),
+			utils.S3BucketName:       []byte(configMap.Data[S3BucketName]),
+			utils.S3Region:           []byte(s3Region),
+			utils.S3Endpoint:         []byte(fmt.Sprintf("%s://%s", DefaultS3EndpointProtocol, route.Spec.Host)),
+			utils.AwsSecretAccessKey: []byte(secret.Data[utils.AwsSecretAccessKey]),
+			utils.AwsAccessKeyId:     []byte(secret.Data[utils.AwsAccessKeyId]),
 		},
 	}
 
 	customData := map[string][]byte{
-		common.SecretOriginKey: []byte(common.S3Origin),
+		utils.SecretOriginKey: []byte(utils.OriginMap["S3Origin"]),
 	}
 
-	newSecret, err := generateBlueSecret(&s3Secret, common.InternalLabel, common.CreateUniqueSecretName(c.clusterName, storageClusterRef.Namespace, storageClusterRef.Name, common.S3ProfilePrefix), storageClusterRef.Name, c.clusterName, customData)
+	newSecret, err := generateBlueSecret(&s3Secret, utils.InternalLabel, utils.CreateUniqueSecretName(c.clusterName, storageClusterRef.Namespace, storageClusterRef.Name, utils.S3ProfilePrefix), storageClusterRef.Name, c.clusterName, customData)
 	if err != nil {
 		return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: %v", secret.Name, secret.Namespace, c.clusterName, err)
 	}

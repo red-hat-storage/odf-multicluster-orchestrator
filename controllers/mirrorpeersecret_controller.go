@@ -19,7 +19,7 @@ package controllers
 import (
 	"context"
 
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -66,8 +66,8 @@ func mirrorPeerSecretReconcile(ctx context.Context, rc client.Client, req ctrl.R
 		logger.Error(err, "Error in getting secret", "request", req)
 		return err
 	}
-	if common.IsSecretSource(&peerSecret) {
-		if err := common.ValidateSourceSecret(&peerSecret); err != nil {
+	if utils.IsSecretSource(&peerSecret) {
+		if err := utils.ValidateSourceSecret(&peerSecret); err != nil {
 			logger.Error(err, "Provided source secret is not valid", "secret", peerSecret.Name, "namespace", peerSecret.Namespace)
 			return err
 		}
@@ -76,14 +76,14 @@ func mirrorPeerSecretReconcile(ctx context.Context, rc client.Client, req ctrl.R
 			logger.Error(err, "Updating the destination secret failed", "secret", peerSecret.Name, "namespace", peerSecret.Namespace)
 			return err
 		}
-	} else if common.IsSecretDestination(&peerSecret) {
+	} else if utils.IsSecretDestination(&peerSecret) {
 		// a destination secret updation happened
 		err = processDestinationSecretUpdation(ctx, rc, &peerSecret)
 		if err != nil {
 			logger.Error(err, "Restoring destination secret failed", "secret", peerSecret.Name, "namespace", peerSecret.Namespace)
 			return err
 		}
-	} else if common.IsSecretInternal(&peerSecret) {
+	} else if utils.IsSecretInternal(&peerSecret) {
 		err = createOrUpdateSecretsFromInternalSecret(ctx, rc, &peerSecret, nil)
 		if err != nil {
 			logger.Error(err, "Updating the secret from internal secret is failed", "secret", peerSecret.Name, "namespace", peerSecret.Namespace)
@@ -96,6 +96,6 @@ func mirrorPeerSecretReconcile(ctx context.Context, rc client.Client, req ctrl.R
 // SetupWithManager sets up the controller with the Manager.
 func (r *MirrorPeerSecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.Secret{}, builder.WithPredicates(common.SourceOrDestinationPredicate)).
+		For(&corev1.Secret{}, builder.WithPredicates(utils.SourceOrDestinationPredicate)).
 		Complete(r)
 }

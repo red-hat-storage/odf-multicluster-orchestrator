@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	ocsv1 "github.com/openshift/ocs-operator/api/v1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
 	cephv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	rookclient "github.com/rook/rook/pkg/client/clientset/versioned/fake"
 	"github.com/stretchr/testify/assert"
@@ -132,7 +132,7 @@ func getFakeRookGreenSecretExchangeController(t *testing.T) *greenSecretTokenExc
 				Name:      "greensecretwithwrongsc",
 				Namespace: "ns",
 				Labels: map[string]string{
-					common.SecretLabelTypeKey: string(common.DestinationLabel),
+					utils.SecretLabelTypeKey: string(utils.DestinationLabel),
 				},
 			},
 			Data: map[string][]byte{
@@ -146,7 +146,7 @@ func getFakeRookGreenSecretExchangeController(t *testing.T) *greenSecretTokenExc
 				Name:      "greensecret",
 				Namespace: "ns",
 				Labels: map[string]string{
-					common.SecretLabelTypeKey: string(common.DestinationLabel),
+					utils.SecretLabelTypeKey: string(utils.DestinationLabel),
 				},
 			},
 			Data: map[string][]byte{
@@ -225,7 +225,7 @@ func TestRookGreenSecretSnyc(t *testing.T) {
 			if c.syncExpected {
 				actualSecret, err := fakeCtrl.spokeKubeClient.CoreV1().Secrets(TestStorageClusterNamespace).Get(context.TODO(), name, metav1.GetOptions{})
 				assert.NoError(t, err)
-				assert.Equal(t, actualSecret.GetLabels()[common.CreatedByLabelKey], TokenExchangeName)
+				assert.Equal(t, actualSecret.GetLabels()[utils.CreatedByLabelKey], TokenExchangeName)
 				ctx := context.TODO()
 				sc := &ocsv1.StorageCluster{}
 				err = rookHandler.spokeClient.Get(ctx, types.NamespacedName{Name: TestStorageClusterName, Namespace: TestStorageClusterNamespace}, sc)
@@ -243,20 +243,20 @@ func getExpectedRookBlueSecret(t *testing.T) *corev1.Secret {
 	assert.NoError(t, err)
 
 	data := map[string][]byte{
-		common.SecretDataKey:         secretData,
-		common.NamespaceKey:          []byte(TestStorageClusterNamespace),
-		common.StorageClusterNameKey: []byte(TestStorageClusterName),
-		common.SecretOriginKey:       []byte(common.RookOrigin),
+		utils.SecretDataKey:         secretData,
+		utils.NamespaceKey:          []byte(TestStorageClusterNamespace),
+		utils.StorageClusterNameKey: []byte(TestStorageClusterName),
+		utils.SecretOriginKey:       []byte(utils.OriginMap["RookOrigin"]),
 	}
 	expectedSecret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      common.CreateUniqueSecretName(TestManagedClusterName, TestStorageClusterNamespace, TestStorageClusterName),
+			Name:      utils.CreateUniqueSecretName(TestManagedClusterName, TestStorageClusterNamespace, TestStorageClusterName),
 			Namespace: TestManagedClusterName,
 			Labels: map[string]string{
-				common.SecretLabelTypeKey: string(common.SourceLabel),
+				utils.SecretLabelTypeKey: string(utils.SourceLabel),
 			},
 		},
-		Type: common.SecretLabelTypeKey,
+		Type: utils.SecretLabelTypeKey,
 		Data: data,
 	}
 
@@ -302,7 +302,7 @@ func TestRookBlueSecretSnyc(t *testing.T) {
 				assert.NoError(t, err)
 			}
 			if c.syncExpected {
-				actualSecret, err := fakeCtrl.hubKubeClient.CoreV1().Secrets(TestManagedClusterName).Get(context.TODO(), common.CreateUniqueSecretName(TestManagedClusterName, TestStorageClusterNamespace, TestStorageClusterName), metav1.GetOptions{})
+				actualSecret, err := fakeCtrl.hubKubeClient.CoreV1().Secrets(TestManagedClusterName).Get(context.TODO(), utils.CreateUniqueSecretName(TestManagedClusterName, TestStorageClusterNamespace, TestStorageClusterName), metav1.GetOptions{})
 				assert.NoError(t, err)
 				assert.True(t, reflect.DeepEqual(getExpectedRookBlueSecret(t), actualSecret))
 			} else {

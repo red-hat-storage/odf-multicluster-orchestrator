@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 /*
@@ -23,7 +24,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -183,7 +184,7 @@ var _ = Describe("MirrorPeer Status Tests", func() {
 			pr2 := fakeMirrorPeer.Spec.Items[1]
 
 			secretNN1 := types.NamespacedName{
-				Name:      common.CreateUniqueSecretName(pr1.ClusterName, pr1.StorageClusterRef.Namespace, pr1.StorageClusterRef.Name),
+				Name:      utils.CreateUniqueSecretName(pr1.ClusterName, pr1.StorageClusterRef.Namespace, pr1.StorageClusterRef.Name),
 				Namespace: pr1.ClusterName,
 			}
 
@@ -192,10 +193,10 @@ var _ = Describe("MirrorPeer Status Tests", func() {
 				Namespace: pr1.StorageClusterRef.Namespace,
 			}
 
-			sec1 := common.CreateSourceSecret(secretNN1, storageClusterNN1, []byte("SecretData1"), common.RookOrigin)
+			sec1 := utils.CreateSourceSecret(secretNN1, storageClusterNN1, []byte("SecretData1"), utils.OriginMap["RookOrigin"])
 
 			secretNN2 := types.NamespacedName{
-				Name:      common.CreateUniqueSecretName(pr2.ClusterName, pr2.StorageClusterRef.Namespace, pr2.StorageClusterRef.Name),
+				Name:      utils.CreateUniqueSecretName(pr2.ClusterName, pr2.StorageClusterRef.Namespace, pr2.StorageClusterRef.Name),
 				Namespace: pr2.ClusterName,
 			}
 
@@ -204,7 +205,7 @@ var _ = Describe("MirrorPeer Status Tests", func() {
 				Namespace: pr2.StorageClusterRef.Namespace,
 			}
 
-			sec2 := common.CreateSourceSecret(secretNN2, storageClusterNN2, []byte("SecretData2"), common.RookOrigin)
+			sec2 := utils.CreateSourceSecret(secretNN2, storageClusterNN2, []byte("SecretData2"), utils.OriginMap["RookOrigin"])
 
 			err = k8sClient.Create(context.TODO(), sec1, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())

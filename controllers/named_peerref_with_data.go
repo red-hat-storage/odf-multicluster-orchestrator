@@ -6,7 +6,7 @@ import (
 	"reflect"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -31,9 +31,9 @@ type NamedPeerRefWithSecretData struct {
 func NewNamedPeerRefWithSecretData(secret *corev1.Secret, peerRef multiclusterv1alpha1.PeerRef) *NamedPeerRefWithSecretData {
 	var nPeerRef NamedPeerRefWithSecretData = NamedPeerRefWithSecretData{
 		Name:         secret.Name,
-		Data:         secret.Data[common.SecretDataKey],
+		Data:         secret.Data[utils.SecretDataKey],
 		PeerRef:      peerRef,
-		SecretOrigin: string(secret.Data[common.SecretOriginKey]),
+		SecretOrigin: string(secret.Data[utils.SecretOriginKey]),
 	}
 	return &nPeerRef
 }
@@ -43,7 +43,7 @@ func NewNamedPeerRefWithSecretData(secret *corev1.Secret, peerRef multiclusterv1
 //	 a. details of the secret, like name,namespace etc; that is to be generated
 // 	 b. data part that is to be passed on to the newly created secret
 // The type of secret (ie; source or destination) is passed as the argument
-func (nPR *NamedPeerRefWithSecretData) GenerateSecret(secretLabelType common.SecretLabelType) *corev1.Secret {
+func (nPR *NamedPeerRefWithSecretData) GenerateSecret(secretLabelType utils.SecretLabelType) *corev1.Secret {
 	if nPR == nil {
 		return nil
 	}
@@ -56,10 +56,10 @@ func (nPR *NamedPeerRefWithSecretData) GenerateSecret(secretLabelType common.Sec
 		Namespace: nPR.StorageClusterRef.Namespace,
 	}
 	var retSecret *corev1.Secret
-	if secretLabelType == common.DestinationLabel {
-		retSecret = common.CreateDestinationSecret(secretNamespacedName, storageClusterNamespacedName, nPR.Data, nPR.SecretOrigin)
-	} else if secretLabelType == common.SourceLabel {
-		retSecret = common.CreateSourceSecret(secretNamespacedName, storageClusterNamespacedName, nPR.Data, nPR.SecretOrigin)
+	if secretLabelType == utils.DestinationLabel {
+		retSecret = utils.CreateDestinationSecret(secretNamespacedName, storageClusterNamespacedName, nPR.Data, nPR.SecretOrigin)
+	} else if secretLabelType == utils.SourceLabel {
+		retSecret = utils.CreateSourceSecret(secretNamespacedName, storageClusterNamespacedName, nPR.Data, nPR.SecretOrigin)
 	}
 
 	return retSecret
@@ -108,7 +108,7 @@ func (nPR *NamedPeerRefWithSecretData) CreateOrUpdateDestinationSecret(ctx conte
 	}
 
 	logger := log.FromContext(ctx)
-	expectedDest := nPR.GenerateSecret(common.DestinationLabel)
+	expectedDest := nPR.GenerateSecret(utils.DestinationLabel)
 	var currentDest corev1.Secret
 	err = nPR.GetAssociatedSecret(ctx, rc, &currentDest)
 	if err != nil {

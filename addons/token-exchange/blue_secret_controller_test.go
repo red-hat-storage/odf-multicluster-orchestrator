@@ -3,13 +3,13 @@ package addons
 import (
 	"context"
 	"fmt"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"testing"
 	"time"
 
 	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -66,7 +66,7 @@ func NewFakeSyncContext(t *testing.T, key string) *fakeSyncContext {
 	}
 }
 
-func getFakeTokenExchangeController(t *testing.T, secretType common.SecretLabelType) factory.Controller {
+func getFakeTokenExchangeController(t *testing.T, secretType utils.SecretLabelType) factory.Controller {
 	hubResources := []runtime.Object{
 		&corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -95,7 +95,7 @@ func getFakeTokenExchangeController(t *testing.T, secretType common.SecretLabelT
 		assert.NoError(t, err)
 	}
 
-	if secretType == common.DestinationLabel {
+	if secretType == utils.DestinationLabel {
 		return newgreenSecretTokenExchangeAgentController(
 			fakeHubKubeClient,
 			fakeHubInformerFactory.Core().V1().Secrets(),
@@ -149,7 +149,7 @@ func TestBlueSecretSync(t *testing.T) {
 		},
 	}
 	registerFakeSecretHandler()
-	fakeCtrl := getFakeTokenExchangeController(t, common.SourceLabel)
+	fakeCtrl := getFakeTokenExchangeController(t, utils.SourceLabel)
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			err := fakeCtrl.Sync(context.TODO(), NewFakeSyncContext(t, c.namespaceName))

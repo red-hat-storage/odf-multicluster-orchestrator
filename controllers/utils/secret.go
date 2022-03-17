@@ -1,20 +1,14 @@
-package common
+package utils
 
 import (
 	"context"
-	"crypto/sha512"
 	"errors"
-	"fmt"
-	"reflect"
-	"strings"
-
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 type SecretLabelType string
@@ -31,42 +25,9 @@ const (
 	SecretDataKey                         = "secret-data"
 	SecretOriginKey                       = "secret-origin"
 	MirrorPeerSecret                      = "mirrorpeersecret"
-
-	// rook
-	RookOrigin = "rook"
-
-	// s3
-	S3ProfilePrefix    = "s3profile"
-	S3Origin           = "S3"
-	S3Endpoint         = "s3CompatibleEndpoint"
-	S3BucketName       = "s3Bucket"
-	S3ProfileName      = "s3ProfileName"
-	S3Region           = "s3Region"
-	AwsAccessKeyId     = "AWS_ACCESS_KEY_ID"
-	AwsSecretAccessKey = "AWS_SECRET_ACCESS_KEY"
-
-	// ramen
-	RamenHubOperatorConfigName = "ramen-hub-operator-config"
 )
 
-var (
-	SourceOrDestinationPredicate = predicate.Funcs{
-		CreateFunc: func(e event.CreateEvent) bool {
-			return IsSecretSource(e.Object) || IsSecretInternal(e.Object)
-		},
-		DeleteFunc: func(e event.DeleteEvent) bool {
-			return IsSecretSource(e.Object) || IsSecretDestination(e.Object)
-		},
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			return (IsSecretSource(e.ObjectOld) && IsSecretSource(e.ObjectNew)) ||
-				(IsSecretDestination(e.ObjectOld) && IsSecretDestination(e.ObjectNew)) ||
-				IsSecretInternal(e.ObjectOld) && IsSecretInternal(e.ObjectNew)
-		},
-		GenericFunc: func(_ event.GenericEvent) bool {
-			return false
-		},
-	}
-)
+var OriginMap = map[string]string{"RookOrigin": "rook", "S3Origin": "S3"}
 
 func GetInternalLabel(secret *corev1.Secret) SecretLabelType {
 	return SecretLabelType(secret.Labels[SecretLabelTypeKey])
@@ -192,20 +153,6 @@ func CreateDestinationSecret(secretNameAndNamespace types.NamespacedName,
 		secretData,
 		secretOrigin,
 	)
-}
-
-// CreateUniqueName function creates a sha512 hex sum from the given parameters
-func CreateUniqueName(params ...string) string {
-	genStr := strings.Join(params, "-")
-	return fmt.Sprintf("%x", sha512.Sum512([]byte(genStr)))
-}
-
-// CreateUniqueSecretName function creates a name of 40 chars using sha512 hex sum from the given parameters
-func CreateUniqueSecretName(managedCluster, storageClusterNamespace, storageClusterName string, prefix ...string) string {
-	if len(prefix) > 0 {
-		return CreateUniqueName(prefix[0], managedCluster, storageClusterNamespace, storageClusterName)[0:39]
-	}
-	return CreateUniqueName(managedCluster, storageClusterNamespace, storageClusterName)[0:39]
 }
 
 // CreatePeerRefFromSecret function creates a 'PeerRef' object

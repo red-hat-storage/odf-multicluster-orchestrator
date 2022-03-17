@@ -3,10 +3,10 @@ package addons
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/resource/resourceapply"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/common"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,7 +36,7 @@ func getConfigMap(lister corev1lister.ConfigMapLister, name, namespace string) (
 	return confgMap, nil
 }
 
-func generateBlueSecret(secret *corev1.Secret, secretType common.SecretLabelType, uniqueName string, sc string, managedCluster string, customData map[string][]byte) (nsecret corev1.Secret, err error) {
+func generateBlueSecret(secret *corev1.Secret, secretType utils.SecretLabelType, uniqueName string, sc string, managedCluster string, customData map[string][]byte) (nsecret corev1.Secret, err error) {
 	if secret == nil {
 		return nsecret, fmt.Errorf("cannot create secret on the hub, source secret nil")
 	}
@@ -47,9 +47,9 @@ func generateBlueSecret(secret *corev1.Secret, secretType common.SecretLabelType
 	}
 
 	data := map[string][]byte{
-		common.SecretDataKey:         secretData,
-		common.NamespaceKey:          []byte(secret.Namespace),
-		common.StorageClusterNameKey: []byte(sc),
+		utils.SecretDataKey:         secretData,
+		utils.NamespaceKey:          []byte(secret.Namespace),
+		utils.StorageClusterNameKey: []byte(sc),
 	}
 
 	for key, value := range customData {
@@ -61,10 +61,10 @@ func generateBlueSecret(secret *corev1.Secret, secretType common.SecretLabelType
 			Name:      uniqueName,
 			Namespace: managedCluster,
 			Labels: map[string]string{
-				common.SecretLabelTypeKey: string(secretType),
+				utils.SecretLabelTypeKey: string(secretType),
 			},
 		},
-		Type: common.SecretLabelTypeKey,
+		Type: utils.SecretLabelTypeKey,
 		Data: data,
 	}
 	return nSecret, nil
@@ -80,7 +80,7 @@ func createSecret(client kubernetes.Interface, recorder events.Recorder, newSecr
 }
 
 func validateGreenSecret(secret corev1.Secret) error {
-	if secret.GetLabels()[common.SecretLabelTypeKey] != string(common.DestinationLabel) {
+	if secret.GetLabels()[utils.SecretLabelTypeKey] != string(utils.DestinationLabel) {
 		return fmt.Errorf("secret %q in namespace %q is not a green secret. Skip syncing with the spoke cluster", secret.Name, secret.Namespace)
 	}
 
@@ -92,11 +92,11 @@ func validateGreenSecret(secret corev1.Secret) error {
 		return fmt.Errorf("missing storageCluster namespace info in secret %q in namespace %q", secret.Name, secret.Namespace)
 	}
 
-	if string(secret.Data[common.StorageClusterNameKey]) == "" {
+	if string(secret.Data[utils.StorageClusterNameKey]) == "" {
 		return fmt.Errorf("missing storageCluster name info in secret %q in namespace %q", secret.Name, secret.Namespace)
 	}
 
-	if string(secret.Data[common.SecretDataKey]) == "" {
+	if string(secret.Data[utils.SecretDataKey]) == "" {
 		return fmt.Errorf("missing secret-data info in secret %q in namespace %q", secret.Name, secret.Namespace)
 	}
 
