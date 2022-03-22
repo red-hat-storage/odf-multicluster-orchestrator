@@ -1,6 +1,8 @@
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 CWD := $(shell pwd)
 
+GO ?= go
+
 .DEFAULT_GOAL := help
 
 # All variables are defined here
@@ -10,10 +12,10 @@ include hack/make/vars.mk
 include hack/make/tools.mk
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
-ifeq (,$(shell go env GOBIN))
-GOBIN=$(shell go env GOPATH)/bin
+ifeq (,$(shell $(GO) env GOBIN))
+GOBIN=$(shell $(GO) env GOPATH)/bin
 else
-GOBIN=$(shell go env GOBIN)
+GOBIN=$(shell $(GO) env GOBIN)
 endif
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
@@ -41,10 +43,10 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 fmt: ## Run go fmt against code.
-	go fmt ./...
+	$(GO) fmt ./...
 
 vet: ## Run go vet against code.
-	go vet ./...
+	$(GO) vet ./...
 
 golangci-lint: golangci-bin ## Run golangci-lint against code.
 	$(GOLANGCI_BIN) run ./...
@@ -53,14 +55,14 @@ kube-linter: kubelinter-bin ## Run kube-linter against YAML files
 	$(KUBELINTER_BIN) lint ./ --config ./.kube-linter-config.yaml
 
 unit-test: ## Run unit tests
-	go test ./... -v -tags unit -coverprofile unit-cover.out
+	$(GO) test ./... -v -tags unit -coverprofile unit-cover.out
 
 ENVTEST_ASSETS_DIR=$(CWD)/testbin
 OPENSHIFT_CI ?= false
 test: ## Run integration tests.
 ifeq ($(OPENSHIFT_CI), true)
 	@echo "Running in OpenShift CI. Syncing vendor"
-	go mod tidy && go mod vendor
+	$(GO) mod tidy && $(GO) mod vendor
 else
 	@echo "Running outside OpenShift CI. Ignoring vendor"
 endif
@@ -72,10 +74,10 @@ endif
 ##@ Build
 
 build: generate fmt vet golangci-lint kube-linter ## Build manager binary.
-	go build -o bin/manager main.go
+	$(GO) build -o bin/manager main.go
 
 run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./main.go
+	$(GO) run ./main.go
 
 docker-build: generate fmt vet golangci-lint kube-linter ## Build docker image with the manager.
 	docker build -t ${IMG} .
@@ -127,7 +129,7 @@ catalog-push: ## Push a catalog image.
 ##@ Actions
 
 ensure-clean-workdir: ## Ensure all required changes are generated and committed
-	go mod tidy
+	$(GO) mod tidy
 	$(MAKE) manifests generate fmt vet
 	git --no-pager diff
 	git status --porcelain 2>&1 | tee /dev/stderr | (! read)
