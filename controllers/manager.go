@@ -135,6 +135,13 @@ func (o *ManagerOptions) runManager() {
 		AgentImage: agentImage,
 	}
 
+	err = (&multiclusterv1alpha1.MirrorPeer{}).SetupWebhookWithManager(mgr)
+
+	if err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "MirrorPeer")
+		os.Exit(1)
+	}
+
 	setupLog.Info("creating addon manager")
 	addonMgr, err := addonmanager.New(mgr.GetConfig())
 	if err != nil {
