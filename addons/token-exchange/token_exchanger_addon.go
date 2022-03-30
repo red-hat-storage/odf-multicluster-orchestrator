@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/pem"
 	"fmt"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 
 	"github.com/openshift/library-go/pkg/assets"
 	"github.com/openshift/library-go/pkg/operator/events"
@@ -76,11 +77,13 @@ func (a *TokenExchangeAddon) Manifests(cluster *clusterv1.ManagedCluster, addon 
 		ClusterName           string
 		AddonInstallNamespace string
 		Image                 string
+		DRMode                string
 	}{
 		KubeConfigSecret:      fmt.Sprintf("%s-hub-kubeconfig", TokenExchangeName),
 		AddonInstallNamespace: installNamespace,
 		ClusterName:           cluster.Name,
 		Image:                 a.AgentImage,
+		DRMode:                addon.Annotations[utils.DRModeAnnotationKey],
 	}
 
 	for _, file := range agentDeploymentFiles {

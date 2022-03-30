@@ -24,7 +24,6 @@ type rookSecretHandler struct {
 }
 
 const (
-	RookSecretHandlerName            = "rook"
 	RookType                         = "kubernetes.io/rook"
 	RookDefaultBlueSecretMatchString = "cluster-peer-token"
 )

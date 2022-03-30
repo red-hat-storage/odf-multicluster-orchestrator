@@ -87,14 +87,21 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	err = r.enableCSIAddons(ctx, scr.Namespace)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to start CSI Addons for rook: %v", err)
-	}
+	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
+		err = r.enableCSIAddons(ctx, scr.Namespace)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to start CSI Addons for rook: %v", err)
+		}
 
-	err = r.enableMirroring(ctx, scr.Name, scr.Namespace, &mirrorPeer)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to enable mirroring the storagecluster %q in namespace %q in managed cluster. Error %v", scr.Name, scr.Namespace, err)
+		err = r.enableMirroring(ctx, scr.Name, scr.Namespace, &mirrorPeer)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to enable mirroring the storagecluster %q in namespace %q in managed cluster. Error %v", scr.Name, scr.Namespace, err)
+		}
+
+		errs := r.createVolumeReplicationClass(ctx, &mirrorPeer)
+		if len(errs) > 0 {
+			return ctrl.Result{}, fmt.Errorf("few failures occured while creating VolumeReplicationClasses: %v", errs)
+		}
 	}
 
 	err = r.createS3(ctx, req, mirrorPeer, scr.Namespace)
@@ -103,10 +110,6 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	errs := r.createVolumeReplicationClass(ctx, &mirrorPeer)
-	if len(errs) > 0 {
-		return ctrl.Result{}, fmt.Errorf("few failures occured while creating VolumeReplicationClasses: %v", errs)
-	}
 	return ctrl.Result{}, nil
 }
 

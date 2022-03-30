@@ -22,7 +22,6 @@ type s3SecretHandler struct {
 }
 
 const (
-	S3SecretHandlerName       = "s3"
 	ObjectBucketClaimKind     = "ObjectBucketClaim"
 	S3BucketName              = "BUCKET_NAME"
 	S3BucketRegion            = "BUCKET_REGION"
