@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 /*
@@ -63,6 +64,7 @@ var _ = Describe("ManagedClusterAddOn creation, updation and deletion", func() {
 		BeforeEach(func() {
 			newMirrorPeer := mirrorPeer1.DeepCopy()
 			newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
+				Type: "async",
 				Items: []multiclusterv1alpha1.PeerRef{
 					{
 						ClusterName: "cluster1",

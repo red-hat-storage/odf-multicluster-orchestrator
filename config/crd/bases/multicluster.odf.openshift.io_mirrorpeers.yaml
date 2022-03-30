@@ -73,8 +73,16 @@ spec:
                 items:
                   type: string
                 type: array
+              type:
+                default: async
+                description: Type represents the mode of DR operation (sync or async)
+                enum:
+                - async
+                - sync
+                type: string
             required:
             - items
+            - type
             type: object
           status:
             description: MirrorPeerStatus defines the observed state of MirrorPeer

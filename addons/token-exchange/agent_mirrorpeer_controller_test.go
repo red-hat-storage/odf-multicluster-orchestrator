@@ -43,6 +43,7 @@ var (
 			Name: "mirrorpeer-with-proper-scheduling-intervals",
 		},
 		Spec: multiclusterv1alpha1.MirrorPeerSpec{
+			Type:                "async",
 			Items:               mpItems,
 			SchedulingIntervals: []string{"10m", "5m", "30m", "1h", "5m"},
 		},
@@ -52,6 +53,7 @@ var (
 			Name: "mirrorpeer-with-invalid-scheduling-intervals",
 		},
 		Spec: multiclusterv1alpha1.MirrorPeerSpec{
+			Type:                "async",
 			Items:               mpItems,
 			SchedulingIntervals: []string{"1p", "2o", "3h", "4hh", "5md"},
 		},

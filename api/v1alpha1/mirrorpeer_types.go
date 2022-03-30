@@ -21,11 +21,13 @@ import (
 )
 
 type PhaseType string
-type MirroringMode string
+type DRType string
 
 const (
 	ExchangingSecret PhaseType = "ExchangingSecret"
 	ExchangedSecret  PhaseType = "ExchangedSecret"
+	Sync             DRType    = "sync"
+	Async            DRType    = "async"
 )
 
 // StorageClusterRef holds a reference to a StorageCluster
@@ -46,6 +48,11 @@ type PeerRef struct {
 
 // MirrorPeerSpec defines the desired state of MirrorPeer
 type MirrorPeerSpec struct {
+	// Type represents the mode of DR operation (sync or async)
+	// +kubebuilder:default=async
+	// +kubebuilder:validation:Enum=async;sync
+	Type DRType `json:"type"`
+
 	// Items is a list of PeerRef.
 	// +kubebuilder:validation:MaxItems=2
 	// +kubebuilder:validation:MinItems=2
