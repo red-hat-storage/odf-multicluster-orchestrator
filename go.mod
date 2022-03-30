@@ -4,14 +4,14 @@ go 1.16
 
 require (
 	github.com/csi-addons/volume-replication-operator v0.2.0
-	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20210818162813-3eee31c01875
+	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20220105185820-c1da9586e05b
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.15.0
 	github.com/openshift/api v3.9.1-0.20191111211345-a27ff30ebf09+incompatible
 	github.com/openshift/library-go v0.0.0-20210916194400-ae21aab32431
 	github.com/openshift/ocs-operator v0.0.1-alpha2
 	github.com/ramendr/ramen v0.0.0-20220314215400-90d1d91e4875
-	github.com/rook/rook v1.7.3-0.20210830134613-f2b966caf356
+	github.com/rook/rook v1.8.7
 	github.com/spf13/cobra v1.1.3
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
@@ -21,7 +21,7 @@ require (
 	k8s.io/klog/v2 v2.9.0
 	open-cluster-management.io/addon-framework v0.1.0
 	open-cluster-management.io/api v0.5.1-0.20211109002058-9676c7a1e606
-	sigs.k8s.io/controller-runtime v0.9.7
+	sigs.k8s.io/controller-runtime v0.10.2
 	sigs.k8s.io/yaml v1.3.0
 
 )
