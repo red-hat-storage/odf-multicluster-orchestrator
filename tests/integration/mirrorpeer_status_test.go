@@ -62,6 +62,7 @@ var _ = Describe("MirrorPeer Status Tests", func() {
 				Name: "fake-mirror-peer-2",
 			},
 			Spec: multiclusterv1alpha1.MirrorPeerSpec{
+				Type: "async",
 				Items: []multiclusterv1alpha1.PeerRef{
 					{
 						ClusterName: "new-managed-cluster-1",
@@ -151,6 +152,7 @@ var _ = Describe("MirrorPeer Status Tests", func() {
 				Name: "fake-mirror-peer",
 			},
 			Spec: multiclusterv1alpha1.MirrorPeerSpec{
+				Type: "async",
 				Items: []multiclusterv1alpha1.PeerRef{
 					{
 						ClusterName: "managed-cluster1",

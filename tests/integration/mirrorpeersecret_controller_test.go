@@ -138,6 +138,7 @@ var _ = Describe("MirrorPeerSecret Controller", func() {
 				Name: mpName,
 			},
 			Spec: multiclusterv1alpha1.MirrorPeerSpec{
+				Type:  "async",
 				Items: items,
 			},
 		}

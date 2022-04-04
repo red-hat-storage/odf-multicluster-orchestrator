@@ -2,6 +2,7 @@ package addons
 
 import (
 	"context"
+	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"time"
 
 	"github.com/openshift/library-go/pkg/controller/controllercmd"
@@ -34,6 +35,7 @@ func NewAgentCommand() *cobra.Command {
 type AgentOptions struct {
 	HubKubeconfigFile string
 	SpokeClusterName  string
+	DRMode            string
 }
 
 // NewAgentOptions returns the flags with default value set
@@ -45,6 +47,7 @@ func (o *AgentOptions) AddFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 	flags.StringVar(&o.HubKubeconfigFile, "hub-kubeconfig", o.HubKubeconfigFile, "Location of kubeconfig file to connect to hub cluster.")
 	flags.StringVar(&o.SpokeClusterName, "cluster-name", o.SpokeClusterName, "Name of spoke cluster.")
+	flags.StringVar(&o.DRMode, "mode", o.DRMode, "The DR mode of token exchange addon. Valid values are: 'sync', 'async'")
 }
 
 // RunAgent starts the controllers on agent to process work from hub.
@@ -66,7 +69,7 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 		return err
 	}
 	hubKubeInformerFactory := informers.NewSharedInformerFactoryWithOptions(hubKubeClient, 10*time.Minute, informers.WithNamespace(o.SpokeClusterName))
-	err = registerHandler(controllerContext.KubeConfig, hubRestConfig)
+	err = registerHandler(multiclusterv1alpha1.DRType(o.DRMode), controllerContext.KubeConfig, hubRestConfig)
 	if err != nil {
 		return err
 	}

@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 /*
@@ -64,6 +65,7 @@ var _ = Describe("MirrorPeer Validations", func() {
 			By("creating MirrorPeer with 1 Item", func() {
 				newMirrorPeer := mirrorPeer.DeepCopy()
 				newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
+					Type: "async",
 					Items: []multiclusterv1alpha1.PeerRef{
 						{
 							ClusterName: "test-provider-cluster",
@@ -80,6 +82,7 @@ var _ = Describe("MirrorPeer Validations", func() {
 			By("creating MirrorPeer without MirrorPeer.Spec.Items[*].ClusterName ", func() {
 				newMirrorPeer := mirrorPeer.DeepCopy()
 				newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
+					Type: "async",
 					Items: []multiclusterv1alpha1.PeerRef{
 						{
 							StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
@@ -105,6 +108,7 @@ var _ = Describe("MirrorPeer Validations", func() {
 			By("creating MirrorPeer without MirrorPeer.Spec.Items[*].StorageClusterRef ", func() {
 				newMirrorPeer := mirrorPeer.DeepCopy()
 				newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
+					Type: "async",
 					Items: []multiclusterv1alpha1.PeerRef{
 						{
 							ClusterName: "test-provider-cluster1",
@@ -128,6 +132,7 @@ var _ = Describe("MirrorPeer Validations", func() {
 			By("creating MirrorPeer with all fields well defined", func() {
 				newMirrorPeer := mirrorPeer.DeepCopy()
 				newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
+					Type: "async",
 					Items: []multiclusterv1alpha1.PeerRef{
 						{
 							ClusterName: "test-provider-cluster1",
@@ -157,6 +162,7 @@ var _ = Describe("MirrorPeer Validations", func() {
 		BeforeEach(func() {
 			newMirrorPeer := mirrorPeer.DeepCopy()
 			newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
+				Type: "async",
 				Items: []multiclusterv1alpha1.PeerRef{
 					{
 						ClusterName: "test-provider-cluster1",
@@ -256,6 +262,7 @@ var _ = Describe("MirrorPeerReconciler Reconcile", func() {
 
 			newMirrorPeer := mirrorPeer.DeepCopy()
 			newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
+				Type: "async",
 				Items: []multiclusterv1alpha1.PeerRef{
 					{
 						ClusterName: "test-provider-cluster1",

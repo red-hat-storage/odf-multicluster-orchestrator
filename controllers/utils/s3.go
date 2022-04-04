@@ -22,6 +22,11 @@ const (
 
 	// ramen
 	RamenHubOperatorConfigName = "ramen-hub-operator-config"
+
+	//handlers
+	RookSecretHandlerName = "rook"
+	S3SecretHandlerName   = "s3"
+	DRModeAnnotationKey   = "multicluster.openshift.io/mode"
 )
 
 func GetCurrentStorageClusterRef(mp *multiclusterv1alpha1.MirrorPeer, spokeClusterName string) (*multiclusterv1alpha1.StorageClusterRef, error) {
