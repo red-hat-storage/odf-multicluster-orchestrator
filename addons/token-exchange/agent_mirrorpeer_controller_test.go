@@ -48,6 +48,7 @@ var (
 			SchedulingIntervals: []string{"10m", "5m", "30m", "1h", "5m"},
 		},
 	}
+	// Validating webhooks in place won't allow for this to be created
 	mirrorpeer2 = multiclusterv1alpha1.MirrorPeer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "mirrorpeer-with-invalid-scheduling-intervals",
@@ -172,18 +173,6 @@ func TestMirrorPeerReconcile(t *testing.T) {
 				t.Errorf("VolumeReplicatonClass not created or updated properly; Please check Provisioner, Parameters and MirroringMode")
 				break
 			}
-		}
-
-		_, err := reconciler.r.Reconcile(ctx, ctrl.Request{
-			NamespacedName: types.NamespacedName{
-				Name: mirrorpeer2.Name,
-			},
-		})
-
-		// On reconciling mirrorpeer2 with invalid scheduling intervals, the err should not be nil (because of validation)
-		// This may be caused by other reconciliation errors too but since both mirrorpeers have same items, it should have been long caught by the checks above !
-		if err == nil {
-			t.Errorf("MirrorPeerReconciler Reconcile() should have failed. Error: %s", err)
 		}
 	}
 

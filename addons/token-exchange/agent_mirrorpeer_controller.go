@@ -21,8 +21,6 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	"regexp"
-
 	replicationv1alpha1 "github.com/csi-addons/volume-replication-operator/api/v1alpha1"
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	ocsv1 "github.com/openshift/ocs-operator/api/v1"
@@ -225,18 +223,6 @@ func (r *MirrorPeerReconciler) enableCSIAddons(ctx context.Context, namespace st
 	return nil
 }
 
-/*
-  validateSchedulingInterval checks if the scheduling interval is valid and ending with a 'm' or 'h' or 'd'
-  else it will return error.
-*/
-func validateSchedulingInterval(interval string) error {
-	re := regexp.MustCompile(`^\d+[mhd]$`)
-	if re.MatchString(interval) {
-		return nil
-	}
-	return fmt.Errorf("invalid scheduling interval %q. interval should have suffix 'm|h|d' ", interval)
-}
-
 func (r *MirrorPeerReconciler) createVolumeReplicationClass(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer) []error {
 	scr, err := utils.GetCurrentStorageClusterRef(mp, r.SpokeClusterName)
 	var errs []error
@@ -248,12 +234,6 @@ func (r *MirrorPeerReconciler) createVolumeReplicationClass(ctx context.Context,
 		return errs
 	}
 	for _, interval := range mp.Spec.SchedulingIntervals {
-		err = validateSchedulingInterval(interval)
-		if err != nil {
-			klog.Error(err, "Failed to validate scheduling interval")
-			errs = append(errs, err)
-			continue
-		}
 		params := make(map[string]string)
 		params[MirroringModeKey] = DefaultMirroringMode
 		params[SchedulingIntervalKey] = interval
