@@ -72,18 +72,25 @@ func (a *TokenExchangeAddon) Manifests(cluster *clusterv1.ManagedCluster, addon 
 		return objects, fmt.Errorf("image not provided for agent %q", TokenExchangeName)
 	}
 
+	groups := agent.DefaultGroups(cluster.Name, TokenExchangeName)
+	user := agent.DefaultUser(cluster.Name, TokenExchangeName, TokenExchangeName)
+
 	manifestConfig := struct {
 		KubeConfigSecret      string
 		ClusterName           string
 		AddonInstallNamespace string
 		Image                 string
 		DRMode                string
+		Group                 string
+		User                  string
 	}{
 		KubeConfigSecret:      fmt.Sprintf("%s-hub-kubeconfig", TokenExchangeName),
 		AddonInstallNamespace: installNamespace,
 		ClusterName:           cluster.Name,
 		Image:                 a.AgentImage,
 		DRMode:                addon.Annotations[utils.DRModeAnnotationKey],
+		Group:                 groups[0],
+		User:                  user,
 	}
 
 	for _, file := range agentDeploymentFiles {
