@@ -81,6 +81,10 @@ func (r *MirrorPeer) ValidateUpdate(old runtime.Object) error {
 		return fmt.Errorf("error updating MirrorPeer, new and old spec.items have different lengths")
 	}
 
+	if r.Spec.Type != oldMirrorPeer.Spec.Type {
+		return fmt.Errorf("error updating MirrorPeer, the type cannot be changed from %s to %s", oldMirrorPeer.Spec.Type, r.Spec.Type)
+	}
+
 	refs := make(map[string]int)
 	for idx, pr := range oldMirrorPeer.Spec.Items {
 		// Creating a make-shift set of references to check for duplicates
