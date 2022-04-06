@@ -52,6 +52,8 @@ func registerHandler(mode multiclusterv1alpha1.DRType, spokeKubeConfig *rest.Con
 			spokeClient: genericSpokeClient,
 			hubClient:   genericHubClient,
 		}
+	default:
+		return fmt.Errorf("unsupported DR mode: %v", mode)
 	}
 
 	return nil

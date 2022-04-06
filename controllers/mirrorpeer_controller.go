@@ -142,13 +142,13 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 	// Create or Update ManagedClusterAddon
 	for i := range mirrorPeer.Spec.Items {
+		annotations := make(map[string]string)
+		annotations[utils.DRModeAnnotationKey] = string(mirrorPeer.Spec.Type)
 		managedClusterAddOn := addonapiv1alpha1.ManagedClusterAddOn{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      tokenexchange.TokenExchangeName,
-				Namespace: mirrorPeer.Spec.Items[i].ClusterName,
-				Annotations: map[string]string{
-					utils.DRModeAnnotationKey: string(mirrorPeer.Spec.Type),
-				},
+				Name:        tokenexchange.TokenExchangeName,
+				Namespace:   mirrorPeer.Spec.Items[i].ClusterName,
+				Annotations: annotations,
 			},
 		}
 		_, err := controllerutil.CreateOrUpdate(ctx, r.Client, &managedClusterAddOn, func() error {

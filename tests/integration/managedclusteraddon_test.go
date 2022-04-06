@@ -29,6 +29,7 @@ import (
 
 	tokenexchange "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -153,6 +154,18 @@ var _ = Describe("ManagedClusterAddOn creation, updation and deletion", func() {
 					k8sClient.Get(context.TODO(), mcAddOn1LookupKey, &mcAddOn1)
 					return mcAddOn1.Spec.InstallNamespace
 				}, 20*time.Second, 2*time.Second).Should(Equal("new-test-namespace"))
+			})
+
+			By("having invalid annotations", func() {
+				Eventually(func() string {
+					k8sClient.Get(context.TODO(), mcAddOn1LookupKey, &mcAddOn1)
+					return mcAddOn1.Annotations[utils.DRModeAnnotationKey]
+				}, 20*time.Second, 2*time.Second).Should(Equal("async"))
+
+				Eventually(func() string {
+					k8sClient.Get(context.TODO(), mcAddOn2LookupKey, &mcAddOn2)
+					return mcAddOn2.Annotations[utils.DRModeAnnotationKey]
+				}, 20*time.Second, 2*time.Second).Should(Equal("async"))
 			})
 		})
 	})
