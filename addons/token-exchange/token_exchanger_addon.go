@@ -1,10 +1,12 @@
 package addons
 
 import (
+	"context"
 	"crypto/x509"
 	"embed"
 	"encoding/pem"
 	"fmt"
+
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 
 	"github.com/openshift/library-go/pkg/assets"
@@ -188,8 +190,10 @@ func (a *TokenExchangeAddon) permissionConfig(cluster *clusterv1.ManagedCluster,
 	}
 
 	results := resourceapply.ApplyDirectly(
+		context.TODO(),
 		resourceapply.NewKubeClientHolder(a.KubeClient),
 		a.Recorder,
+		resourceapply.NewResourceCache(),
 		func(name string) ([]byte, error) {
 			template, err := manifestFiles.ReadFile(name)
 			if err != nil {

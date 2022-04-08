@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+
 	tokenexchange "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
@@ -69,7 +70,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// Fetch MirrorPeer for given Request
 	var mirrorPeer multiclusterv1alpha1.MirrorPeer
-	err := r.Get(ctx, req.NamespacedName, &mirrorPeer)
+	err := r.Client.Get(ctx, req.NamespacedName, &mirrorPeer)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.

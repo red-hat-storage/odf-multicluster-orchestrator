@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"flag"
 	"os"
 
@@ -121,7 +122,7 @@ func (o *ManagerOptions) runManager() {
 	}
 
 	namespace := os.Getenv("POD_NAMESPACE")
-	controllerRef, err := events.GetControllerReferenceForCurrentPod(kubeClient, namespace, nil)
+	controllerRef, err := events.GetControllerReferenceForCurrentPod(context.TODO(), kubeClient, namespace, nil)
 	if err != nil {
 		setupLog.Info("unable to get owner reference (falling back to namespace)", "error", err)
 	}
