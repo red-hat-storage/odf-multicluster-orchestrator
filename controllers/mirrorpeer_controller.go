@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	addons "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
 	tokenExchange "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
@@ -169,7 +170,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangingSecret
 		statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
 		if statusErr != nil {
-			logger.Error(statusErr, "Error occurred while updating the status of mirrorpeer", "MirrorPeer", mirrorPeer)
+			logger.Error(statusErr, "Error occurred while updating the status of mirrorpeer", "MirrorPeer Status", mirrorPeer.Status)
 			// Requeue, but don't throw
 			return ctrl.Result{Requeue: true}, nil
 		}
@@ -189,12 +190,12 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 			err = r.Client.Get(ctx, namespacedName, &s3Secret)
 			if err != nil {
-				logger.Error(err, "error in fetching s3 internal secret", "peerref", peerRef.ClusterName, "MirrorPeer", mirrorPeer)
+				logger.Error(err, "error in fetching s3 internal secret", "peerref", peerRef.ClusterName, "MirrorPeer", mirrorPeer.Name)
 				return ctrl.Result{}, err
 			}
 			err = createOrUpdateSecretsFromInternalSecret(ctx, r.Client, &s3Secret, []multiclusterv1alpha1.MirrorPeer{mirrorPeer})
 			if err != nil {
-				logger.Error(err, "error in updating S3 profile", "peerref", peerRef.ClusterName, "MirrorPeer", mirrorPeer)
+				logger.Error(err, "error in updating S3 profile", "peerref", peerRef.ClusterName, "MirrorPeer", mirrorPeer.Name)
 				return ctrl.Result{}, err
 			}
 		}
@@ -221,22 +222,22 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			logger.Info("Secrets not found; Attempting to reconcile again")
 			return ctrl.Result{Requeue: true}, nil
 		}
-		logger.Info("Error while exchanging tokens", "MirrorPeer", mirrorPeer)
+		logger.Error(err, "Error while exchanging tokens")
 		mirrorPeer.Status.Message = err.Error()
 		statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
 		if statusErr != nil {
-			logger.Error(statusErr, "Error occurred while updating the status of mirrorpeer", "MirrorPeer", mirrorPeer)
+			logger.Error(statusErr, "Error occurred while updating the status of mirrorpeer", "MirrorPeer Status", mirrorPeer.Status)
 		}
 		return ctrl.Result{}, err
 	}
 
 	if tokensExchanged {
-		logger.Info("Tokens exchanged", "MirrorPeer", mirrorPeer)
+		logger.Info("tokens exchanged succesfully")
 		mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangedSecret
 		mirrorPeer.Status.Message = ""
 		statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
 		if statusErr != nil {
-			logger.Error(statusErr, "Error occured while updating the status of mirrorpeer", "MirrorPeer", mirrorPeer)
+			logger.Error(statusErr, "Error occured while updating the status of mirrorpeer", "MirrorPeer Status", mirrorPeer.Status)
 			// Requeue, but don't throw
 			return ctrl.Result{Requeue: true}, nil
 		}
@@ -364,24 +365,44 @@ func (r *MirrorPeerReconciler) checkTokenExchangeStatus(ctx context.Context, mp 
 
 	err := r.checkForSourceSecret(ctx, pr1)
 	if err != nil {
-		logger.Error(err, "Failed to find valid source secret", "PeerRef", pr1)
+		if k8serrors.IsNotFound(err) {
+			logger.Info("Source secret not found")
+			return false, err
+		}
+
+		logger.Error(err, "Failed to find Source secret", "PeerRef", pr2)
 		return false, err
 	}
 
 	err = r.checkForDestinationSecret(ctx, pr1, pr2.ClusterName)
 	if err != nil {
-		logger.Error(err, "Failed to find valid destination secret", "PeerRef", pr1)
+		if k8serrors.IsNotFound(err) {
+			logger.Info("Destination secret not found")
+			return false, err
+		}
+
+		logger.Error(err, "Failed to find destination secret", "PeerRef", pr2)
 		return false, err
 	}
 
 	err = r.checkForSourceSecret(ctx, pr2)
 	if err != nil {
-		logger.Error(err, "Failed to find valid source secret", "PeerRef", pr2)
+		if k8serrors.IsNotFound(err) {
+			logger.Info("Source secret not found")
+			return false, err
+		}
+
+		logger.Error(err, "Failed to find Source secret", "PeerRef", pr2)
 		return false, err
 	}
 
 	err = r.checkForDestinationSecret(ctx, pr2, pr1.ClusterName)
 	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			logger.Info("Destination secret not found")
+			return false, err
+		}
+
 		logger.Error(err, "Failed to find destination secret", "PeerRef", pr2)
 		return false, err
 	}
@@ -390,7 +411,6 @@ func (r *MirrorPeerReconciler) checkTokenExchangeStatus(ctx context.Context, mp 
 }
 
 func (r *MirrorPeerReconciler) checkForSourceSecret(ctx context.Context, peerRef multiclusterv1alpha1.PeerRef) error {
-	logger := log.FromContext(ctx)
 	prSecretName := utils.GetSecretNameByPeerRef(peerRef)
 	var peerSourceSecret corev1.Secret
 	err := r.Client.Get(ctx, types.NamespacedName{
@@ -400,10 +420,7 @@ func (r *MirrorPeerReconciler) checkForSourceSecret(ctx context.Context, peerRef
 	}, &peerSourceSecret)
 
 	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			logger.Info("Source secret not found", "Secret", prSecretName)
-			return err
-		}
+		return err
 	}
 
 	err = utils.ValidateSourceSecret(&peerSourceSecret)
@@ -414,7 +431,6 @@ func (r *MirrorPeerReconciler) checkForSourceSecret(ctx context.Context, peerRef
 	return nil
 }
 func (r *MirrorPeerReconciler) checkForDestinationSecret(ctx context.Context, peerRef multiclusterv1alpha1.PeerRef, destNamespace string) error {
-	logger := log.FromContext(ctx)
 	prSecretName := utils.GetSecretNameByPeerRef(peerRef)
 	var peerDestinationSecret corev1.Secret
 	err := r.Client.Get(ctx, types.NamespacedName{
@@ -423,10 +439,7 @@ func (r *MirrorPeerReconciler) checkForDestinationSecret(ctx context.Context, pe
 		Namespace: destNamespace,
 	}, &peerDestinationSecret)
 	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			logger.Info("Destination secret not found", "Secret", prSecretName)
-			return err
-		}
+		return err
 	}
 	err = utils.ValidateDestinationSecret(&peerDestinationSecret)
 	if err != nil {
