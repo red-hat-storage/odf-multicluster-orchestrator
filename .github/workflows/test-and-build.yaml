@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go: [ '1.16', '1.17' ]
+        go: [ '1.17' ]
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
@@ -30,12 +30,12 @@ jobs:
       run: make ensure-clean-workdir
 
   unit-test:
-    name: Unit Tests (Go ${{ matrix.go }})
+    name: Unit Tests
     needs: clean-workdir
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go: [ '1.16', '1.17' ]
+        go: [ '1.17' ]
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
@@ -54,7 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go: [ '1.16', '1.17' ]
+        go: [ '1.17' ]
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
@@ -73,7 +73,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go: [ '1.16', '1.17' ]
+        go: ['1.17' ]
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
@@ -92,7 +92,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go: [ '1.16', '1.17' ]
+        go: ['1.17' ]
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
@@ -111,7 +111,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go: [ '1.16', '1.17' ]
+        go: [ '1.17' ]
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
