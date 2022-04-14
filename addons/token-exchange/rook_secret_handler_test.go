@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"reflect"
 	"testing"
 	"time"
 
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
-	ocsv1 "github.com/openshift/ocs-operator/api/v1"
+	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	cephv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	rookclient "github.com/rook/rook/pkg/client/clientset/versioned/fake"
 	"github.com/stretchr/testify/assert"
@@ -242,12 +243,12 @@ func getExpectedRookBlueSecret(t *testing.T) *corev1.Secret {
 	secretData, err := json.Marshal(getFakeToken())
 	assert.NoError(t, err)
 
-	data := map[string][]byte{
-		utils.SecretDataKey:         secretData,
-		utils.NamespaceKey:          []byte(TestStorageClusterNamespace),
-		utils.StorageClusterNameKey: []byte(TestStorageClusterName),
-		utils.SecretOriginKey:       []byte(utils.OriginMap["RookOrigin"]),
-	}
+	data := make(map[string][]byte)
+	data[utils.SecretDataKey] = secretData
+	data[utils.NamespaceKey] = []byte(TestStorageClusterNamespace)
+	data[utils.StorageClusterNameKey] = []byte(TestStorageClusterName)
+	data[utils.SecretOriginKey] = []byte(utils.OriginMap["RookOrigin"])
+
 	expectedSecret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      utils.CreateUniqueSecretName(TestManagedClusterName, TestStorageClusterNamespace, TestStorageClusterName),

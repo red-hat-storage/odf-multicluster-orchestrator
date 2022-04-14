@@ -49,11 +49,11 @@ func (nPR *NamedPeerRefWithSecretData) GenerateSecret(secretLabelType utils.Secr
 	}
 	secretNamespacedName := types.NamespacedName{
 		Name:      nPR.Name,
-		Namespace: nPR.ClusterName,
+		Namespace: nPR.PeerRef.ClusterName,
 	}
 	storageClusterNamespacedName := types.NamespacedName{
-		Name:      nPR.StorageClusterRef.Name,
-		Namespace: nPR.StorageClusterRef.Namespace,
+		Name:      nPR.PeerRef.StorageClusterRef.Name,
+		Namespace: nPR.PeerRef.StorageClusterRef.Namespace,
 	}
 	var retSecret *corev1.Secret
 	if secretLabelType == utils.DestinationLabel {
@@ -71,7 +71,7 @@ func (nPR *NamedPeerRefWithSecretData) Request() (req reconcile.Request) {
 	}
 	req.NamespacedName = types.NamespacedName{
 		Name:      nPR.Name,
-		Namespace: nPR.ClusterName,
+		Namespace: nPR.PeerRef.ClusterName,
 	}
 	return
 }

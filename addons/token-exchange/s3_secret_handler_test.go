@@ -189,11 +189,11 @@ func getExpectedS3BlueSecret(t *testing.T) *corev1.Secret {
 	assert.NoError(t, err)
 
 	data := map[string][]byte{
-		utils.SecretDataKey:         secretData,
 		utils.NamespaceKey:          []byte(StorageClusterNamespace),
 		utils.StorageClusterNameKey: []byte(StorageClusterName),
 		utils.SecretOriginKey:       []byte(utils.OriginMap["S3Origin"]),
 	}
+	data[utils.SecretDataKey] = secretData
 	expectedSecret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      utils.CreateUniqueSecretName(TestManagedClusterName, StorageClusterNamespace, StorageClusterName, utils.S3ProfilePrefix),
