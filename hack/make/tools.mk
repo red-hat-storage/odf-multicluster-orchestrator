@@ -47,7 +47,8 @@ ifeq (,$(shell which operator-sdk 2>/dev/null))
 	set -e ;\
 	mkdir -p $(dir $(OSDK)) ;\
 	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
-	curl -sSLo $(OSDK) https://github.com/operator-framework/operator-sdk/releases/download/v1.14.0/operator-sdk_$${OS}_$${ARCH} ;\
+	OSDK_VERSION=v1.17.0 && \
+	curl -sSLo $(OSDK) https://github.com/operator-framework/operator-sdk/releases/download/$${OSDK_VERSION}/operator-sdk_$${OS}_$${ARCH} ;\
 	chmod +x $(OSDK) ;\
 	}
 else
