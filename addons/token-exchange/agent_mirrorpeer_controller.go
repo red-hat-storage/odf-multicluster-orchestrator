@@ -19,14 +19,19 @@ package addons
 import (
 	"context"
 	"crypto/sha1"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"sort"
+
 	replicationv1alpha1 "github.com/csi-addons/volume-replication-operator/api/v1alpha1"
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -47,6 +52,14 @@ type MirrorPeerReconciler struct {
 	SpokeClusterName string
 }
 
+type Token struct {
+	FSID      string `json:"fsid"`
+	Namespace string `json:"namespace"`
+	MonHost   string `json:"mon_host"`
+	ClientId  string `json:"client_id"`
+	Key       string `json:"key"`
+}
+
 const (
 	RookCSIEnableKey                      = "CSI_ENABLE_OMAP_GENERATOR"
 	RookVolumeRepKey                      = "CSI_ENABLE_VOLUME_REPLICATION"
@@ -59,6 +72,10 @@ const (
 	RBDVolumeReplicationClassNameTemplate = "rbd-volumereplicationclass-%v"
 	RBDReplicationSecretName              = "rook-csi-rbd-provisioner"
 	DefaultMirroringMode                  = "snapshot"
+	RamenLabelTemplate                    = "ramendr.openshift.io/%s"
+	StorageIDKey                          = "storageid"
+	ReplicationIDKey                      = "replicationid"
+	CephFSProvisionerTemplate             = "%s.cephfs.csi.ceph.com"
 )
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -85,7 +102,16 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	clusterFSIDs := make(map[string]string)
+	klog.Infof("Fetching clusterFSIDs")
+	err = r.fetchClusterFSIDs(ctx, &mirrorPeer, clusterFSIDs)
+	if err != nil {
+		return ctrl.Result{Requeue: true}, fmt.Errorf("failed to get all cluster FSIDs, retrying again: %v", err)
+	}
+
+	klog.Info(clusterFSIDs)
 	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
+		klog.Infof("enabling async mode dependencies")
 		err = r.enableCSIAddons(ctx, scr.Namespace)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to start CSI Addons for rook: %v", err)
@@ -96,12 +122,19 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{}, fmt.Errorf("failed to enable mirroring the storagecluster %q in namespace %q in managed cluster. Error %v", scr.Name, scr.Namespace, err)
 		}
 
-		errs := r.createVolumeReplicationClass(ctx, &mirrorPeer)
+		errs := r.createVolumeReplicationClass(ctx, &mirrorPeer, clusterFSIDs)
 		if len(errs) > 0 {
 			return ctrl.Result{}, fmt.Errorf("few failures occured while creating VolumeReplicationClasses: %v", errs)
 		}
 	}
 
+	klog.Infof("labeling rbd storageclasses")
+	errs := r.labelRBDStorageClasses(ctx, mirrorPeer, scr.Namespace, clusterFSIDs)
+	if len(errs) > 0 {
+		return ctrl.Result{}, fmt.Errorf("few failures occured while labeling RBD StorageClasses: %v", errs)
+	}
+
+	klog.Infof("creating s3 buckets")
 	err = r.createS3(ctx, req, mirrorPeer, scr.Namespace)
 	if err != nil {
 		klog.Error(err, "Failed to create ODR S3 resources")
@@ -223,7 +256,46 @@ func (r *MirrorPeerReconciler) enableCSIAddons(ctx context.Context, namespace st
 	return nil
 }
 
-func (r *MirrorPeerReconciler) createVolumeReplicationClass(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer) []error {
+func (r *MirrorPeerReconciler) fetchClusterFSIDs(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer, clusterFSIDs map[string]string) error {
+	for _, pr := range mp.Spec.Items {
+		var secretName string
+		if pr.ClusterName == r.SpokeClusterName {
+			secretName = fmt.Sprintf("cluster-peer-token-%s-cephcluster", pr.StorageClusterRef.Name)
+		} else {
+			secretName = utils.CreateUniqueSecretName(pr.ClusterName, pr.StorageClusterRef.Namespace, pr.StorageClusterRef.Name)
+		}
+		var secret corev1.Secret
+		klog.Info("Checking secret ", secretName)
+		err := r.SpokeClient.Get(ctx, types.NamespacedName{
+			Name:      secretName,
+			Namespace: pr.StorageClusterRef.Namespace,
+		}, &secret)
+
+		if err != nil {
+			klog.Error(err, "Error while fetching peer secret", "peerSecret ", secretName)
+			return err
+		}
+
+		klog.Info("Decoding secret data token ", string(secret.Data["token"]))
+		encodedData, err := base64.StdEncoding.DecodeString(string(secret.Data["token"]))
+		if err != nil {
+			klog.Error(err, "Error while decoding peer secret", "peerSecret ", secretName)
+			return err
+		}
+
+		var token Token
+		err = json.Unmarshal(encodedData, &token)
+		if err != nil {
+			klog.Error(err, "failed to unmarshal secret data for the secret %q in namespace %q. ", secret.Name, secret.Namespace)
+			return err
+		}
+
+		clusterFSIDs[pr.ClusterName] = token.FSID
+	}
+	return nil
+}
+
+func (r *MirrorPeerReconciler) createVolumeReplicationClass(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer, clusterFSIDs map[string]string) []error {
 	scr, err := utils.GetCurrentStorageClusterRef(mp, r.SpokeClusterName)
 	var errs []error
 	if err != nil {
@@ -233,6 +305,16 @@ func (r *MirrorPeerReconciler) createVolumeReplicationClass(ctx context.Context,
 	if len(errs) > 0 {
 		return errs
 	}
+	var fsids []string
+	for _, v := range clusterFSIDs {
+		fsids = append(fsids, v)
+	}
+
+	// To ensure reliability of hash generation
+	sort.Strings(fsids)
+
+	replicationId := utils.CreateUniqueReplicationId(fsids)
+
 	for _, interval := range mp.Spec.SchedulingIntervals {
 		params := make(map[string]string)
 		params[MirroringModeKey] = DefaultMirroringMode
@@ -240,6 +322,7 @@ func (r *MirrorPeerReconciler) createVolumeReplicationClass(ctx context.Context,
 		params[ReplicationSecretNameKey] = RBDReplicationSecretName
 		params[ReplicationSecretNamespaceKey] = scr.Namespace
 		vrcName := fmt.Sprintf(RBDVolumeReplicationClassNameTemplate, utils.FnvHash(interval))
+		klog.Infof("Creating volume replication class %q with label replicationId %q", vrcName, replicationId)
 		found := &replicationv1alpha1.VolumeReplicationClass{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: vrcName,
@@ -258,9 +341,12 @@ func (r *MirrorPeerReconciler) createVolumeReplicationClass(ctx context.Context,
 			errs = append(errs, err)
 			continue
 		}
+		labels := make(map[string]string)
+		labels[fmt.Sprintf(RamenLabelTemplate, ReplicationIDKey)] = replicationId
 		vrc := replicationv1alpha1.VolumeReplicationClass{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: vrcName,
+				Name:   vrcName,
+				Labels: labels,
 			},
 			Spec: replicationv1alpha1.VolumeReplicationClassSpec{
 				Parameters:  params,
@@ -312,4 +398,36 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(mpPredicate)).
 		Complete(r)
+}
+
+func (r *MirrorPeerReconciler) labelRBDStorageClasses(ctx context.Context, mp multiclusterv1alpha1.MirrorPeer, storageClusterNamespace string, clusterFSIDs map[string]string) []error {
+	klog.Info(clusterFSIDs)
+	// Get all StorageClasses in storageClusterNamespace
+	scs := &storagev1.StorageClassList{}
+	err := r.SpokeClient.List(ctx, scs)
+	var errs []error
+	if err != nil {
+		errs = append(errs, err)
+		return errs
+	}
+	klog.Infof("Found %d StorageClasses", len(scs.Items))
+	key := r.SpokeClusterName
+	for _, sc := range scs.Items {
+		if _, ok := clusterFSIDs[key]; !ok {
+			errs = append(errs, fmt.Errorf("no value found for key: %s, unable to update StorageClass for %s", key, key))
+			continue
+		}
+		if sc.Provisioner == fmt.Sprintf(RBDProvisionerTemplate, storageClusterNamespace) || sc.Provisioner == fmt.Sprintf(CephFSProvisionerTemplate, storageClusterNamespace) {
+			klog.Infof("Updating StorageClass %q with label storageid %q", sc.Name, clusterFSIDs[key])
+			sc.Labels = make(map[string]string)
+			sc.Labels[fmt.Sprintf(RamenLabelTemplate, StorageIDKey)] = clusterFSIDs[key]
+			err = r.SpokeClient.Update(ctx, &sc)
+			if err != nil {
+				klog.Error(err, "Failed to update StorageClass: %s", sc.Name)
+				errs = append(errs, err)
+			}
+		}
+	}
+
+	return errs
 }

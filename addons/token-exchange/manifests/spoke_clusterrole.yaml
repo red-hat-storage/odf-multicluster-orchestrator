@@ -24,3 +24,6 @@ rules:
 - apiGroups: ["multicluster.odf.openshift.io"]
   resources: ["mirrorpeers"]
   verbs: ["get", "list", "watch", "update"]
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses"]
+  verbs: ["get","list","update"]

@@ -33,3 +33,7 @@ func CreateUniqueSecretName(managedCluster, storageClusterNamespace, storageClus
 	}
 	return CreateUniqueName(managedCluster, storageClusterNamespace, storageClusterName)[0:39]
 }
+
+func CreateUniqueReplicationId(fsids []string) string {
+	return CreateUniqueName(fsids...)[0:39]
+}

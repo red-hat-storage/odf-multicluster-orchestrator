@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	storagev1 "k8s.io/api/storage/v1"
 	"testing"
 
 	replicationv1alpha1 "github.com/csi-addons/volume-replication-operator/api/v1alpha1"
@@ -59,6 +60,49 @@ var (
 			SchedulingIntervals: []string{"1p", "2o", "3h", "4hh", "5md"},
 		},
 	}
+
+	secretData = map[string][]byte{
+		"token":   []byte("eyJmc2lkIjoiMzU2NjZlNGMtZTljMC00ZmE3LWE3MWEtMmIwNTJiZjUxOTFhIiwiY2xpZW50X2lkIjoicmJkLW1pcnJvci1wZWVyIiwia2V5IjoiQVFDZVkwNWlYUmtsTVJBQU95b3I3ZTZPL3MrcTlzRnZWcVpVaHc9PSIsIm1vbl9ob3N0IjoiMTcyLjMxLjE2NS4yMjg6Njc4OSwxNzIuMzEuMTkxLjE0MDo2Nzg5LDE3Mi4zMS44LjQ0OjY3ODkiLCJuYW1lc3BhY2UiOiJvcGVuc2hpZnQtc3RvcmFnZSJ9"),
+		"cluster": []byte("ocs-storagecluster-cephcluster"),
+	}
+	// Create secret cluster-peer-token
+	clusterPeerToken = corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster-peer-token-test-storagecluster-cephcluster",
+			Namespace: "test-namespace",
+		},
+		Data: secretData,
+	}
+
+	exchangedSecret1 = corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "5feeb6c9ab835d7365ccec211f0756ede3a54f3",
+			Namespace: "test-namespace",
+		},
+		Data: secretData,
+	}
+
+	exchangedSecret2 = corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "c4bca1dacc9733952cc5a705761792867c4d3fb",
+			Namespace: "test-namespace",
+		},
+		Data: secretData,
+	}
+
+	rbdStorageClass = &storagev1.StorageClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "rbd-storageclass",
+		},
+		Provisioner: fmt.Sprintf(RBDProvisionerTemplate, "test-namespace"),
+	}
+
+	cephfsStorageClass = &storagev1.StorageClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cephfs-storageclass",
+		},
+		Provisioner: fmt.Sprintf(CephFSProvisionerTemplate, "test-namespace"),
+	}
 )
 
 func TestMirrorPeerReconcile(t *testing.T) {
@@ -103,7 +147,7 @@ func TestMirrorPeerReconcile(t *testing.T) {
 		rcm.Data[RookCSIEnableKey] = "false"
 		rcm.Data[RookVolumeRepKey] = "false"
 
-		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&storageCluster, &rcm).Build()
+		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&storageCluster, &rcm, &clusterPeerToken, &exchangedSecret1, &exchangedSecret2, rbdStorageClass, cephfsStorageClass).Build()
 
 		r := MirrorPeerReconciler{
 			HubClient:        fakeHubClient,
@@ -170,10 +214,31 @@ func TestMirrorPeerReconcile(t *testing.T) {
 			if found.Spec.Provisioner != fmt.Sprintf(RBDProvisionerTemplate, reconciler.sc.Namespace) &&
 				found.Spec.Parameters[ReplicationSecretNameKey] != RBDReplicationSecretName ||
 				found.Spec.Parameters[MirroringModeKey] != DefaultMirroringMode {
-				t.Errorf("VolumeReplicatonClass not created or updated properly; Please check Provisioner, Parameters and MirroringMode")
+				t.Errorf("VolumeReplicatonClass %s not created or updated properly; Please check Provisioner, Parameters and MirroringMode", found.Name)
+				break
+			}
+
+			if val, ok := found.Labels[fmt.Sprintf(RamenLabelTemplate, ReplicationIDKey)]; !ok || val != "47bd66cfd330837b0e19179e73a64583b986357" {
+				t.Errorf("VolumeReplicatonClass %s not created or updated properly; Please check Labels ", found.Name)
 				break
 			}
 		}
+
+		// Loops through all storageclasses and check for the label
+		scs := &storagev1.StorageClassList{}
+		err := reconciler.r.SpokeClient.List(ctx, scs)
+		if err != nil {
+			t.Errorf("Failed to get StorageClasses Error: %s", err)
+		}
+		for _, sc := range scs.Items {
+			if sc.Provisioner == fmt.Sprintf(RBDProvisionerTemplate, "test-namespace") || sc.Provisioner == fmt.Sprintf(CephFSProvisionerTemplate, "test-namespace") {
+				if _, ok := sc.Labels[fmt.Sprintf(RamenLabelTemplate, StorageIDKey)]; !ok {
+					t.Errorf("StorageClass %s not updated properly; Please check Labels ", sc.Name)
+					break
+				}
+			}
+		}
+
 	}
 
 }
