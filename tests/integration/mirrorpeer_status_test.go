@@ -186,7 +186,7 @@ var _ = Describe("MirrorPeer Status Tests", func() {
 			pr2 := fakeMirrorPeer.Spec.Items[1]
 
 			secretNN1 := types.NamespacedName{
-				Name:      utils.CreateUniqueSecretName(pr1.ClusterName, pr1.StorageClusterRef.Namespace, pr1.StorageClusterRef.Name),
+				Name:      utils.GetSecretNameByPeerRef(pr1),
 				Namespace: pr1.ClusterName,
 			}
 
@@ -198,7 +198,7 @@ var _ = Describe("MirrorPeer Status Tests", func() {
 			sec1 := utils.CreateSourceSecret(secretNN1, storageClusterNN1, []byte("SecretData1"), utils.OriginMap["RookOrigin"])
 
 			secretNN2 := types.NamespacedName{
-				Name:      utils.CreateUniqueSecretName(pr2.ClusterName, pr2.StorageClusterRef.Namespace, pr2.StorageClusterRef.Name),
+				Name:      utils.GetSecretNameByPeerRef(pr2),
 				Namespace: pr2.ClusterName,
 			}
 

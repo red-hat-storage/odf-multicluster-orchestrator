@@ -19,9 +19,7 @@ package addons
 import (
 	"context"
 	"crypto/sha1"
-	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -50,14 +48,6 @@ type MirrorPeerReconciler struct {
 	Scheme           *runtime.Scheme
 	SpokeClient      client.Client
 	SpokeClusterName string
-}
-
-type Token struct {
-	FSID      string `json:"fsid"`
-	Namespace string `json:"namespace"`
-	MonHost   string `json:"mon_host"`
-	ClientId  string `json:"client_id"`
-	Key       string `json:"key"`
 }
 
 const (
@@ -221,7 +211,7 @@ func getOppositePeerRefs(mp *multiclusterv1alpha1.MirrorPeer, spokeClusterName s
 }
 func hasRequiredSecret(peerSecrets []string, oppositePeerRef []multiclusterv1alpha1.PeerRef) bool {
 	for _, pr := range oppositePeerRef {
-		sec := utils.CreateUniqueSecretName(pr.ClusterName, pr.StorageClusterRef.Namespace, pr.StorageClusterRef.Name)
+		sec := utils.GetSecretNameByPeerRef(pr)
 		if !contains(peerSecrets, sec) {
 			return false
 		}
@@ -262,31 +252,18 @@ func (r *MirrorPeerReconciler) fetchClusterFSIDs(ctx context.Context, mp *multic
 		if pr.ClusterName == r.SpokeClusterName {
 			secretName = fmt.Sprintf("cluster-peer-token-%s-cephcluster", pr.StorageClusterRef.Name)
 		} else {
-			secretName = utils.CreateUniqueSecretName(pr.ClusterName, pr.StorageClusterRef.Namespace, pr.StorageClusterRef.Name)
+			secretName = utils.GetSecretNameByPeerRef(pr)
 		}
-		var secret corev1.Secret
 		klog.Info("Checking secret ", secretName)
-		err := r.SpokeClient.Get(ctx, types.NamespacedName{
-			Name:      secretName,
-			Namespace: pr.StorageClusterRef.Namespace,
-		}, &secret)
-
+		secret, err := utils.FetchSecretWithName(ctx, r.SpokeClient, types.NamespacedName{Name: secretName, Namespace: pr.StorageClusterRef.Namespace})
 		if err != nil {
 			klog.Error(err, "Error while fetching peer secret", "peerSecret ", secretName)
 			return err
 		}
 
-		klog.Info("Decoding secret data token ", string(secret.Data["token"]))
-		encodedData, err := base64.StdEncoding.DecodeString(string(secret.Data["token"]))
+		token, err := utils.UnmarshalRookSecret(secret)
 		if err != nil {
-			klog.Error(err, "Error while decoding peer secret", "peerSecret ", secretName)
-			return err
-		}
-
-		var token Token
-		err = json.Unmarshal(encodedData, &token)
-		if err != nil {
-			klog.Error(err, "failed to unmarshal secret data for the secret %q in namespace %q. ", secret.Name, secret.Namespace)
+			klog.Error(err, "Error while unmarshalling peer secret", "peerSecret ", secretName)
 			return err
 		}
 

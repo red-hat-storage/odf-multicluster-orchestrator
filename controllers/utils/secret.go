@@ -2,6 +2,8 @@ package utils
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -25,7 +27,25 @@ const (
 	SecretDataKey                         = "secret-data"
 	SecretOriginKey                       = "secret-origin"
 	MirrorPeerSecret                      = "mirrorpeersecret"
+	RookTokenKey                          = "token"
 )
+
+type RookToken struct {
+	FSID      string `json:"fsid"`
+	Namespace string `json:"namespace"`
+	MonHost   string `json:"mon_host"`
+	ClientId  string `json:"client_id"`
+	Key       string `json:"key"`
+}
+
+type S3Token struct {
+	AccessKeyID          string `json:"AWS_ACCESS_KEY_ID"`
+	SecretAccessKey      string `json:"AWS_SECRET_ACCESS_KEY"`
+	S3Bucket             string `json:"s3Bucket"`
+	S3CompatibleEndpoint string `json:"s3CompatibleEndpoint"`
+	S3ProfileName        string `json:"s3ProfileName"`
+	S3Region             string `json:"s3Region"`
+}
 
 var OriginMap = map[string]string{"RookOrigin": "rook", "S3Origin": "S3"}
 
@@ -193,4 +213,83 @@ func FetchAllMirrorPeers(ctx context.Context, rc client.Client) ([]multiclusterv
 		return nil, err
 	}
 	return mirrorPeerListObj.Items, nil
+}
+
+func FetchSecretWithName(ctx context.Context, rc client.Client, secretName types.NamespacedName) (*corev1.Secret, error) {
+	var secret corev1.Secret
+	err := rc.Get(ctx, secretName, &secret)
+	if err != nil {
+		return nil, err
+	}
+	return &secret, nil
+}
+
+func UnmarshalRookSecret(rookSecret *corev1.Secret) (*RookToken, error) {
+	encodedData, err := base64.StdEncoding.DecodeString(string(rookSecret.Data[RookTokenKey]))
+	if err != nil {
+		return nil, err
+	}
+
+	var token RookToken
+	err = json.Unmarshal(encodedData, &token)
+	if err != nil {
+		return nil, err
+	}
+
+	return &token, nil
+}
+
+func UnmarshalS3Secret(s3Secret *corev1.Secret) (*S3Token, error) {
+	encodedData, err := base64.StdEncoding.DecodeString(string(s3Secret.Data[SecretDataKey]))
+	if err != nil {
+		return nil, err
+	}
+
+	var token S3Token
+	err = json.Unmarshal(encodedData, &token)
+	if err != nil {
+		return nil, err
+	}
+
+	aidbyte, err := base64.StdEncoding.DecodeString(token.AccessKeyID)
+	if err != nil {
+		return nil, err
+	}
+	token.AccessKeyID = string(aidbyte)
+
+	skeybyte, err := base64.StdEncoding.DecodeString(token.SecretAccessKey)
+	if err != nil {
+		return nil, err
+	}
+	token.SecretAccessKey = string(skeybyte)
+
+	s3pnbyte, err := base64.StdEncoding.DecodeString(token.S3ProfileName)
+	if err != nil {
+		return nil, err
+	}
+	token.S3ProfileName = string(s3pnbyte)
+
+	s3cebyte, err := base64.StdEncoding.DecodeString(token.S3CompatibleEndpoint)
+	if err != nil {
+		return nil, err
+	}
+	token.S3CompatibleEndpoint = string(s3cebyte)
+
+	s3rbyte, err := base64.StdEncoding.DecodeString(token.S3Region)
+	if err != nil {
+		return nil, err
+	}
+	token.S3Region = string(s3rbyte)
+
+	s3bbyte, err := base64.StdEncoding.DecodeString(token.S3Bucket)
+	if err != nil {
+		return nil, err
+	}
+	token.S3Bucket = string(s3bbyte)
+
+	return &token, nil
+}
+
+func GetSecretNameByPeerRef(pr multiclusterv1alpha1.PeerRef, prefix ...string) string {
+	return CreateUniqueSecretName(pr.ClusterName, pr.StorageClusterRef.Namespace, pr.StorageClusterRef.Name, prefix...)
 }

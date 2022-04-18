@@ -120,7 +120,7 @@ func TestMirrorPeerReconcile(t *testing.T) {
 	for i, pr := range mirrorpeer1.Spec.Items {
 		secretNames := make([]string, 0)
 		for _, ref := range oppositePeerRefsArray[i] {
-			secretNames = append(secretNames, utils.CreateUniqueSecretName(ref.ClusterName, ref.StorageClusterRef.Namespace, ref.StorageClusterRef.Name))
+			secretNames = append(secretNames, utils.GetSecretNameByPeerRef(ref))
 		}
 		storageCluster := ocsv1.StorageCluster{
 			ObjectMeta: metav1.ObjectMeta{
