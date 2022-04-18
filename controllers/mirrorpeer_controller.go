@@ -173,7 +173,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		for _, peerRef := range mirrorPeer.Spec.Items {
 			var s3Secret corev1.Secret
 			namespacedName := types.NamespacedName{
-				Name:      utils.CreateUniqueSecretName(peerRef.ClusterName, peerRef.StorageClusterRef.Namespace, peerRef.StorageClusterRef.Name, utils.S3ProfilePrefix),
+				Name:      utils.GetSecretNameByPeerRef(peerRef, utils.S3ProfilePrefix),
 				Namespace: peerRef.ClusterName,
 			}
 			err = r.Client.Get(ctx, namespacedName, &s3Secret)
@@ -292,7 +292,7 @@ func (r *MirrorPeerReconciler) checkTokenExchangeStatus(ctx context.Context, mp 
 
 func (r *MirrorPeerReconciler) checkForSourceSecret(ctx context.Context, peerRef multiclusterv1alpha1.PeerRef) error {
 	logger := log.FromContext(ctx)
-	prSecretName := utils.CreateUniqueSecretName(peerRef.ClusterName, peerRef.StorageClusterRef.Namespace, peerRef.StorageClusterRef.Name)
+	prSecretName := utils.GetSecretNameByPeerRef(peerRef)
 	var peerSourceSecret corev1.Secret
 	err := r.Client.Get(ctx, types.NamespacedName{
 		Name: prSecretName,
@@ -316,7 +316,7 @@ func (r *MirrorPeerReconciler) checkForSourceSecret(ctx context.Context, peerRef
 }
 func (r *MirrorPeerReconciler) checkForDestinationSecret(ctx context.Context, peerRef multiclusterv1alpha1.PeerRef, destNamespace string) error {
 	logger := log.FromContext(ctx)
-	prSecretName := utils.CreateUniqueSecretName(peerRef.ClusterName, peerRef.StorageClusterRef.Namespace, peerRef.StorageClusterRef.Name)
+	prSecretName := utils.GetSecretNameByPeerRef(peerRef)
 	var peerDestinationSecret corev1.Secret
 	err := r.Client.Get(ctx, types.NamespacedName{
 		Name: prSecretName,
