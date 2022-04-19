@@ -240,13 +240,10 @@ func UnmarshalRookSecret(rookSecret *corev1.Secret) (*RookToken, error) {
 }
 
 func UnmarshalS3Secret(s3Secret *corev1.Secret) (*S3Token, error) {
-	encodedData, err := base64.StdEncoding.DecodeString(string(s3Secret.Data[SecretDataKey]))
-	if err != nil {
-		return nil, err
-	}
+	encodedData := s3Secret.Data[SecretDataKey]
 
 	var token S3Token
-	err = json.Unmarshal(encodedData, &token)
+	err := json.Unmarshal(encodedData, &token)
 	if err != nil {
 		return nil, err
 	}
