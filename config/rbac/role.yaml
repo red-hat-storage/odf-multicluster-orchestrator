@@ -26,6 +26,15 @@ rules:
   verbs:
   - '*'
 - apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - get
+  - list
+  - update
+- apiGroups:
   - authorization.k8s.io
   resources:
   - subjectaccessreviews
@@ -58,6 +67,15 @@ rules:
   - list
   - watch
 - apiGroups:
+  - console.openshift.io
+  resources:
+  - consoleplugins
+  verbs:
+  - create
+  - get
+  - list
+  - update
+- apiGroups:
   - ""
   resources:
   - configmaps
@@ -74,6 +92,15 @@ rules:
   - secrets
   verbs:
   - '*'
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - get
+  - list
+  - update
 - apiGroups:
   - multicluster.odf.openshift.io
   resources:
