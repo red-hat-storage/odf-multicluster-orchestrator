@@ -54,7 +54,7 @@ func TestUnmarshalRookSecret(t *testing.T) {
 		if actualOutput.Namespace != testCase.expectedOutput.Namespace {
 			t.Errorf("Expected %s, received value %s", testCase.expectedOutput.Namespace, actualOutput.Namespace)
 		}
-		
+
 		if actualOutput.MonHost != testCase.expectedOutput.MonHost {
 			t.Errorf("Expected %s, received value %s", testCase.expectedOutput.MonHost, actualOutput.MonHost)
 		}
