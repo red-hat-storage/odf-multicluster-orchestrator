@@ -9,13 +9,17 @@ RAMEN_VERSION ?= 0.0.1
 IMAGE_REGISTRY ?= quay.io
 REGISTRY_NAMESPACE ?= ocs-dev
 IMAGE_TAG ?= latest
+
 IMAGE_NAME ?= odf-multicluster-orchestrator
 BUNDLE_IMAGE_NAME ?= $(IMAGE_NAME)-bundle
 CATALOG_IMAGE_NAME ?= $(IMAGE_NAME)-catalog
 RAMEN_HUB_PACKAGE_NAME ?= ramen-hub-operator
+MULTICLUSTER_CONSOLE_IMG_NAME ?= odf-multicluster-console
+MULTICLUSTER_CONSOLE_IMG_TAG ?= latest
 
 # Image URL to use all building/pushing image targets
 IMG ?=  $(IMAGE_REGISTRY)/$(REGISTRY_NAMESPACE)/$(IMAGE_NAME):$(IMAGE_TAG)
+MULTICLUSTER_CONSOLE_IMG ?= ${IMAGE_REGISTRY}/$(REGISTRY_NAMESPACE)/$(MULTICLUSTER_CONSOLE_IMG_NAME):$(MULTICLUSTER_CONSOLE_IMG_TAG)
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")

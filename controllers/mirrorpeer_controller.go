@@ -59,6 +59,9 @@ const hubRecoveryLabel = "cluster.open-cluster-management.io/backup"
 //+kubebuilder:rbac:groups=addon.open-cluster-management.io,resources=managedclusteraddons/finalizers,verbs=*
 //+kubebuilder:rbac:groups=addon.open-cluster-management.io,resources=managedclusteraddons;clustermanagementaddons,verbs=*
 //+kubebuilder:rbac:groups=addon.open-cluster-management.io,resources=managedclusteraddons/status,verbs=*
+//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;create;update
+//+kubebuilder:rbac:groups=console.openshift.io,resources=consoleplugins,verbs=get;list;create;update
+//+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;create;update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
