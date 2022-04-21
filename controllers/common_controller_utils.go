@@ -424,7 +424,7 @@ func PeersConnectedToPeerRef(sourcePeerRef multiclusterv1alpha1.PeerRef, mirrorP
 		if len(connectedPeers) > 0 {
 			// add the PeerRef s into a map, to keep only the unique ones
 			for _, eachPeerRef := range connectedPeers {
-				mapKey := utils.CreateUniqueName(eachPeerRef.ClusterName, eachPeerRef.StorageClusterRef.Namespace, eachPeerRef.StorageClusterRef.Name)
+				mapKey := utils.GetSecretNameByPeerRef(eachPeerRef)
 				uniquePeerRefMap[mapKey] = eachPeerRef
 			}
 		}
