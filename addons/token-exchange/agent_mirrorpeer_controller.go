@@ -107,35 +107,9 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 		}
 	} else {
-		klog.Infof("Mirrorpeer is being deleted %q", mirrorPeer.Name)
-		peerRef, err := utils.GetPeerRefForSpokeCluster(&mirrorPeer, r.SpokeClusterName)
+		result, err := r.deleteMirrorPeer(ctx, mirrorPeer, scr)
 		if err != nil {
-			klog.Errorf("Failed to get current PeerRef %q %v", mirrorPeer.Name, err)
-			return ctrl.Result{}, err
-		}
-
-		peerRefUsed, err := utils.DoesAnotherMirrorPeerPointToPeerRef(ctx, r.HubClient, peerRef)
-		if err != nil {
-			klog.Errorf("failed to check if another peer uses peer ref %v", err)
-		}
-		if !peerRefUsed {
-			if err := r.disableMirroring(ctx, scr.Name, scr.Namespace, &mirrorPeer); err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to disable mirroring for the storagecluster %q in namespace %q. Error %v", scr.Name, scr.Namespace, err)
-			}
-			if err := r.disableCSIAddons(ctx, scr.Namespace); err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to disable CSI Addons for rook: %v", err)
-			}
-		}
-
-		if err := r.deleteGreenSecret(ctx, r.SpokeClusterName, scr.Namespace, &mirrorPeer); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to delete green secrets: %v", err)
-		}
-
-		if err := r.deleteVolumeReplicationClass(ctx, &mirrorPeer, peerRef); err != nil {
-			return ctrl.Result{}, fmt.Errorf("few failures occured while deleting VolumeReplicationClasses: %v", err)
-		}
-		if err := r.deleteS3(ctx, mirrorPeer, scr.Namespace); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to delete s3 buckets")
+			return result, err
 		}
 		err = r.HubClient.Get(ctx, req.NamespacedName, &mirrorPeer)
 		if err != nil {

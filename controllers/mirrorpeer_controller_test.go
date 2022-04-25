@@ -21,21 +21,20 @@ package controllers
 
 import (
 	"context"
-	"testing"
-
+	tokenExchange "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"testing"
 )
 
 func TestMirrorPeerReconcilerReconcile(t *testing.T) {
-	// Using the same scheme as manager to ensure consistency.
-	// Using a different scheme for test might cause issues like
-	// missing scheme in manager
-	scheme := mgrScheme
 
 	mirrorpeer := multiclusterv1alpha1.MirrorPeer{
 		ObjectMeta: metav1.ObjectMeta{
@@ -61,28 +60,9 @@ func TestMirrorPeerReconcilerReconcile(t *testing.T) {
 		},
 	}
 
-	managedcluster1 := clusterv1.ManagedCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "cluster1",
-		},
-		Spec: clusterv1.ManagedClusterSpec{},
-	}
+	r := getFakeMirrorPeerReconciler(mirrorpeer)
 
-	managedcluster2 := clusterv1.ManagedCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "cluster2",
-		},
-		Spec: clusterv1.ManagedClusterSpec{},
-	}
-
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer, &managedcluster1, &managedcluster2).Build()
 	ctx := context.TODO()
-
-	r := MirrorPeerReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
-	}
-
 	req := ctrl.Request{
 		NamespacedName: types.NamespacedName{
 			Name: "mirrorpeer",
@@ -103,4 +83,192 @@ func TestMirrorPeerReconcilerReconcile(t *testing.T) {
 	if val, ok := mp.Labels[hubRecoveryLabel]; !ok || val != "resource" {
 		t.Errorf("MirrorPeer.Labels[%s] is not set correctly. Expected: %s, Actual: %s", hubRecoveryLabel, "resource", val)
 	}
+}
+
+func getFakeMirrorPeerReconciler(mirrorpeer multiclusterv1alpha1.MirrorPeer) MirrorPeerReconciler {
+	// Using the same scheme as manager to ensure consistency.
+	// Using a different scheme for test might cause issues like
+	// missing scheme in manager
+	scheme := mgrScheme
+
+	managedcluster1 := clusterv1.ManagedCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cluster1",
+		},
+		Spec: clusterv1.ManagedClusterSpec{},
+	}
+
+	managedcluster2 := clusterv1.ManagedCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cluster2",
+		},
+		Spec: clusterv1.ManagedClusterSpec{},
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer, &managedcluster1, &managedcluster2).Build()
+
+	r := MirrorPeerReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+	return r
+}
+
+func TestProcessManagedClusterAddons(t *testing.T) {
+	ctx := context.TODO()
+	mirrorpeer := multiclusterv1alpha1.MirrorPeer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "mirrorpeer-test",
+		},
+		Spec: multiclusterv1alpha1.MirrorPeerSpec{
+			Items: []multiclusterv1alpha1.PeerRef{
+				{
+					ClusterName: "cluster1",
+					StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
+						Name:      "test-storagecluster",
+						Namespace: "test-namespace",
+					},
+				},
+				{
+					ClusterName: "cluster2",
+					StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
+						Name:      "test-storagecluster",
+						Namespace: "test-namespace",
+					},
+				},
+			},
+		},
+	}
+	// Create fake k8s client
+	r := getFakeMirrorPeerReconciler(mirrorpeer)
+	// Create fake secrets somehow
+	if err := r.processManagedClusterAddon(ctx, mirrorpeer); err != nil {
+		t.Error("Failed to create managed cluster addon")
+	}
+
+	for i := range mirrorpeer.Spec.Items {
+		managedClusterAddon := addonapiv1alpha1.ManagedClusterAddOn{}
+		if err := r.Get(ctx, types.NamespacedName{
+			Name:      tokenExchange.TokenExchangeName,
+			Namespace: mirrorpeer.Spec.Items[i].ClusterName,
+		}, &managedClusterAddon); err != nil {
+			t.Error("Failed to create ManagedClusterAddon")
+		}
+		owner := managedClusterAddon.GetOwnerReferences()
+		if owner[0].Name != mirrorpeer.Name {
+			t.Error("Failed to add OwnerRefs to ManagedClusterAddon")
+		}
+	}
+}
+
+func TestDeleteResources(t *testing.T) {
+	ctx := context.TODO()
+
+	mirrorpeer := multiclusterv1alpha1.MirrorPeer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "mirrorpeer",
+		},
+		Spec: multiclusterv1alpha1.MirrorPeerSpec{
+			Items: []multiclusterv1alpha1.PeerRef{
+				{
+					ClusterName: "cluster1",
+					StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
+						Name:      "test-storagecluster",
+						Namespace: "test-namespace",
+					},
+				},
+				{
+					ClusterName: "cluster2",
+					StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
+						Name:      "test-storagecluster",
+						Namespace: "test-namespace",
+					},
+				},
+			},
+			ManageS3: true,
+		},
+	}
+	r := getFakeMirrorPeerReconciler(mirrorpeer)
+
+	if err := CreateFakeSecrets(mirrorpeer, r, ctx); err != nil {
+		t.Error("Failed to create fake secrets", err)
+	}
+
+	sourceSecrets, err := fetchAllSourceSecrets(ctx, r.Client, "")
+	if len(sourceSecrets) < 2 {
+		t.Error("Failed to delete SourceSecrets", sourceSecrets, err)
+	}
+	destinationSecrets, err := fetchAllDestinationSecrets(ctx, r.Client, "")
+	if len(destinationSecrets) < 2 {
+		t.Error("Failed to delete Destination Secrets", err)
+	}
+	internalSecrets, err := utils.FetchAllSecretsWithLabel(ctx, r.Client, "", utils.InternalLabel)
+	if len(internalSecrets) < 2 {
+		t.Error("Failed to delete Internal Secrets", err)
+	}
+
+	err = r.deleteSecrets(ctx, mirrorpeer)
+	if err != nil {
+		t.Error("Failed to delete resources", err)
+	}
+	for i := range mirrorpeer.Spec.Items {
+		sourceSecrets, err := fetchAllSourceSecrets(ctx, r.Client, mirrorpeer.Spec.Items[i].ClusterName)
+		if len(sourceSecrets) > 0 {
+			t.Error("Failed to delete SourceSecrets", sourceSecrets, err)
+		}
+		destinationSecrets, err := fetchAllDestinationSecrets(ctx, r.Client, mirrorpeer.Spec.Items[i].ClusterName)
+		if len(destinationSecrets) > 0 {
+			t.Error("Failed to delete Destination Secrets", err)
+		}
+		internalSecrets, err := utils.FetchAllSecretsWithLabel(ctx, r.Client, mirrorpeer.Spec.Items[i].ClusterName, utils.InternalLabel)
+		if len(internalSecrets) > 0 {
+			t.Error("Failed to delete Internal Secrets", err)
+		}
+	}
+
+}
+
+func CreateFakeSecrets(mirrorPeer multiclusterv1alpha1.MirrorPeer, r MirrorPeerReconciler, ctx context.Context) error {
+	for i := range mirrorPeer.Spec.Items {
+		sourceSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "fake-source-secret",
+				Namespace: mirrorPeer.Spec.Items[i].ClusterName,
+				Labels: map[string]string{
+					utils.SecretLabelTypeKey: string(utils.SourceLabel),
+				},
+			},
+			Type: corev1.SecretTypeOpaque,
+		}
+		if err := r.Create(ctx, sourceSecret); err != nil {
+			return err
+		}
+		destinationSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "fake-destination-secret",
+				Namespace: mirrorPeer.Spec.Items[i].ClusterName,
+				Labels: map[string]string{
+					utils.SecretLabelTypeKey: string(utils.DestinationLabel),
+				},
+			},
+			Type: corev1.SecretTypeOpaque,
+		}
+		if err := r.Create(ctx, destinationSecret); err != nil {
+			return err
+		}
+		internalSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "fake-internal-secret",
+				Namespace: mirrorPeer.Spec.Items[i].ClusterName,
+				Labels: map[string]string{
+					utils.SecretLabelTypeKey: string(utils.InternalLabel),
+				},
+			},
+			Type: corev1.SecretTypeOpaque,
+		}
+		if err := r.Create(ctx, internalSecret); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -3,9 +3,12 @@ package addons
 import (
 	"context"
 	"fmt"
+	"github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"testing"
+
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	storagev1 "k8s.io/api/storage/v1"
-	"testing"
 
 	replicationv1alpha1 "github.com/csi-addons/volume-replication-operator/api/v1alpha1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
@@ -241,4 +244,222 @@ func TestMirrorPeerReconcile(t *testing.T) {
 
 	}
 
+}
+
+func TestDisableMirroring(t *testing.T) {
+	ctx := context.TODO()
+	scheme := mgrScheme
+	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer1).Build()
+	for _, pr := range mirrorpeer1.Spec.Items {
+		storageCluster := ocsv1.StorageCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      pr.StorageClusterRef.Name,
+				Namespace: pr.StorageClusterRef.Namespace,
+			},
+			Spec: ocsv1.StorageClusterSpec{
+				Mirroring: ocsv1.MirroringSpec{
+					Enabled: true,
+				},
+			},
+		}
+
+		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&storageCluster).Build()
+		r := MirrorPeerReconciler{
+			HubClient:        fakeHubClient,
+			SpokeClient:      fakeSpokeClient,
+			Scheme:           scheme,
+			SpokeClusterName: pr.ClusterName,
+		}
+		if err := r.disableMirroring(ctx, pr.StorageClusterRef.Name, pr.StorageClusterRef.Namespace, &mirrorpeer1); err != nil {
+			t.Error("failed to disable mirroring", err)
+		}
+		var sc ocsv1.StorageCluster
+		if err := fakeSpokeClient.Get(ctx, types.NamespacedName{
+			Name:      pr.StorageClusterRef.Name,
+			Namespace: pr.StorageClusterRef.Namespace,
+		}, &sc); err != nil {
+			t.Error("failed to get storage cluster", err)
+		}
+
+		if sc.Spec.Mirroring.Enabled {
+			t.Error("failed to disable mirroring")
+		}
+	}
+}
+
+func TestDisableCSIAddons(t *testing.T) {
+	ctx := context.TODO()
+	scheme := mgrScheme
+	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer1).Build()
+	for _, pr := range mirrorpeer1.Spec.Items {
+		rcm := corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      RookConfigMapName,
+				Namespace: pr.StorageClusterRef.Namespace,
+			},
+		}
+
+		// Need to initialize this map otherwise it panics during reconcile
+		rcm.Data = make(map[string]string)
+		rcm.Data[RookCSIEnableKey] = "true"
+		rcm.Data[RookVolumeRepKey] = "true"
+
+		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&rcm).Build()
+		r := MirrorPeerReconciler{
+			HubClient:        fakeHubClient,
+			SpokeClient:      fakeSpokeClient,
+			Scheme:           scheme,
+			SpokeClusterName: pr.ClusterName,
+		}
+		if err := r.disableCSIAddons(ctx, pr.StorageClusterRef.Namespace); err != nil {
+			t.Error("failed to disable volume replication in CSI addons", err)
+		}
+		if err := r.SpokeClient.Get(ctx, types.NamespacedName{
+			Name:      RookConfigMapName,
+			Namespace: pr.StorageClusterRef.Namespace,
+		}, &rcm); err != nil {
+			t.Error("failed to get rook config map", err)
+		}
+		if rcm.Data[RookCSIEnableKey] != "false" && rcm.Data[RookVolumeRepKey] != "false" {
+			t.Error("failed to disable volume replication in CSI addons")
+		}
+	}
+}
+
+func TestDeleteGreenSecret(t *testing.T) {
+	ctx := context.TODO()
+	scheme := mgrScheme
+	secretData := map[string][]byte{
+		utils.StorageClusterNameKey: []byte("test-storagecluster"),
+		utils.NamespaceKey:          []byte("test-namespace"),
+		utils.SecretOriginKey:       []byte(""),
+		utils.SecretDataKey:         []byte(""),
+	}
+	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer1).Build()
+	for _, pr := range mirrorpeer1.Spec.Items {
+		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects().Build()
+		oppositePeerRefs := getOppositePeerRefs(&mirrorpeer1, pr.ClusterName)
+		for _, oppPeer := range oppositePeerRefs {
+			greenSecret := corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      utils.GetSecretNameByPeerRef(oppPeer),
+					Namespace: pr.StorageClusterRef.Namespace,
+				},
+				Data: secretData,
+			}
+			if err := fakeSpokeClient.Create(ctx, &greenSecret); err != nil {
+				t.Error("failed to create an exchanged secret", greenSecret.Name)
+			}
+		}
+
+		r := MirrorPeerReconciler{
+			HubClient:        fakeHubClient,
+			SpokeClient:      fakeSpokeClient,
+			Scheme:           scheme,
+			SpokeClusterName: pr.ClusterName,
+		}
+
+		if err := r.deleteGreenSecret(ctx, pr.ClusterName, pr.StorageClusterRef.Namespace, &mirrorpeer1); err != nil {
+			t.Errorf("failed to delete green secret from namespace %s, err: %v", pr.StorageClusterRef.Namespace, err)
+		}
+		for _, oppPeer := range oppositePeerRefs {
+			var greenSecret corev1.Secret
+			if err := r.SpokeClient.Get(ctx, types.NamespacedName{
+				Name:      utils.GetSecretNameByPeerRef(oppPeer),
+				Namespace: pr.StorageClusterRef.Namespace,
+			}, &greenSecret); err != nil {
+				if !errors.IsNotFound(err) {
+					t.Error(err, "Green Secret did not get deleted")
+				}
+			} else {
+				t.Error("Green secret did not get deleted")
+			}
+		}
+	}
+}
+
+func TestDeleteS3(t *testing.T) {
+	bucketName := "odrbucket-b1b922184baf"
+	ctx := context.TODO()
+	scheme := mgrScheme
+	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer1).Build()
+	for _, pr := range mirrorpeer1.Spec.Items {
+		obc := &v1alpha1.ObjectBucketClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      bucketName,
+				Namespace: pr.StorageClusterRef.Namespace,
+			},
+		}
+		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(obc).Build()
+		r := MirrorPeerReconciler{
+			HubClient:        fakeHubClient,
+			SpokeClient:      fakeSpokeClient,
+			Scheme:           scheme,
+			SpokeClusterName: pr.ClusterName,
+		}
+		if err := r.deleteS3(ctx, mirrorpeer1, pr.StorageClusterRef.Namespace); err != nil {
+			t.Errorf("failed to delete s3 bucket")
+		}
+		if err := fakeSpokeClient.Get(ctx, types.NamespacedName{
+			Namespace: pr.StorageClusterRef.Namespace,
+			Name:      bucketName}, obc); err != nil {
+			if !errors.IsNotFound(err) {
+				t.Error(err, "S3 bucket did not get deleted")
+			}
+		} else {
+			t.Error("S3 bucket did not get deleted")
+		}
+	}
+}
+
+func TestDeleteVolumeReplication(t *testing.T) {
+	ctx := context.TODO()
+	scheme := mgrScheme
+	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer1).Build()
+	for _, pr := range mirrorpeer1.Spec.Items {
+		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects().Build()
+		r := MirrorPeerReconciler{
+			HubClient:        fakeHubClient,
+			SpokeClient:      fakeSpokeClient,
+			Scheme:           scheme,
+			SpokeClusterName: pr.ClusterName,
+		}
+		for _, interval := range mirrorpeer1.Spec.SchedulingIntervals {
+			vrc := getFakeVRC(interval)
+			err := r.SpokeClient.Create(ctx, &vrc)
+			if err != nil {
+				if !errors.IsAlreadyExists(err) {
+					t.Errorf("%v Failed to create VolumeReplicationClass: %s", err, vrc.Name)
+				}
+				continue
+			}
+		}
+		if err := r.deleteVolumeReplicationClass(ctx, &mirrorpeer1, &pr); err != nil {
+			if !errors.IsNotFound(err) {
+				t.Error("failed to delete volume replication classes", err)
+			}
+			t.Log("the volume replication class has already been deleted")
+		}
+		for _, interval := range mirrorpeer1.Spec.SchedulingIntervals {
+			vrc := getFakeVRC(interval)
+			if err := fakeSpokeClient.Get(ctx, types.NamespacedName{
+				Name: vrc.Name}, &vrc); err != nil {
+				if !errors.IsNotFound(err) {
+					t.Error(err, "Volume replication class ", vrc.Name, " did not get deleted")
+				}
+			} else {
+				t.Errorf("volume replication %s class did not get deleted", vrc.Name)
+			}
+		}
+	}
+}
+
+func getFakeVRC(interval string) replicationv1alpha1.VolumeReplicationClass {
+	vrcName := fmt.Sprintf(RBDVolumeReplicationClassNameTemplate, utils.FnvHash(interval))
+	vrc := replicationv1alpha1.VolumeReplicationClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: vrcName,
+		},
+	}
+	return vrc
 }
