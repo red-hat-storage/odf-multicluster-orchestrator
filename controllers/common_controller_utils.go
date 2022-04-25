@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	yaml "sigs.k8s.io/yaml"
+	"sigs.k8s.io/yaml"
 )
 
 // createOrUpdateDestinationSecretsFromSource updates all destination secrets
@@ -329,7 +329,7 @@ func processDeletedSecrets(ctx context.Context, rc client.Client, req types.Name
 	var err error
 	logger := log.FromContext(ctx, "controller", "MirrorPeerController")
 	// get all the secrets with the same name
-	allSecrets, err := fetchAllInternalSecrets(ctx, rc, "", utils.IgnoreLabel)
+	allSecrets, err := utils.FetchAllSecretsWithLabel(ctx, rc, "", utils.IgnoreLabel)
 	if err != nil {
 		logger.Error(err, "Unable to get the list of secrets")
 		return err
@@ -447,38 +447,10 @@ func PeersConnectedToSecret(secret *corev1.Secret, mirrorPeers []multiclusterv1a
 	return PeersConnectedToPeerRef(sourcePeerRef, mirrorPeers), nil
 }
 
-// fetchAllInternalSecrets will get all the internal secrets in the namespace and with the provided label
-// if the namespace is empty, it will fetch from all the namespaces
-// if the label type is 'Ignore', it will fetch all the internal secrets (both source and destination)
-func fetchAllInternalSecrets(ctx context.Context, rc client.Client, namespace string, secretLabelType utils.SecretLabelType) ([]corev1.Secret, error) {
-	var err error
-	var sourceSecretList corev1.SecretList
-	var clientListOptions []client.ListOption
-	if namespace != "" {
-		clientListOptions = append(clientListOptions, client.InNamespace(namespace))
-	}
-	if secretLabelType == "" {
-		return nil, errors.New("empty 'SecretLabelType' provided. please provide 'Ignore' label type")
-	}
-	var listLabelOption client.ListOption
-	if secretLabelType != utils.IgnoreLabel {
-		listLabelOption = client.MatchingLabels(map[string]string{utils.SecretLabelTypeKey: string(secretLabelType)})
-	} else {
-		// if the 'secretLabelType' is asking to ignore, then
-		// don't check the label value
-		// just check whether the secret has the internal label key
-		listLabelOption = client.HasLabels([]string{utils.SecretLabelTypeKey})
-	}
-	clientListOptions = append(clientListOptions, listLabelOption)
-	// find all the secrets with the provided internal label
-	err = rc.List(ctx, &sourceSecretList, clientListOptions...)
-	return sourceSecretList.Items, err
-}
-
 func fetchAllSourceSecrets(ctx context.Context, rc client.Client, namespace string) ([]corev1.Secret, error) {
-	return fetchAllInternalSecrets(ctx, rc, namespace, utils.SourceLabel)
+	return utils.FetchAllSecretsWithLabel(ctx, rc, namespace, utils.SourceLabel)
 }
 
 func fetchAllDestinationSecrets(ctx context.Context, rc client.Client, namespace string) ([]corev1.Secret, error) {
-	return fetchAllInternalSecrets(ctx, rc, namespace, utils.DestinationLabel)
+	return utils.FetchAllSecretsWithLabel(ctx, rc, namespace, utils.DestinationLabel)
 }

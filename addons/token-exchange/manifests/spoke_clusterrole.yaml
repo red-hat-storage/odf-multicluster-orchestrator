@@ -20,7 +20,7 @@ rules:
   verbs: ["get", "list", "watch", "create", "update", "delete"]
 - apiGroups: ["objectbucket.io"]
   resources: ["objectbucketclaims"]
-  verbs: ["get", "create",]
+  verbs: ["get", "create", "delete"]
 - apiGroups: ["multicluster.odf.openshift.io"]
   resources: ["mirrorpeers"]
   verbs: ["get", "list", "watch", "update"]

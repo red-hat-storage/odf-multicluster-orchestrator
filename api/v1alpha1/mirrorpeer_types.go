@@ -26,6 +26,7 @@ type DRType string
 const (
 	ExchangingSecret PhaseType = "ExchangingSecret"
 	ExchangedSecret  PhaseType = "ExchangedSecret"
+	Deleting         PhaseType = "Deleting"
 	Sync             DRType    = "sync"
 	Async            DRType    = "async"
 )

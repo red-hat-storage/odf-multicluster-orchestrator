@@ -168,7 +168,7 @@ func updateStorageCluster(secretName, storageClusterName, storageClusterNamespac
 	}
 
 	// Update secret name
-	if !contains(sc.Spec.Mirroring.PeerSecretNames, secretName) {
+	if !utils.ContainsString(sc.Spec.Mirroring.PeerSecretNames, secretName) {
 		sc.Spec.Mirroring.PeerSecretNames = append(sc.Spec.Mirroring.PeerSecretNames, secretName)
 		err := spokeClient.Update(ctx, sc)
 		if err != nil {
@@ -177,14 +177,4 @@ func updateStorageCluster(secretName, storageClusterName, storageClusterNamespac
 	}
 
 	return nil
-}
-
-// contains checks if an item exists in a given list.
-func contains(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
 }
