@@ -38,6 +38,7 @@ metadata:
         }
       ]
     capabilities: Basic Install
+    console.openshift.io/plugins: '["odf-multicluster-console"]'
     olm.skipRange: ""
     operators.operatorframework.io/builder: operator-sdk-v1.16.0+git
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
@@ -85,6 +86,15 @@ spec:
           verbs:
           - '*'
         - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - create
+          - get
+          - list
+          - update
+        - apiGroups:
           - authorization.k8s.io
           resources:
           - subjectaccessreviews
@@ -117,6 +127,15 @@ spec:
           - list
           - watch
         - apiGroups:
+          - console.openshift.io
+          resources:
+          - consoleplugins
+          verbs:
+          - create
+          - get
+          - list
+          - update
+        - apiGroups:
           - ""
           resources:
           - configmaps
@@ -133,6 +152,15 @@ spec:
           - secrets
           verbs:
           - '*'
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - get
+          - list
+          - update
         - apiGroups:
           - multicluster.odf.openshift.io
           resources:
@@ -236,6 +264,39 @@ spec:
                 runAsNonRoot: true
               serviceAccountName: odfmo-controller-manager
               terminationGracePeriodSeconds: 10
+      - name: odf-multicluster-console
+        spec:
+          selector:
+            matchLabels:
+              app.kubernetes.io/name: odf-multicluster-console
+              control-plane: odfmo-controller-manager
+          strategy: {}
+          template:
+            metadata:
+              labels:
+                app.kubernetes.io/name: odf-multicluster-console
+                control-plane: odfmo-controller-manager
+            spec:
+              containers:
+              - args:
+                - --ssl --cert=/var/serving-cert/tls.crt --key=/var/serving-cert/tls.key
+                image: quay.io/ocs-dev/odf-multicluster-console:latest
+                name: odf-multicluster-console
+                ports:
+                - containerPort: 9001
+                  protocol: TCP
+                resources:
+                  limits:
+                    cpu: 100m
+                    memory: 512Mi
+                volumeMounts:
+                - mountPath: /var/serving-cert
+                  name: odf-multicluster-console-serving-cert
+                  readOnly: true
+              volumes:
+              - name: odf-multicluster-console-serving-cert
+                secret:
+                  secretName: odf-multicluster-console-serving-cert
       permissions:
       - rules:
         - apiGroups:

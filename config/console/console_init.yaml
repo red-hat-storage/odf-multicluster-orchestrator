@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multicluster-console
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: odf-multicluster-console
+  template:
+    spec:
+      containers:
+        - name: odf-multicluster-console
+          image: odf-multicluster-console:latest
+          resources:
+            limits:
+              cpu: "100m"
+              memory: "512Mi"
+          ports:
+            - containerPort: 9001
+              protocol: TCP
+          args:
+            - "--ssl --cert=/var/serving-cert/tls.crt --key=/var/serving-cert/tls.key"
+          volumeMounts:
+            - name: odf-multicluster-console-serving-cert
+              mountPath: /var/serving-cert
+              readOnly: true
+      volumes:
+        - name: odf-multicluster-console-serving-cert
+          secret:
+            secretName: odf-multicluster-console-serving-cert

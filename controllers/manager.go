@@ -5,9 +5,11 @@ import (
 	"flag"
 	"os"
 
+	consolev1alpha1 "github.com/openshift/api/console/v1alpha1"
 	"github.com/openshift/library-go/pkg/operator/events"
 	tokenexchange "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/console"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -20,6 +22,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 var (
@@ -32,14 +35,16 @@ func init() {
 
 	utilruntime.Must(multiclusterv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(addonapiv1alpha1.AddToScheme(mgrScheme))
+	utilruntime.Must(consolev1alpha1.AddToScheme(mgrScheme))
 	//+kubebuilder:scaffold:scheme
 }
 
 type ManagerOptions struct {
-	MetricsAddr          string
-	EnableLeaderElection bool
-	ProbeAddr            string
-	ZapOpts              zap.Options
+	MetricsAddr             string
+	EnableLeaderElection    bool
+	ProbeAddr               string
+	MulticlusterConsolePort int
+	ZapOpts                 zap.Options
 }
 
 func NewManagerOptions() *ManagerOptions {
@@ -50,6 +55,7 @@ func (o *ManagerOptions) AddFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 	flags.StringVar(&o.MetricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flags.StringVar(&o.ProbeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.IntVar(&o.MulticlusterConsolePort, "multicluster-console-port", 9001, "The port where the multicluster console server will be serving its payload")
 	flags.BoolVar(&o.EnableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -89,6 +95,8 @@ func (o *ManagerOptions) runManager() {
 		os.Exit(1)
 	}
 
+	namespace := os.Getenv("POD_NAMESPACE")
+
 	if err = (&MirrorPeerReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
@@ -103,6 +111,18 @@ func (o *ManagerOptions) runManager() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MirrorPeer")
+		os.Exit(1)
+	}
+
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		err = console.InitConsole(ctx, mgr.GetClient(), o.MulticlusterConsolePort, namespace)
+		if err != nil {
+			setupLog.Error(err, "unable to initialize multicluster console to manager")
+			return err
+		}
+		return nil
+	})); err != nil {
+		setupLog.Error(err, "unable to add multicluster console to manager")
 		os.Exit(1)
 	}
 
@@ -121,7 +141,6 @@ func (o *ManagerOptions) runManager() {
 		setupLog.Error(err, "problem getting kubeclient")
 	}
 
-	namespace := os.Getenv("POD_NAMESPACE")
 	controllerRef, err := events.GetControllerReferenceForCurrentPod(context.TODO(), kubeClient, namespace, nil)
 	if err != nil {
 		setupLog.Info("unable to get owner reference (falling back to namespace)", "error", err)

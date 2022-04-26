@@ -93,6 +93,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	cd config/console && $(KUSTOMIZE) edit set image odf-multicluster-console=$(MULTICLUSTER_CONSOLE_IMG)
 	$(KUSTOMIZE) build config/default | kubectl apply -f -
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
@@ -103,6 +104,7 @@ bundle: manifests kustomize operator-sdk ## Generate bundle manifests and metada
 	export RAMEN_HUB_PACKAGE_NAME=$(RAMEN_HUB_PACKAGE_NAME) RAMEN_VERSION=$(RAMEN_VERSION) && cat config/dependencies/dependencies.yaml | envsubst > bundle/metadata/dependencies.yaml
 	$(OSDK) generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	cd config/console && $(KUSTOMIZE) edit set image odf-multicluster-console=$(MULTICLUSTER_CONSOLE_IMG)
 	cd config/manifests/bases && $(KUSTOMIZE) edit add annotation --force 'olm.skipRange':"$(SKIP_RANGE)" && \
 		$(KUSTOMIZE) edit add patch --name odf-multicluster-orchestrator.v0.0.0 --kind ClusterServiceVersion\
 		--patch '[{"op": "replace", "path": "/spec/replaces", "value": "$(REPLACES)"}]'

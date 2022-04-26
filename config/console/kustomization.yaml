@@ -1,0 +1,15 @@
+namePrefix: odf-
+
+# Labels to add to all resources and selectors.
+commonLabels:
+  app.kubernetes.io/name: odf-multicluster-console
+
+resources:
+- console_init.yaml
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+images:
+- name: odf-multicluster-console
+  newName: quay.io/ocs-dev/odf-multicluster-console
+  newTag: latest
