@@ -547,6 +547,32 @@ var _ = Describe("MirrorPeerSecret Controller", func() {
 	})
 
 	AfterEach(func() {
+
+		By("removing all the namespaces", func() {
+			var mirrorPeer multiclusterv1alpha1.MirrorPeer
+			mpNN := types.NamespacedName{Name: mpName}
+			err := k8sClient.Get(ctx, mpNN, &mirrorPeer)
+			Expect(err).ShouldNot(HaveOccurred())
+			mirrorPeerPP := MirrorPeerPlusPlus(mirrorPeer)
+			namespaces := mirrorPeerPP.GetClusterNamespaces()
+			for _, eachNspace := range namespaces {
+				err := k8sClient.Delete(ctx, &eachNspace)
+				Expect(err).ShouldNot(HaveOccurred())
+			}
+		})
+
+		By("removing the MirrorPeer", func() {
+			var mirrorPeer multiclusterv1alpha1.MirrorPeer
+			mpNN := types.NamespacedName{Name: mpName}
+			err := k8sClient.Get(ctx, mpNN, &mirrorPeer)
+			Expect(err).ShouldNot(HaveOccurred())
+			err = k8sClient.Delete(ctx, &mirrorPeer)
+			Expect(err).ShouldNot(HaveOccurred())
+			EventuallyWithOffset(1, func() bool {
+				return k8serrors.IsNotFound((k8sClient.Get(ctx, mpNN, &mirrorPeer)))
+			}, time.Second*3, time.Millisecond*250).Should(BeTrue())
+		})
+
 		By("removing the Source secrets", func() {
 			var sourceList corev1.SecretList
 			var hasSourceLabel client.MatchingLabels = make(client.MatchingLabels)
@@ -581,26 +607,5 @@ var _ = Describe("MirrorPeerSecret Controller", func() {
 			Expect(destList.Items).To(BeEmpty())
 		})
 
-		By("removing all the namespaces", func() {
-			var mirrorPeer multiclusterv1alpha1.MirrorPeer
-			mpNN := types.NamespacedName{Name: mpName}
-			err := k8sClient.Get(ctx, mpNN, &mirrorPeer)
-			Expect(err).ShouldNot(HaveOccurred())
-			mirrorPeerPP := MirrorPeerPlusPlus(mirrorPeer)
-			namespaces := mirrorPeerPP.GetClusterNamespaces()
-			for _, eachNspace := range namespaces {
-				err := k8sClient.Delete(ctx, &eachNspace)
-				Expect(err).ShouldNot(HaveOccurred())
-			}
-		})
-
-		By("removing the MirrorPeer", func() {
-			var mirrorPeer multiclusterv1alpha1.MirrorPeer
-			mpNN := types.NamespacedName{Name: mpName}
-			err := k8sClient.Get(ctx, mpNN, &mirrorPeer)
-			Expect(err).ShouldNot(HaveOccurred())
-			err = k8sClient.Delete(ctx, &mirrorPeer)
-			Expect(err).ShouldNot(HaveOccurred())
-		})
 	})
 })

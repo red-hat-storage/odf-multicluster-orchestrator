@@ -5,11 +5,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"reflect"
+
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -188,6 +189,34 @@ func CreatePeerRefFromSecret(secret *corev1.Secret) (multiclusterv1alpha1.PeerRe
 			Namespace: string(secret.Data[NamespaceKey])},
 	}
 	return retPeerRef, nil
+}
+
+// FetchAllSecretsWithLabel will get all the internal secrets in the namespace and with the provided label
+// if the namespace is empty, it will fetch from all the namespaces
+// if the label type is 'Ignore', it will fetch all the internal secrets (both source and destination)
+func FetchAllSecretsWithLabel(ctx context.Context, rc client.Client, namespace string, secretLabelType SecretLabelType) ([]corev1.Secret, error) {
+	var err error
+	var sourceSecretList corev1.SecretList
+	var clientListOptions []client.ListOption
+	if namespace != "" {
+		clientListOptions = append(clientListOptions, client.InNamespace(namespace))
+	}
+	if secretLabelType == "" {
+		return nil, errors.New("empty 'SecretLabelType' provided. please provide 'Ignore' label type")
+	}
+	var listLabelOption client.ListOption
+	if secretLabelType != IgnoreLabel {
+		listLabelOption = client.MatchingLabels(map[string]string{SecretLabelTypeKey: string(secretLabelType)})
+	} else {
+		// if the 'secretLabelType' is asking to ignore, then
+		// don't check the label value
+		// just check whether the secret has the internal label key
+		listLabelOption = client.HasLabels([]string{SecretLabelTypeKey})
+	}
+	clientListOptions = append(clientListOptions, listLabelOption)
+	// find all the secrets with the provided internal label
+	err = rc.List(ctx, &sourceSecretList, clientListOptions...)
+	return sourceSecretList.Items, err
 }
 
 func FindMatchingSecretWithPeerRef(peerRef multiclusterv1alpha1.PeerRef, secrets []corev1.Secret) *corev1.Secret {
