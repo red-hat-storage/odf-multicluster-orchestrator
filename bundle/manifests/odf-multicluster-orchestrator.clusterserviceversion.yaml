@@ -278,9 +278,7 @@ spec:
                 control-plane: odfmo-controller-manager
             spec:
               containers:
-              - args:
-                - --ssl --cert=/var/serving-cert/tls.crt --key=/var/serving-cert/tls.key
-                image: quay.io/ocs-dev/odf-multicluster-console:latest
+              - image: quay.io/ocs-dev/odf-multicluster-console:latest
                 name: odf-multicluster-console
                 ports:
                 - containerPort: 9001
