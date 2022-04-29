@@ -21,6 +21,7 @@ package integration_test
 
 import (
 	"context"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -54,16 +55,33 @@ var (
 	mirrorPeerLookupKey = types.NamespacedName{Namespace: mirrorPeer.Namespace, Name: mirrorPeer.Name}
 )
 
+func GetFakeS3SecretForPeerRef(peer multiclusterv1alpha1.PeerRef) *v1.Secret {
+	return &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      utils.GetSecretNameByPeerRef(peer, utils.S3ProfilePrefix),
+			Namespace: peer.ClusterName,
+		},
+		Data: map[string][]byte{
+			"namespace":            []byte("openshift-storage"),
+			"secret-data":          []byte(`{"AWS_ACCESS_KEY_ID":"dXNlcjEyMzQ=","AWS_SECRET_ACCESS_KEY":"cGFzc3dvcmQxMjM0","s3Bucket":"b2RyYnVja2V0LWJjZjMwNDFmMjFkNw==","s3CompatibleEndpoint":"aHR0cHM6Ly9zMy1vcGVuc2hpZnQtc3RvcmFnZS5hcHBzLmh1Yi01MTY3NjNiMC0yZjQzLTRmMGYtYWI3Zi0wYzI4YjYzM2FjMTAuZGV2Y2x1c3Rlci5vcGVuc2hpZnQuY29t","s3ProfileName":"czNwcm9maWxlLWxvY2FsLWNsdXN0ZXItb2NzLXN0b3JhZ2VjbHVzdGVy","s3Region":"bm9vYmFh"}`),
+			"secret-origin":        []byte("S3"),
+			"storage-cluster-name": []byte("ocs-storagecluster"),
+		},
+	}
+}
+
 var _ = Describe("MirrorPeer Validations", func() {
 	When("creating MirrorPeer", func() {
 		It("should return validation error", func() {
 			By("creating MirrorPeer with null spec", func() {
 				newMirrorPeer := mirrorPeer.DeepCopy()
+				newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-null-spec"
 				err := k8sClient.Create(context.TODO(), newMirrorPeer, &client.CreateOptions{})
 				Expect(err).To(HaveOccurred())
 			})
 			By("creating MirrorPeer with 1 Item", func() {
 				newMirrorPeer := mirrorPeer.DeepCopy()
+				newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-1-item"
 				newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
 					Type: "async",
 					Items: []multiclusterv1alpha1.PeerRef{
@@ -81,6 +99,7 @@ var _ = Describe("MirrorPeer Validations", func() {
 			})
 			By("creating MirrorPeer without MirrorPeer.Spec.Items[*].ClusterName ", func() {
 				newMirrorPeer := mirrorPeer.DeepCopy()
+				newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-without-clustername"
 				newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
 					Type: "async",
 					Items: []multiclusterv1alpha1.PeerRef{
@@ -107,6 +126,7 @@ var _ = Describe("MirrorPeer Validations", func() {
 			})
 			By("creating MirrorPeer without MirrorPeer.Spec.Items[*].StorageClusterRef ", func() {
 				newMirrorPeer := mirrorPeer.DeepCopy()
+				newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-without-storageclusterref"
 				newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
 					Type: "async",
 					Items: []multiclusterv1alpha1.PeerRef{
@@ -131,6 +151,7 @@ var _ = Describe("MirrorPeer Validations", func() {
 		It("should not return validation error", func() {
 			By("creating MirrorPeer with all fields well defined", func() {
 				newMirrorPeer := mirrorPeer.DeepCopy()
+				newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-all-fields"
 				newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
 					Type: "async",
 					Items: []multiclusterv1alpha1.PeerRef{
@@ -161,6 +182,7 @@ var _ = Describe("MirrorPeer Validations", func() {
 	When("updating MirrorPeer", func() {
 		BeforeEach(func() {
 			newMirrorPeer := mirrorPeer.DeepCopy()
+			newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-update"
 			newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
 				Type: "async",
 				Items: []multiclusterv1alpha1.PeerRef{
@@ -185,13 +207,17 @@ var _ = Describe("MirrorPeer Validations", func() {
 		})
 		AfterEach(func() {
 			newMirrorPeer := mirrorPeer.DeepCopy()
+			newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-update"
 			err := k8sClient.Delete(context.TODO(), newMirrorPeer, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
 		})
 		It("should return validation error ", func() {
 			By("updating MirrorPeer with len(MirrorPeer.Spec.Items) < 2", func() {
 				var newMirrorPeer multiclusterv1alpha1.MirrorPeer
-				err := k8sClient.Get(context.TODO(), mirrorPeerLookupKey, &newMirrorPeer)
+				err := k8sClient.Get(context.TODO(), types.NamespacedName{
+					Name:      "test-mirrorpeer-update",
+					Namespace: "",
+				}, &newMirrorPeer)
 				Expect(err).NotTo(HaveOccurred())
 				newMirrorPeer.Spec.Items = []multiclusterv1alpha1.PeerRef{
 					{
@@ -209,7 +235,10 @@ var _ = Describe("MirrorPeer Validations", func() {
 		It("should not return validation error ", func() {
 			By("updating MirrorPeer.Spec.Items", func() {
 				var newMirrorPeer multiclusterv1alpha1.MirrorPeer
-				err := k8sClient.Get(context.TODO(), mirrorPeerLookupKey, &newMirrorPeer)
+				err := k8sClient.Get(context.TODO(), types.NamespacedName{
+					Name:      "test-mirrorpeer-update",
+					Namespace: "",
+				}, &newMirrorPeer)
 				Expect(err).NotTo(HaveOccurred())
 				newMirrorPeer.Spec.Items = []multiclusterv1alpha1.PeerRef{
 					{
@@ -261,6 +290,7 @@ var _ = Describe("MirrorPeerReconciler Reconcile", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			newMirrorPeer := mirrorPeer.DeepCopy()
+			newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-create"
 			newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
 				Type: "async",
 				Items: []multiclusterv1alpha1.PeerRef{
@@ -285,6 +315,7 @@ var _ = Describe("MirrorPeerReconciler Reconcile", func() {
 		})
 		AfterEach(func() {
 			newMirrorPeer := mirrorPeer.DeepCopy()
+			newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-create"
 			err := k8sClient.Delete(context.TODO(), newMirrorPeer, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -311,7 +342,7 @@ var _ = Describe("MirrorPeerReconciler Reconcile", func() {
 
 				req := ctrl.Request{
 					NamespacedName: types.NamespacedName{
-						Name: "test-mirrorpeer",
+						Name: "test-mirrorpeer-create",
 					},
 				}
 

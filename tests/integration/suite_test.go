@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 /*
@@ -19,6 +20,7 @@ limitations under the License.
 package integration_test
 
 import (
+	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	"path/filepath"
 	"testing"
 
@@ -74,6 +76,9 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	err = clusterv1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = ramenv1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:scheme
