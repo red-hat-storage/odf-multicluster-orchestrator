@@ -18,10 +18,9 @@ package controllers
 
 import (
 	"context"
-
+	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	addons "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
 	tokenExchange "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
-
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
@@ -31,7 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
-	klog "k8s.io/klog/v2"
+	"k8s.io/klog/v2"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -67,6 +66,7 @@ const mirrorPeerFinalizer = "hub.mirrorpeer.multicluster.odf.openshift.io"
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;create;update
 //+kubebuilder:rbac:groups=console.openshift.io,resources=consoleplugins,verbs=get;list;create;update
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;create;update
+//+kubebuilder:rbac:groups=ramendr.openshift.io,resources=drclusters,verbs=get;list;create;update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -78,7 +78,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// Fetch MirrorPeer for given Request
 	var mirrorPeer multiclusterv1alpha1.MirrorPeer
-	err := r.Client.Get(ctx, req.NamespacedName, &mirrorPeer)
+	err := r.Get(ctx, req.NamespacedName, &mirrorPeer)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -170,6 +170,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
 		if statusErr != nil {
 			logger.Error(statusErr, "Error occurred while updating the status of mirrorpeer", "MirrorPeer", mirrorPeer)
+			// Requeue, but don't throw
 			return ctrl.Result{Requeue: true}, nil
 		}
 	}
@@ -203,7 +204,18 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	err = r.createDRClusters(ctx, &mirrorPeer)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			logger.Info("resource not found, retrying to create DRCluster", "MirrorPeer", mirrorPeer)
+			return ctrl.Result{}, nil
+		}
+		logger.Error(err, "failed to create DRClusters for MirrorPeer", "MirrorPeer", mirrorPeer.Name)
+		return ctrl.Result{}, err
+	}
+
 	tokensExchanged, err := r.checkTokenExchangeStatus(ctx, mirrorPeer)
+
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.Info("Secrets not found; Attempting to reconcile again")
@@ -446,4 +458,53 @@ func checkK8sUpdateErrors(err error, obj client.Object) (ctrl.Result, error) {
 		klog.Info("Warning: Failed to update object", obj.GetName(), "Error", err)
 	}
 	return ctrl.Result{}, nil
+}
+
+func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer) error {
+	logger := log.FromContext(ctx)
+	for _, pr := range mp.Spec.Items {
+		clusterName := pr.ClusterName
+		s3SecretName := utils.GetSecretNameByPeerRef(pr, utils.S3ProfilePrefix)
+		rookSecretName := utils.GetSecretNameByPeerRef(pr)
+
+		hs, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: rookSecretName, Namespace: clusterName})
+		if err != nil {
+			logger.Error(err, "failed to fetch rook secret", "Secret", rookSecretName)
+			return err
+		}
+
+		ss, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: s3SecretName, Namespace: clusterName})
+		if err != nil {
+			logger.Error(err, "failed to fetch s3 secret", "Secret", s3SecretName)
+			return err
+		}
+
+		rt, err := utils.UnmarshalHubSecret(hs)
+		if err != nil {
+			logger.Error(err, "failed to unmarshal rook secret", "Secret", rookSecretName)
+			return err
+		}
+
+		st, err := utils.UnmarshalS3Secret(ss)
+		if err != nil {
+			logger.Error(err, "failed to unmarshal s3 secret", "Secret", s3SecretName)
+			return err
+		}
+
+		dc := ramenv1alpha1.DRCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: "default"},
+		}
+
+		_, err = controllerutil.CreateOrUpdate(ctx, r.Client, &dc, func() error {
+			dc.Spec.S3ProfileName = st.S3ProfileName
+			dc.Spec.Region = ramenv1alpha1.Region(rt.FSID)
+			return nil
+		})
+
+		if err != nil {
+			return err
+		}
+
+	}
+	return nil
 }

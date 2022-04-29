@@ -39,6 +39,10 @@ type RookToken struct {
 	Key       string `json:"key"`
 }
 
+type HubToken struct {
+	Token   string `json:"token"`
+	Cluster string `json:"cluster"`
+}
 type S3Token struct {
 	AccessKeyID          string `json:"AWS_ACCESS_KEY_ID"`
 	SecretAccessKey      string `json:"AWS_SECRET_ACCESS_KEY"`
@@ -266,6 +270,35 @@ func UnmarshalRookSecret(rookSecret *corev1.Secret) (*RookToken, error) {
 	}
 
 	return &token, nil
+}
+
+func UnmarshalHubSecret(hubSecret *corev1.Secret) (*RookToken, error) {
+	var token HubToken
+	err := json.Unmarshal(hubSecret.Data[SecretDataKey], &token)
+	if err != nil {
+		return nil, err
+	}
+
+	// Do an annoying conversion to RookToken
+	// Double decoding
+
+	tokenbyte, err := base64.StdEncoding.DecodeString(token.Token)
+	if err != nil {
+		return nil, err
+	}
+
+	actualtokenjsonbyte, err := base64.StdEncoding.DecodeString(string(tokenbyte))
+	if err != nil {
+		return nil, err
+	}
+
+	var actualtoken RookToken
+	err = json.Unmarshal(actualtokenjsonbyte, &actualtoken)
+	if err != nil {
+		return nil, err
+	}
+
+	return &actualtoken, nil
 }
 
 func UnmarshalS3Secret(s3Secret *corev1.Secret) (*S3Token, error) {
