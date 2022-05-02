@@ -3,10 +3,9 @@ package controllers
 import (
 	"context"
 	"flag"
-	"os"
-
 	consolev1alpha1 "github.com/openshift/api/console/v1alpha1"
 	"github.com/openshift/library-go/pkg/operator/events"
+	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	tokenexchange "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/console"
@@ -19,6 +18,7 @@ import (
 	"open-cluster-management.io/addon-framework/pkg/addonmanager"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	"os"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -36,6 +36,8 @@ func init() {
 	utilruntime.Must(multiclusterv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(addonapiv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(consolev1alpha1.AddToScheme(mgrScheme))
+
+	utilruntime.Must(ramenv1alpha1.AddToScheme(mgrScheme))
 	//+kubebuilder:scaffold:scheme
 }
 

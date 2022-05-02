@@ -195,7 +195,7 @@ var _ = Describe("MirrorPeer Status Tests", func() {
 				Namespace: pr1.StorageClusterRef.Namespace,
 			}
 
-			sec1 := utils.CreateSourceSecret(secretNN1, storageClusterNN1, []byte("SecretData1"), utils.OriginMap["RookOrigin"])
+			sec1 := utils.CreateSourceSecret(secretNN1, storageClusterNN1, []byte(`{"cluster":"b2NzLXN0b3JhZ2VjbHVzdGVyLWNlcGhjbHVzdGVy","token":"ZXlKbWMybGtJam9pWXpSak56SmpNRE10WXpCbFlpMDBZMlppTFRnME16RXRNekExTmpZME16UmxZV1ZqSWl3aVkyeHBaVzUwWDJsa0lqb2ljbUprTFcxcGNuSnZjaTF3WldWeUlpd2lhMlY1SWpvaVFWRkVkbGxyTldrM04xbG9TMEpCUVZZM2NFZHlVVXBrU1VvelJtZGpjVWxGVUZWS0wzYzlQU0lzSW0xdmJsOW9iM04wSWpvaU1UY3lMak13TGpFd01TNHlORGs2TmpjNE9Td3hOekl1TXpBdU1UZ3pMakU1TURvMk56ZzVMREUzTWk0ek1DNHlNak11TWpFd09qWTNPRGtpTENKdVlXMWxjM0JoWTJVaU9pSnZjR1Z1YzJocFpuUXRjM1J2Y21GblpTSjk="}`), utils.OriginMap["RookOrigin"])
 
 			secretNN2 := types.NamespacedName{
 				Name:      utils.GetSecretNameByPeerRef(pr2),
@@ -207,11 +207,18 @@ var _ = Describe("MirrorPeer Status Tests", func() {
 				Namespace: pr2.StorageClusterRef.Namespace,
 			}
 
-			sec2 := utils.CreateSourceSecret(secretNN2, storageClusterNN2, []byte("SecretData2"), utils.OriginMap["RookOrigin"])
+			sec2 := utils.CreateSourceSecret(secretNN2, storageClusterNN2, []byte(`{"cluster":"b2NzLXN0b3JhZ2VjbHVzdGVyLWNlcGhjbHVzdGVy","token":"ZXlKbWMybGtJam9pWXpSak56SmpNRE10WXpCbFlpMDBZMlppTFRnME16RXRNekExTmpZME16UmxZV1ZqSWl3aVkyeHBaVzUwWDJsa0lqb2ljbUprTFcxcGNuSnZjaTF3WldWeUlpd2lhMlY1SWpvaVFWRkVkbGxyTldrM04xbG9TMEpCUVZZM2NFZHlVVXBrU1VvelJtZGpjVWxGVUZWS0wzYzlQU0lzSW0xdmJsOW9iM04wSWpvaU1UY3lMak13TGpFd01TNHlORGs2TmpjNE9Td3hOekl1TXpBdU1UZ3pMakU1TURvMk56ZzVMREUzTWk0ek1DNHlNak11TWpFd09qWTNPRGtpTENKdVlXMWxjM0JoWTJVaU9pSnZjR1Z1YzJocFpuUXRjM1J2Y21GblpTSjk="}`), utils.OriginMap["RookOrigin"])
+
+			s3sec1 := GetFakeS3SecretForPeerRef(pr1)
+			s3sec2 := GetFakeS3SecretForPeerRef(pr2)
 
 			err = k8sClient.Create(context.TODO(), sec1, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Create(context.TODO(), sec2, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Create(context.TODO(), s3sec1, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Create(context.TODO(), s3sec2, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Create(context.TODO(), fakeMirrorPeer, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())

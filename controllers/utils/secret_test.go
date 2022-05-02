@@ -8,6 +8,7 @@ import (
 )
 
 var (
+	// Constitutes the cluster-peer-token and final exchanged secret
 	rookSecret = corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "b91e4ac0fd672577e6c1547441440c48935ae20",
@@ -19,6 +20,22 @@ var (
 		},
 	}
 
+	// Constitutes both blue secret and green secret present on the hub
+	hubSecret = corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "d8433b8cb5b6d99c4d785ebd6082efd19cad50c",
+			Namespace: "openshift-storage",
+		},
+		Data: map[string][]byte{
+			"namespace":            []byte("openshift-storage"),
+			"secret-data":          []byte(`{"cluster":"b2NzLXN0b3JhZ2VjbHVzdGVyLWNlcGhjbHVzdGVy","token":"ZXlKbWMybGtJam9pWXpSak56SmpNRE10WXpCbFlpMDBZMlppTFRnME16RXRNekExTmpZME16UmxZV1ZqSWl3aVkyeHBaVzUwWDJsa0lqb2ljbUprTFcxcGNuSnZjaTF3WldWeUlpd2lhMlY1SWpvaVFWRkVkbGxyTldrM04xbG9TMEpCUVZZM2NFZHlVVXBrU1VvelJtZGpjVWxGVUZWS0wzYzlQU0lzSW0xdmJsOW9iM04wSWpvaU1UY3lMak13TGpFd01TNHlORGs2TmpjNE9Td3hOekl1TXpBdU1UZ3pMakU1TURvMk56ZzVMREUzTWk0ek1DNHlNak11TWpFd09qWTNPRGtpTENKdVlXMWxjM0JoWTJVaU9pSnZjR1Z1YzJocFpuUXRjM1J2Y21GblpTSjk="}`),
+			"secret-origin":        []byte("rook"),
+			"storage-cluster-name": []byte("ocs-storagecluster"),
+		},
+		Type: "multicluster.odf.openshift.io/secret-type",
+	}
+
+	// Constitutes the s3 secret synced on hub
 	s3Secret = corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "10d0befe9022a438cb7216391c32e6eba32f19f",
@@ -69,6 +86,47 @@ func TestUnmarshalRookSecret(t *testing.T) {
 	}
 }
 
+func TestUnmarshalHubSecret(t *testing.T) {
+	testCases := []struct {
+		input          *corev1.Secret
+		expectedOutput *RookToken
+	}{
+		{&hubSecret, &RookToken{
+			FSID:      "c4c72c03-c0eb-4cfb-8431-30566434eaec",
+			Namespace: "openshift-storage",
+			MonHost:   "172.30.101.249:6789,172.30.183.190:6789,172.30.223.210:6789",
+			ClientId:  "rbd-mirror-peer",
+			Key:       "AQDvYk5i77YhKBAAV7pGrQJdIJ3FgcqIEPUJ/w==",
+		}},
+	}
+
+	for _, testCase := range testCases {
+		actualOutput, err := UnmarshalHubSecret(testCase.input)
+		if err != nil {
+			t.Errorf("TestUnmarshalHubSecret() failed. Error: %s", err)
+		}
+
+		if actualOutput.FSID != testCase.expectedOutput.FSID {
+			t.Errorf("Expected %s, received value %s", testCase.expectedOutput.FSID, actualOutput.FSID)
+		}
+
+		if actualOutput.Namespace != testCase.expectedOutput.Namespace {
+			t.Errorf("Expected %s, received value %s", testCase.expectedOutput.Namespace, actualOutput.Namespace)
+		}
+
+		if actualOutput.MonHost != testCase.expectedOutput.MonHost {
+			t.Errorf("Expected %s, received value %s", testCase.expectedOutput.MonHost, actualOutput.MonHost)
+		}
+
+		if actualOutput.ClientId != testCase.expectedOutput.ClientId {
+			t.Errorf("Expected %s, received value %s", testCase.expectedOutput.ClientId, actualOutput.ClientId)
+		}
+
+		if actualOutput.Key != testCase.expectedOutput.Key {
+			t.Errorf("Expected %s, received value %s", testCase.expectedOutput.Key, actualOutput.Key)
+		}
+	}
+}
 func TestUnmarshalS3Secret(t *testing.T) {
 	testCases := []struct {
 		input          *corev1.Secret

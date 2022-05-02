@@ -9,7 +9,7 @@ require (
 	github.com/onsi/gomega v1.17.0
 	github.com/openshift/api v3.9.1-0.20191111211345-a27ff30ebf09+incompatible
 	github.com/openshift/library-go v0.0.0-20220301155438-a3f30cb5faf9
-	github.com/ramendr/ramen v0.0.0-20220411111402-92482e4c572c
+	github.com/ramendr/ramen v0.0.0-20220430132232-16aca88edd44
 	github.com/red-hat-storage/ocs-operator v0.4.9
 	github.com/rook/rook v1.8.8
 	github.com/spf13/cobra v1.2.1
@@ -161,6 +161,7 @@ replace (
 	github.com/kubevirt/terraform-provider-kubevirt => github.com/nirarg/terraform-provider-kubevirt v0.0.0-20201222125919-101cee051ed3
 	github.com/metal3-io/baremetal-operator => github.com/openshift/baremetal-operator v0.0.0-20200715132148-0f91f62a41fe
 	github.com/metal3-io/cluster-api-provider-baremetal => github.com/openshift/cluster-api-provider-baremetal v0.0.0-20190821174549-a2a477909c1d
+	github.com/noobaa/noobaa-operator/v5 => github.com/noobaa/noobaa-operator/v5 v5.0.0-20220412093540-8972af85cac4
 	github.com/openshift/api => github.com/openshift/api v0.0.0-20220411210816-c3bb724c282a
 	github.com/openshift/hive/apis => github.com/openshift/hive/apis v0.0.0-20211028175624-6c9c8e4bff7f
 	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200922180708-b0145884d381
