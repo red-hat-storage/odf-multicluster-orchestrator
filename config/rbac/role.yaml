@@ -34,6 +34,7 @@ rules:
   - get
   - list
   - update
+  - watch
 - apiGroups:
   - authorization.k8s.io
   resources:
@@ -75,6 +76,7 @@ rules:
   - get
   - list
   - update
+  - watch
 - apiGroups:
   - ""
   resources:
@@ -101,6 +103,7 @@ rules:
   - get
   - list
   - update
+  - watch
 - apiGroups:
   - multicluster.odf.openshift.io
   resources:
@@ -136,6 +139,7 @@ rules:
   - get
   - list
   - update
+  - watch
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
