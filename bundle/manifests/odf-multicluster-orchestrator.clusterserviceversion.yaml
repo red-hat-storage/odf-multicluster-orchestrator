@@ -202,6 +202,19 @@ spec:
           - watch
         - apiGroups:
           - rbac.authorization.k8s.io
+          resourceNames:
+          - spoke-clusterrole-bindings
+          resources:
+          - clusterrolebindings
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
           resources:
           - clusterrolebindings
           - clusterroles

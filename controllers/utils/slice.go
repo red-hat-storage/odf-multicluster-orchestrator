@@ -1,6 +1,7 @@
 package utils
 
 import (
+	rbacv1 "k8s.io/api/rbac/v1"
 	"reflect"
 	"strings"
 
@@ -45,6 +46,15 @@ func RemoveString(slice []string, s string) (result []string) {
 		result = append(result, item)
 	}
 	return
+}
+
+func ContainsSubject(slice []rbacv1.Subject, subject *rbacv1.Subject) bool {
+	for i := range slice {
+		if reflect.DeepEqual(slice[i], *subject) {
+			return true
+		}
+	}
+	return false
 }
 
 // RemoveMirrorPeer removes the given mirrorPeer from the slice and returns the new slice
