@@ -231,7 +231,7 @@ func (r *MirrorPeerReconciler) toggleMirroring(ctx context.Context, storageClust
 
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return fmt.Errorf("could not find storagecluster %q in namespace %v: %v", storageClusterName, namespace, err)
+			klog.Errorf("could not find storagecluster %q in namespace %v: %v", storageClusterName, namespace, err)
 		}
 		return err
 	}
@@ -288,7 +288,7 @@ func (r *MirrorPeerReconciler) toggleCSIAddons(ctx context.Context, namespace st
 
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return fmt.Errorf("could not find rook-ceph-config-map: %v", err)
+			klog.Errorf("could not find rook-ceph-config-map: %v", err)
 		}
 		return err
 	}
@@ -491,11 +491,10 @@ func (r *MirrorPeerReconciler) deleteGreenSecret(ctx context.Context, spokeClust
 			if err := r.SpokeClient.Delete(ctx, &secret); err != nil {
 				if errors.IsNotFound(err) {
 					klog.Info("failed to find green secret ", secretName)
-					return nil
 				} else {
 					klog.Error(err, "failed to delete green secret ", secretName)
-					return err
 				}
+				return err
 			}
 			klog.Info("Succesfully deleted ", secretName, " in namespace ", scrNamespace)
 		}
@@ -510,18 +509,20 @@ func (r *MirrorPeerReconciler) deleteS3(ctx context.Context, mirrorPeer multiclu
 	if err != nil {
 		if errors.IsNotFound(err) {
 			klog.Info("Could not find ODR ObjectBucketClaim, skipping deletion")
-			return nil
 		} else {
 			klog.Error(err, "Failed to get ODR ObjectBucketClaim")
-			return err
 		}
+		return err
 	}
 	err = r.SpokeClient.Delete(ctx, noobaaOBC)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			klog.Info("Could not find ODR ObjectBucketClaim, skipping deletion")
+		}
 		klog.Error(err, "Failed to delete ODR ObjectBucketClaim")
 		return err
 	}
-	return err
+	return nil
 }
 
 // deleteVolumeReplicationClass deletes the volume replication class present in the storage cluster resource,
@@ -543,10 +544,12 @@ func (r *MirrorPeerReconciler) deleteVolumeReplicationClass(ctx context.Context,
 				Name: vrcName,
 			},
 		}
-		err = r.SpokeClient.Delete(ctx, vrc)
-		if errors.IsNotFound(err) {
-			klog.Error("Cannot find volume replication class for interval", interval, " ", err)
-			return nil
+		if err := r.SpokeClient.Delete(ctx, vrc); err != nil {
+			if errors.IsNotFound(err) {
+				klog.Error("Cannot find volume replication class for interval", interval, " ", err)
+			}
+			klog.Errorf("Failed to delete volume replication class %v err: %v", vrcName, err)
+			return err
 		}
 
 		klog.Info("Succesfully deleted interval ", interval)
