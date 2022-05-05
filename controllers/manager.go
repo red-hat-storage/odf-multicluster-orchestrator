@@ -10,6 +10,7 @@ import (
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/console"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -61,7 +62,9 @@ func (o *ManagerOptions) AddFlags(cmd *cobra.Command) {
 	flags.BoolVar(&o.EnableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	o.ZapOpts = zap.Options{}
+	o.ZapOpts = zap.Options{
+		StacktraceLevel: zapcore.PanicLevel,
+	}
 	o.ZapOpts.BindFlags(flag.CommandLine)
 }
 
