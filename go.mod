@@ -9,6 +9,7 @@ require (
 	github.com/onsi/gomega v1.17.0
 	github.com/openshift/api v3.9.1-0.20191111211345-a27ff30ebf09+incompatible
 	github.com/openshift/library-go v0.0.0-20220301155438-a3f30cb5faf9
+	github.com/operator-framework/api v0.10.0
 	github.com/ramendr/ramen v0.0.0-20220430132232-16aca88edd44
 	github.com/red-hat-storage/ocs-operator v0.4.9
 	github.com/rook/rook v1.8.8
@@ -38,6 +39,7 @@ require (
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
+	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/cenkalti/backoff/v3 v3.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect
 	github.com/coreos/go-semver v0.3.0 // indirect
