@@ -24,6 +24,7 @@ import (
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -31,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
+	"open-cluster-management.io/addon-framework/pkg/agent"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -49,6 +51,7 @@ type MirrorPeerReconciler struct {
 
 const hubRecoveryLabel = "cluster.open-cluster-management.io/backup"
 const mirrorPeerFinalizer = "hub.mirrorpeer.multicluster.odf.openshift.io"
+const spokeClusterRoleBindingName = "spoke-clusterrole-bindings"
 
 //+kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers/status,verbs=get;update;patch
@@ -67,6 +70,7 @@ const mirrorPeerFinalizer = "hub.mirrorpeer.multicluster.odf.openshift.io"
 //+kubebuilder:rbac:groups=console.openshift.io,resources=consoleplugins,verbs=get;list;create;update;watch
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;create;update;watch
 //+kubebuilder:rbac:groups=ramendr.openshift.io,resources=drclusters,verbs=get;list;create;update;watch
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;create;update;delete;watch,resourceNames=spoke-clusterrole-bindings
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -176,6 +180,12 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if err := r.processManagedClusterAddon(ctx, mirrorPeer); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	err = r.createClusterRoleBindingsForSpoke(ctx, mirrorPeer)
+	if err != nil {
+		logger.Error(err, "Failed to create cluster role bindings for spoke")
 		return ctrl.Result{}, err
 	}
 
@@ -507,4 +517,70 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multicl
 
 	}
 	return nil
+}
+
+func (r *MirrorPeerReconciler) createClusterRoleBindingsForSpoke(ctx context.Context, peer multiclusterv1alpha1.MirrorPeer) error {
+	crb := rbacv1.ClusterRoleBinding{}
+	err := r.Client.Get(ctx, types.NamespacedName{Name: spokeClusterRoleBindingName}, &crb)
+	if err != nil {
+		if !k8serrors.IsNotFound(err) {
+			return err
+		}
+	}
+	var subjects []rbacv1.Subject
+	if crb.Subjects != nil {
+		subjects = crb.Subjects
+	}
+
+	// Add users and groups
+	for _, pr := range peer.Spec.Items {
+		usub := getSubjectByPeerRef(pr, "User")
+		gsub := getSubjectByPeerRef(pr, "Group")
+		if !utils.ContainsSubject(subjects, usub) {
+			subjects = append(subjects, *usub)
+		}
+
+		if !utils.ContainsSubject(subjects, gsub) {
+			subjects = append(subjects, *gsub)
+		}
+	}
+
+	spokeRoleBinding := rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: spokeClusterRoleBindingName,
+		},
+		Subjects: subjects,
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "open-cluster-management:token-exchange:agent",
+		},
+	}
+	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, &spokeRoleBinding, func() error {
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func getSubjectByPeerRef(pr multiclusterv1alpha1.PeerRef, kind string) *rbacv1.Subject {
+	switch kind {
+	case "User":
+		return &rbacv1.Subject{
+			Kind:     kind,
+			Name:     agent.DefaultUser(pr.ClusterName, addons.TokenExchangeName, addons.TokenExchangeName),
+			APIGroup: "rbac.authorization.k8s.io",
+		}
+	case "Group":
+		return &rbacv1.Subject{
+			Kind:     kind,
+			Name:     agent.DefaultGroups(pr.ClusterName, addons.TokenExchangeName)[0],
+			APIGroup: "rbac.authorization.k8s.io",
+		}
+	default:
+		return nil
+	}
 }
