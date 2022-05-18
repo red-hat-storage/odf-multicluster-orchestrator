@@ -4,3 +4,7 @@ resources:
 
 configurations:
 - kustomizeconfig.yaml
+
+#Labels to add to all resources and selectors.
+commonLabels:
+  control-plane: odfmo-controller-manager
