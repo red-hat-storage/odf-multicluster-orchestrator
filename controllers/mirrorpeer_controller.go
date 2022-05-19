@@ -327,7 +327,7 @@ func (r *MirrorPeerReconciler) deleteSecrets(ctx context.Context, mirrorPeer mul
 
 			var secret corev1.Secret
 			if err := r.DeleteAllOf(ctx, &secret, &deleteOpt); err != nil {
-				logger.Error(err, "Cannot delete secrets for MirrorPeer %q", mirrorPeer.Name)
+				logger.Error(err, "Error while deleting secrets for MirrorPeer", "MirrorPeer", mirrorPeer.Name)
 			}
 		}
 	}
