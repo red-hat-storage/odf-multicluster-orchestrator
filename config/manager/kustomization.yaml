@@ -14,3 +14,7 @@ images:
 - name: controller
   newName: quay.io/ocs-dev/odf-multicluster-orchestrator
   newTag: latest
+
+#Labels to add to all resources and selectors.
+commonLabels:
+  control-plane: odfmo-controller-manager
