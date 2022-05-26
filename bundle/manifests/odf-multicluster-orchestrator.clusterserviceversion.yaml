@@ -8,9 +8,6 @@ metadata:
           "apiVersion": "multicluster.odf.openshift.io/v1alpha1",
           "kind": "MirrorPeer",
           "metadata": {
-            "labels": {
-              "control-plane": "odfmo-controller-manager"
-            },
             "name": "mirrorpeer-sample"
           },
           "spec": {
@@ -42,8 +39,6 @@ metadata:
     olm.skipRange: ""
     operators.operatorframework.io/builder: operator-sdk-v1.16.0+git
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
-  labels:
-    control-plane: odfmo-controller-manager
   name: odf-multicluster-orchestrator.v0.0.1
   namespace: placeholder
 spec:
@@ -295,13 +290,11 @@ spec:
           selector:
             matchLabels:
               app.kubernetes.io/name: odf-multicluster-console
-              control-plane: odfmo-controller-manager
           strategy: {}
           template:
             metadata:
               labels:
                 app.kubernetes.io/name: odf-multicluster-console
-                control-plane: odfmo-controller-manager
             spec:
               containers:
               - image: quay.io/ocs-dev/odf-multicluster-console:latest
