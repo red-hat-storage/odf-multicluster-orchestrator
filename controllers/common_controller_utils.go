@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"reflect"
 
 	rmn "github.com/ramendr/ramen/api/v1alpha1"
@@ -305,16 +306,15 @@ func createOrUpdateSecretsFromInternalSecret(ctx context.Context, rc client.Clie
 			return fmt.Errorf("invalid S3 secret format for secret name %q in namesapce %q", secret.Name, secret.Namespace)
 		}
 
-		namespace := utils.GetEnv("ODR_NAMESPACE", utils.RamenHubNamespace)
-
+		currentNamespace := os.Getenv("POD_NAMESPACE")
 		// S3 origin secret has two part 1. s3 bucket secret 2. s3 bucket config
 		// create ramen s3 secret using s3 bucket secret
-		err := createOrUpdateRamenS3Secret(ctx, rc, secret, data, namespace)
+		err := createOrUpdateRamenS3Secret(ctx, rc, secret, data, currentNamespace)
 		if err != nil {
 			return err
 		}
 		// update ramen hub operator config using s3 bucket config and ramen s3 secret reference
-		err = updateRamenHubOperatorConfig(ctx, rc, secret, data, mirrorPeers, namespace)
+		err = updateRamenHubOperatorConfig(ctx, rc, secret, data, mirrorPeers, currentNamespace)
 		if err != nil {
 			return err
 		}

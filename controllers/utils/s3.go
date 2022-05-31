@@ -8,7 +8,6 @@ import (
 )
 
 const (
-	RamenHubNamespace  = "openshift-dr-system"
 	BucketGenerateName = "odrbucket"
 
 	// s3
