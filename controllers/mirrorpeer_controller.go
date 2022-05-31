@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 
-	operatorv1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	addons "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
 	tokenExchange "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
@@ -54,7 +53,6 @@ type MirrorPeerReconciler struct {
 const hubRecoveryLabel = "cluster.open-cluster-management.io/backup"
 const mirrorPeerFinalizer = "hub.mirrorpeer.multicluster.odf.openshift.io"
 const spokeClusterRoleBindingName = "spoke-clusterrole-bindings"
-const ramenSubscriptionName = "odr-dr-system"
 
 //+kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers/status,verbs=get;update;patch
@@ -504,10 +502,8 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multicl
 			return err
 		}
 
-		drNamespace := r.getRamenNamespace(ctx)
-
 		dc := ramenv1alpha1.DRCluster{
-			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: drNamespace},
+			ObjectMeta: metav1.ObjectMeta{Name: clusterName},
 		}
 
 		_, err = controllerutil.CreateOrUpdate(ctx, r.Client, &dc, func() error {
@@ -588,20 +584,4 @@ func getSubjectByPeerRef(pr multiclusterv1alpha1.PeerRef, kind string) *rbacv1.S
 	default:
 		return nil
 	}
-}
-func (r *MirrorPeerReconciler) getRamenNamespace(ctx context.Context) string {
-	logger := log.FromContext(ctx)
-	var subs operatorv1.SubscriptionList
-	err := r.Client.List(ctx, &subs)
-	if err != nil {
-		logger.Error(err, "failed to list subscriptions")
-		return ""
-	}
-
-	for _, sub := range subs.Items {
-		if sub.Name == ramenSubscriptionName {
-			return sub.Namespace
-		}
-	}
-	return "default"
 }
