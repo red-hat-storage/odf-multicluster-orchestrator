@@ -167,7 +167,7 @@ var _ = Describe("Ramen Resource Tests", func() {
 				dc := &ramenv1alpha1.DRCluster{}
 				hsec := hubClusterSecrets[i]
 				ssec := s3ClusterSecrets[i]
-				err := k8sClient.Get(context.TODO(), types.NamespacedName{Name: pr.ClusterName, Namespace: "default"}, dc)
+				err := k8sClient.Get(context.TODO(), types.NamespacedName{Name: pr.ClusterName}, dc)
 				Expect(err).NotTo(HaveOccurred())
 				var hubSecret corev1.Secret
 				err = k8sClient.Get(context.TODO(), types.NamespacedName{Name: hsec.Name, Namespace: hsec.Namespace}, &hubSecret)

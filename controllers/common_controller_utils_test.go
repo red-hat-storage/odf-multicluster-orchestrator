@@ -52,6 +52,7 @@ var (
 	TestSourceManagedClusterSoth       = "south"
 	TestDestinationManagedClusterNorth = "north"
 
+	ramenNamespace          = "openshift-dr-system"
 	StorageClusterName      = "ocs-storagecluster"
 	StorageClusterNamespace = "openshift-storage"
 )
@@ -135,7 +136,7 @@ func getFakeClient(t *testing.T, mgrScheme *runtime.Scheme) client.Client {
 		&corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      utils.RamenHubOperatorConfigName,
-				Namespace: utils.RamenHubNamespace,
+				Namespace: ramenNamespace,
 			},
 			Data: map[string]string{
 				"ramen_manager_config.yaml": string(emptyConfig),
@@ -238,13 +239,13 @@ func TestMirrorPeerSecretReconcile(t *testing.T) {
 	}{
 		{
 			name:            "Managing S3 Profile disabled",
-			ramenNamespace:  utils.RamenHubNamespace,
+			ramenNamespace:  ramenNamespace,
 			manageS3:        false,
 			ignoreS3Profile: true,
 		},
 		{
 			name:            "Creating new S3 Profile in empty Ramen Config",
-			ramenNamespace:  utils.RamenHubNamespace,
+			ramenNamespace:  ramenNamespace,
 			manageS3:        true,
 			ignoreS3Profile: false,
 		},
@@ -264,7 +265,7 @@ func TestMirrorPeerSecretReconcile(t *testing.T) {
 
 	fakeClient := getFakeClient(t, mgrScheme)
 	for _, c := range cases {
-		os.Setenv("ODR_NAMESPACE", c.ramenNamespace)
+		os.Setenv("POD_NAMESPACE", c.ramenNamespace)
 		ctx := context.TODO()
 		err := createOrUpdateSecretsFromInternalSecret(ctx, fakeClient, fakeS3InternalSecret(t, TestSourceManagedClusterEast), fakeMirrorPeers(c.manageS3))
 		assert.NoError(t, err)

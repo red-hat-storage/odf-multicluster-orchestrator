@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	addons "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
 	tokenExchange "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
@@ -502,7 +503,7 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multicl
 		}
 
 		dc := ramenv1alpha1.DRCluster{
-			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: clusterName},
 		}
 
 		_, err = controllerutil.CreateOrUpdate(ctx, r.Client, &dc, func() error {
