@@ -10,6 +10,7 @@ import (
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/console"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -62,7 +63,7 @@ func (o *ManagerOptions) AddFlags(cmd *cobra.Command) {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	o.ZapOpts = zap.Options{
-		Development: true,
+		StacktraceLevel: zapcore.PanicLevel,
 	}
 	o.ZapOpts.BindFlags(flag.CommandLine)
 }
@@ -84,6 +85,8 @@ func (o *ManagerOptions) runManager() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&o.ZapOpts)))
 	setupLog := ctrl.Log.WithName("setup")
 
+	baseLogger := ctrl.Log.WithName("multicluster.odf.openshift.io")
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 mgrScheme,
 		MetricsBindAddress:     o.MetricsAddr,
@@ -91,6 +94,7 @@ func (o *ManagerOptions) runManager() {
 		HealthProbeBindAddress: o.ProbeAddr,
 		LeaderElection:         o.EnableLeaderElection,
 		LeaderElectionID:       "1d19c724.odf.openshift.io",
+		Logger:                 baseLogger,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
