@@ -171,7 +171,11 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if mirrorPeer.Status.Phase == "" {
-		mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangingSecret
+		if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
+			mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangingSecret
+		} else {
+			mirrorPeer.Status.Phase = multiclusterv1alpha1.S3ProfileSyncing
+		}
 		statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
 		if statusErr != nil {
 			logger.Error(statusErr, "Error occurred while updating the status of mirrorpeer", "MirrorPeer", mirrorPeer)
@@ -225,36 +229,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	tokensExchanged, err := r.checkTokenExchangeStatus(ctx, mirrorPeer)
-
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			logger.Info("Secrets not found; Attempting to reconcile again")
-			return ctrl.Result{Requeue: true}, nil
-		}
-		logger.Info("Error while exchanging tokens", "MirrorPeer", mirrorPeer)
-		mirrorPeer.Status.Message = err.Error()
-		statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
-		if statusErr != nil {
-			logger.Error(statusErr, "Error occurred while updating the status of mirrorpeer", "MirrorPeer", mirrorPeer)
-		}
-		return ctrl.Result{}, err
-	}
-
-	if tokensExchanged {
-		logger.Info("Tokens exchanged", "MirrorPeer", mirrorPeer)
-		mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangedSecret
-		mirrorPeer.Status.Message = ""
-		statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
-		if statusErr != nil {
-			logger.Error(statusErr, "Error occured while updating the status of mirrorpeer", "MirrorPeer", mirrorPeer)
-			// Requeue, but don't throw
-			return ctrl.Result{Requeue: true}, nil
-		}
-		return ctrl.Result{}, nil
-	}
-
-	return ctrl.Result{Requeue: true}, nil
+	return r.updateMirrorPeerStatus(ctx, mirrorPeer)
 }
 
 // processManagedClusterAddon creates an addon for the cluster management in all the peer refs,
@@ -476,39 +451,41 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multicl
 	for _, pr := range mp.Spec.Items {
 		clusterName := pr.ClusterName
 		s3SecretName := utils.GetSecretNameByPeerRef(pr, utils.S3ProfilePrefix)
-		rookSecretName := utils.GetSecretNameByPeerRef(pr)
-
-		hs, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: rookSecretName, Namespace: clusterName})
-		if err != nil {
-			logger.Error(err, "failed to fetch rook secret", "Secret", rookSecretName)
-			return err
-		}
-
-		ss, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: s3SecretName, Namespace: clusterName})
-		if err != nil {
-			logger.Error(err, "failed to fetch s3 secret", "Secret", s3SecretName)
-			return err
-		}
-
-		rt, err := utils.UnmarshalHubSecret(hs)
-		if err != nil {
-			logger.Error(err, "failed to unmarshal rook secret", "Secret", rookSecretName)
-			return err
-		}
-
-		st, err := utils.UnmarshalS3Secret(ss)
-		if err != nil {
-			logger.Error(err, "failed to unmarshal s3 secret", "Secret", s3SecretName)
-			return err
-		}
 
 		dc := ramenv1alpha1.DRCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: clusterName},
 		}
 
+		if mp.Spec.Type == multiclusterv1alpha1.Async {
+			rookSecretName := utils.GetSecretNameByPeerRef(pr)
+
+			hs, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: rookSecretName, Namespace: clusterName})
+			if err != nil {
+				logger.Error(err, "Failed to fetch rook secret", "Secret", rookSecretName)
+				return err
+			}
+
+			rt, err := utils.UnmarshalHubSecret(hs)
+			if err != nil {
+				logger.Error(err, "Failed to unmarshal rook secret", "Secret", rookSecretName)
+				return err
+			}
+			dc.Spec.Region = ramenv1alpha1.Region(rt.FSID)
+		}
+		ss, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: s3SecretName, Namespace: clusterName})
+		if err != nil {
+			logger.Error(err, "Failed to fetch s3 secret", "Secret", s3SecretName)
+			return err
+		}
+
+		st, err := utils.UnmarshalS3Secret(ss)
+		if err != nil {
+			logger.Error(err, "Failed to unmarshal s3 secret", "Secret", s3SecretName)
+			return err
+		}
+
 		_, err = controllerutil.CreateOrUpdate(ctx, r.Client, &dc, func() error {
 			dc.Spec.S3ProfileName = st.S3ProfileName
-			dc.Spec.Region = ramenv1alpha1.Region(rt.FSID)
 			return nil
 		})
 
@@ -565,6 +542,82 @@ func (r *MirrorPeerReconciler) createClusterRoleBindingsForSpoke(ctx context.Con
 		return err
 	}
 	return nil
+}
+
+func (r *MirrorPeerReconciler) updateMirrorPeerStatus(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
+		tokensExchanged, err := r.checkTokenExchangeStatus(ctx, mirrorPeer)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				logger.Info("Secrets not found; Attempting to reconcile again")
+				return ctrl.Result{Requeue: true}, nil
+			}
+			logger.Info("Error while exchanging tokens", "MirrorPeer", mirrorPeer)
+			mirrorPeer.Status.Message = err.Error()
+			statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
+			if statusErr != nil {
+				logger.Error(statusErr, "Error occurred while updating the status of mirrorpeer", "MirrorPeer", mirrorPeer)
+			}
+			return ctrl.Result{}, err
+		}
+
+		if tokensExchanged {
+			logger.Info("Tokens exchanged", "MirrorPeer", mirrorPeer)
+			mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangedSecret
+			mirrorPeer.Status.Message = ""
+			statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
+			if statusErr != nil {
+				logger.Error(statusErr, "Error occured while updating the status of mirrorpeer", "MirrorPeer", mirrorPeer)
+				// Requeue, but don't throw
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{}, nil
+		}
+	} else {
+		// Sync mode status update, same flow as async but for s3 profile
+		s3ProfileSynced, err := r.checkS3ProfileStatus(ctx, mirrorPeer)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				logger.Info("Secrets not found; Attempting to reconcile again")
+				return ctrl.Result{Requeue: true}, nil
+			}
+			logger.Info("Error while syncing S3 Profile", "MirrorPeer", mirrorPeer)
+			statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
+			if statusErr != nil {
+				logger.Error(statusErr, "Error occurred while updating the status of mirrorpeer", "MirrorPeer", mirrorPeer)
+			}
+			return ctrl.Result{}, err
+		}
+
+		if s3ProfileSynced {
+			logger.Info("S3Profile synced to hub", "MirrorPeer", mirrorPeer)
+			mirrorPeer.Status.Phase = multiclusterv1alpha1.S3ProfileSynced
+			mirrorPeer.Status.Message = ""
+			statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
+			if statusErr != nil {
+				logger.Error(statusErr, "Error occurred while updating the status of mirrorpeer", "MirrorPeer", mirrorPeer)
+				// Requeue, but don't throw
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{}, nil
+		}
+	}
+
+	return ctrl.Result{Requeue: true}, nil
+}
+
+func (r *MirrorPeerReconciler) checkS3ProfileStatus(ctx context.Context, mp multiclusterv1alpha1.MirrorPeer) (bool, error) {
+	// If S3Profile secret can be fetched for each peerref in the MirrorPeer then the sync is successful
+	for _, pr := range mp.Spec.Items {
+		clusterName := pr.ClusterName
+		s3SecretName := utils.GetSecretNameByPeerRef(pr, utils.S3ProfilePrefix)
+		_, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: s3SecretName, Namespace: clusterName})
+		if err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 func getSubjectByPeerRef(pr multiclusterv1alpha1.PeerRef, kind string) *rbacv1.Subject {

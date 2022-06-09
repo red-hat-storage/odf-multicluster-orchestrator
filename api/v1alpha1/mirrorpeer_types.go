@@ -26,6 +26,8 @@ type DRType string
 const (
 	ExchangingSecret PhaseType = "ExchangingSecret"
 	ExchangedSecret  PhaseType = "ExchangedSecret"
+	S3ProfileSynced  PhaseType = "S3ProfileSynced"
+	S3ProfileSyncing PhaseType = "S3ProfileSyncing"
 	Deleting         PhaseType = "Deleting"
 	Sync             DRType    = "sync"
 	Async            DRType    = "async"
