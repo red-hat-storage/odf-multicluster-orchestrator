@@ -130,15 +130,13 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	clusterFSIDs := make(map[string]string)
-	klog.Infof("Fetching clusterFSIDs")
-	err = r.fetchClusterFSIDs(ctx, &mirrorPeer, clusterFSIDs)
-	if err != nil {
-		return ctrl.Result{Requeue: true}, fmt.Errorf("failed to get all cluster FSIDs, retrying again: %v", err)
-	}
-
-	klog.Info(clusterFSIDs)
 	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
+		clusterFSIDs := make(map[string]string)
+		klog.Infof("Fetching clusterFSIDs")
+		err = r.fetchClusterFSIDs(ctx, &mirrorPeer, clusterFSIDs)
+		if err != nil {
+			return ctrl.Result{Requeue: true}, fmt.Errorf("failed to get all cluster FSIDs, retrying again: %v", err)
+		}
 		klog.Infof("enabling async mode dependencies")
 		err = r.enableCSIAddons(ctx, scr.Namespace)
 		if err != nil {
@@ -154,12 +152,12 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if len(errs) > 0 {
 			return ctrl.Result{}, fmt.Errorf("few failures occured while creating VolumeReplicationClasses: %v", errs)
 		}
-	}
 
-	klog.Infof("labeling rbd storageclasses")
-	errs := r.labelRBDStorageClasses(ctx, mirrorPeer, scr.Namespace, clusterFSIDs)
-	if len(errs) > 0 {
-		return ctrl.Result{}, fmt.Errorf("few failures occured while labeling RBD StorageClasses: %v", errs)
+		klog.Infof("labeling rbd storageclasses")
+		errs = r.labelRBDStorageClasses(ctx, mirrorPeer, scr.Namespace, clusterFSIDs)
+		if len(errs) > 0 {
+			return ctrl.Result{}, fmt.Errorf("few failures occured while labeling RBD StorageClasses: %v", errs)
+		}
 	}
 
 	klog.Infof("creating s3 buckets")
