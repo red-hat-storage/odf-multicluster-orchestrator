@@ -217,8 +217,7 @@ func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret 
 		S3CompatibleEndpoint: string(data[utils.S3Endpoint]),
 		// referenceing ramen secret
 		S3SecretRef: corev1.SecretReference{
-			Name:      secret.Name,
-			Namespace: ramenHubNamespace,
+			Name: secret.Name,
 		},
 	}
 
