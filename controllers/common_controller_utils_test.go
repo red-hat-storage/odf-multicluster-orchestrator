@@ -200,8 +200,7 @@ func getS3Profile(ramenNamespace string, sourceManagedClusterName string, destin
 			S3CompatibleEndpoint: TestS3RouteHost,
 			S3Region:             "",
 			S3SecretRef: corev1.SecretReference{
-				Name:      utils.CreateUniqueSecretName(sourceManagedClusterName, StorageClusterNamespace, StorageClusterName, utils.S3ProfilePrefix),
-				Namespace: ramenNamespace,
+				Name: utils.CreateUniqueSecretName(sourceManagedClusterName, StorageClusterNamespace, StorageClusterName, utils.S3ProfilePrefix),
 			},
 		},
 		{
@@ -210,8 +209,7 @@ func getS3Profile(ramenNamespace string, sourceManagedClusterName string, destin
 			S3CompatibleEndpoint: TestS3RouteHost,
 			S3Region:             "",
 			S3SecretRef: corev1.SecretReference{
-				Name:      utils.CreateUniqueSecretName(destinationManagedClusterName, StorageClusterNamespace, StorageClusterName, utils.S3ProfilePrefix),
-				Namespace: ramenNamespace,
+				Name: utils.CreateUniqueSecretName(destinationManagedClusterName, StorageClusterNamespace, StorageClusterName, utils.S3ProfilePrefix),
 			},
 		},
 	}
