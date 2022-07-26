@@ -67,7 +67,7 @@ const (
 	StorageIDKey                          = "storageid"
 	ReplicationIDKey                      = "replicationid"
 	CephFSProvisionerTemplate             = "%s.cephfs.csi.ceph.com"
-	SpokeMirrorPeerFinalizer              = "spoke.mirrorpeer.multicluster.odf.openshift.io"
+	SpokeMirrorPeerFinalizer              = "spoke.multicluster.odf.openshift.io"
 )
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -96,6 +96,10 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	agentFinalizer := r.SpokeClusterName + "." + SpokeMirrorPeerFinalizer
+
+	if len(agentFinalizer) > 63 {
+		agentFinalizer = fmt.Sprintf("%s.%s", r.SpokeClusterName[0:10], SpokeMirrorPeerFinalizer)
+	}
 
 	if mirrorPeer.GetDeletionTimestamp().IsZero() {
 		if !utils.ContainsString(mirrorPeer.GetFinalizers(), agentFinalizer) {
