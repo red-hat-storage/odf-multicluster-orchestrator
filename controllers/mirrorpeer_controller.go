@@ -51,7 +51,7 @@ type MirrorPeerReconciler struct {
 }
 
 const hubRecoveryLabel = "cluster.open-cluster-management.io/backup"
-const mirrorPeerFinalizer = "hub.mirrorpeer.multicluster.odf.openshift.io"
+const mirrorPeerFinalizer = "hub.multicluster.odf.openshift.io"
 const spokeClusterRoleBindingName = "spoke-clusterrole-bindings"
 
 //+kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers,verbs=get;list;watch;create;update;patch;delete
