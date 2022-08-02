@@ -41,18 +41,19 @@ func getFilterCondition(ownerReferences []metav1.OwnerReference, name string, bl
 	return false
 }
 
-func (s3SecretHandler) getBlueSecretFilter(obj interface{}) bool {
+func (s3SecretHandler) getBlueSecretFilter(obj interface{}) (ClusterType, bool) {
 	blueSecretMatchString := os.Getenv("S3_EXCHANGE_SOURCE_SECRET_STRING_MATCH")
 	if blueSecretMatchString == "" {
 		blueSecretMatchString = utils.BucketGenerateName
 	}
+	defaultClusterType := CONVERGED
 	if s, ok := obj.(*corev1.Secret); ok {
-		return getFilterCondition(s.OwnerReferences, s.ObjectMeta.Name, blueSecretMatchString)
+		return defaultClusterType, getFilterCondition(s.OwnerReferences, s.ObjectMeta.Name, blueSecretMatchString)
 	} else if c, ok := obj.(*corev1.ConfigMap); ok {
-		return getFilterCondition(c.OwnerReferences, c.ObjectMeta.Name, blueSecretMatchString)
+		return defaultClusterType, getFilterCondition(c.OwnerReferences, c.ObjectMeta.Name, blueSecretMatchString)
 	}
 
-	return false
+	return defaultClusterType, false
 }
 
 func (s3SecretHandler) getGreenSecretFilter(obj interface{}) bool {
@@ -66,7 +67,7 @@ func (s s3SecretHandler) syncBlueSecret(name string, namespace string, c *blueSe
 	if err != nil {
 		return fmt.Errorf("failed to get the secret %q in namespace %q in managed cluster. Error %v", name, namespace, err)
 	}
-	isMatch := s.getBlueSecretFilter(secret)
+	_, isMatch := s.getBlueSecretFilter(secret)
 	if !isMatch {
 		// ignore handler which secret filter is not matched
 		return nil
@@ -77,7 +78,7 @@ func (s s3SecretHandler) syncBlueSecret(name string, namespace string, c *blueSe
 	if err != nil {
 		return fmt.Errorf("failed to get the config map %q in namespace %q in managed cluster. Error %v", name, namespace, err)
 	}
-	isMatch = s.getBlueSecretFilter(configMap)
+	_, isMatch = s.getBlueSecretFilter(configMap)
 	if !isMatch {
 		// ignore handler which configmap filter is not matched
 		return nil
@@ -138,7 +139,7 @@ func (s s3SecretHandler) syncBlueSecret(name string, namespace string, c *blueSe
 		return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: %v", secret.Name, secret.Namespace, c.clusterName, err)
 	}
 
-	err = createSecret(c.hubKubeClient, c.recorder, &newSecret)
+	err = createSecret(c.hubKubeClient, c.recorder, newSecret)
 	if err != nil {
 		return fmt.Errorf("failed to sync managed cluster secret %q from namespace %v to the hub cluster in namespace %q err: %v", name, namespace, c.clusterName, err)
 	}

@@ -26,6 +26,7 @@ const (
 	RookSecretHandlerName = "rook"
 	S3SecretHandlerName   = "s3"
 	DRModeAnnotationKey   = "multicluster.openshift.io/mode"
+	FSID                  = "FSID"
 )
 
 func GetCurrentStorageClusterRef(mp *multiclusterv1alpha1.MirrorPeer, spokeClusterName string) (*multiclusterv1alpha1.StorageClusterRef, error) {

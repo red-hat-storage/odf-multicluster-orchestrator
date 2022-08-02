@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"os"
 
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	addons "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
@@ -448,6 +449,7 @@ func checkK8sUpdateErrors(err error, obj client.Object) (ctrl.Result, error) {
 
 func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer) error {
 	logger := log.FromContext(ctx)
+	currentNamespace := os.Getenv("POD_NAMESPACE")
 	for _, pr := range mp.Spec.Items {
 		clusterName := pr.ClusterName
 		s3SecretName := utils.GetSecretNameByPeerRef(pr, utils.S3ProfilePrefix)
@@ -456,22 +458,31 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multicl
 			ObjectMeta: metav1.ObjectMeta{Name: clusterName},
 		}
 
-		if mp.Spec.Type == multiclusterv1alpha1.Async {
-			rookSecretName := utils.GetSecretNameByPeerRef(pr)
+		rookSecretName := utils.GetSecretNameByPeerRef(pr)
 
+		var fsid string
+		if mp.Spec.Type == multiclusterv1alpha1.Sync {
+			hs, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: rookSecretName, Namespace: currentNamespace})
+			if err != nil {
+				logger.Error(err, "Failed to fetch rook secret", "Secret", rookSecretName)
+				return err
+			}
+			fsid = string(hs.Data[utils.FSID])
+		} else {
 			hs, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: rookSecretName, Namespace: clusterName})
 			if err != nil {
 				logger.Error(err, "Failed to fetch rook secret", "Secret", rookSecretName)
 				return err
 			}
-
 			rt, err := utils.UnmarshalHubSecret(hs)
 			if err != nil {
 				logger.Error(err, "Failed to unmarshal rook secret", "Secret", rookSecretName)
 				return err
 			}
-			dc.Spec.Region = ramenv1alpha1.Region(rt.FSID)
+			fsid = rt.FSID
 		}
+
+		dc.Spec.Region = ramenv1alpha1.Region(fsid)
 		ss, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: s3SecretName, Namespace: clusterName})
 		if err != nil {
 			logger.Error(err, "Failed to fetch s3 secret", "Secret", s3SecretName)

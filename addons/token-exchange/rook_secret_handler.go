@@ -24,22 +24,32 @@ type rookSecretHandler struct {
 }
 
 const (
-	RookType                         = "kubernetes.io/rook"
-	RookDefaultBlueSecretMatchString = "cluster-peer-token"
+	RookType                                  = "kubernetes.io/rook"
+	RookDefaultBlueSecretMatchConvergedString = "cluster-peer-token"
+	RookDefaultBlueSecretMatchExternalString  = "rook-ceph-mon"
 )
 
-func (rookSecretHandler) getBlueSecretFilter(obj interface{}) bool {
+type ClusterType string
+
+const (
+	CONVERGED ClusterType = "Converged"
+	EXTERNAL  ClusterType = "External"
+	UNKNOWN   ClusterType = "Unknown"
+)
+
+func (rookSecretHandler) getBlueSecretFilter(obj interface{}) (ClusterType, bool) {
 	blueSecretMatchString := os.Getenv("TOKEN_EXCHANGE_SOURCE_SECRET_STRING_MATCH")
-	if blueSecretMatchString == "" {
-		blueSecretMatchString = RookDefaultBlueSecretMatchString
-	}
 	if s, ok := obj.(*corev1.Secret); ok {
-		if s.Type == RookType && strings.Contains(s.ObjectMeta.Name, blueSecretMatchString) {
-			return true
+		if s.Type == RookType && (strings.Contains(s.ObjectMeta.Name, blueSecretMatchString) || strings.Contains(s.ObjectMeta.Name, RookDefaultBlueSecretMatchConvergedString)) {
+			return CONVERGED, true
+		}
+
+		// This secret may be present in converged mode too but we are using the above check to override this in case of converged mode.
+		if s.Type == RookType && strings.Contains(s.ObjectMeta.Name, RookDefaultBlueSecretMatchExternalString) {
+			return EXTERNAL, true
 		}
 	}
-
-	return false
+	return UNKNOWN, false
 }
 
 func (rookSecretHandler) getGreenSecretFilter(obj interface{}) bool {
@@ -56,7 +66,7 @@ func (r rookSecretHandler) syncBlueSecret(name string, namespace string, c *blue
 	if err != nil {
 		return fmt.Errorf("failed to get the secret %q in namespace %q in managed cluster. Error %v", name, namespace, err)
 	}
-	isMatch := r.getBlueSecretFilter(secret)
+	clusterType, isMatch := r.getBlueSecretFilter(secret)
 	if !isMatch {
 		// ignore handler which secret filter is not matched
 		return nil
@@ -67,17 +77,36 @@ func (r rookSecretHandler) syncBlueSecret(name string, namespace string, c *blue
 	if err != nil {
 		return fmt.Errorf("failed to get the storage cluster name from the secret %q in namespace %q in managed cluster. Error %v", name, namespace, err)
 	}
+	var customData map[string][]byte
+	var labelType utils.SecretLabelType
+	var blueSecret *corev1.Secret
 
-	customData := map[string][]byte{
-		utils.SecretOriginKey: []byte(utils.OriginMap["RookOrigin"]),
+	if clusterType == CONVERGED {
+		customData = map[string][]byte{
+			utils.SecretOriginKey: []byte(utils.OriginMap["RookOrigin"]),
+			utils.ClusterType:     []byte(CONVERGED),
+		}
+		labelType = utils.SourceLabel
+
+		blueSecret, err = generateBlueSecret(secret, labelType, utils.CreateUniqueSecretName(c.clusterName, secret.Namespace, sc), sc, c.clusterName, customData)
+		if err != nil {
+			return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: %v", secret.Name, secret.Namespace, c.clusterName, err)
+		}
+	} else if clusterType == EXTERNAL {
+		customData = map[string][]byte{
+			utils.SecretOriginKey: []byte(utils.OriginMap["RookOrigin"]),
+			utils.ClusterType:     []byte(EXTERNAL),
+		}
+		labelType = utils.InternalLabel
+		blueSecret, err = generateBlueSecretForExternal(secret, labelType, utils.CreateUniqueSecretName(c.clusterName, secret.Namespace, sc), c.clusterName, customData)
+		if err != nil {
+			return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: %v", secret.Name, secret.Namespace, c.clusterName, err)
+		}
+	} else {
+		return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: ClusterType is unknown, should be converged or external", secret.Name, secret.Namespace, c.clusterName)
 	}
 
-	newSecret, err := generateBlueSecret(secret, utils.SourceLabel, utils.CreateUniqueSecretName(c.clusterName, secret.Namespace, sc), sc, c.clusterName, customData)
-	if err != nil {
-		return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: %v", secret.Name, secret.Namespace, c.clusterName, err)
-	}
-
-	err = createSecret(c.hubKubeClient, c.recorder, &newSecret)
+	err = createSecret(c.hubKubeClient, c.recorder, blueSecret)
 	if err != nil {
 		return fmt.Errorf("failed to sync managed cluster secret %q from namespace %v to the hub cluster in namespace %q err: %v", name, namespace, c.clusterName, err)
 	}

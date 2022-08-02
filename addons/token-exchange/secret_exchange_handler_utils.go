@@ -38,7 +38,7 @@ func getConfigMap(lister corev1lister.ConfigMapLister, name, namespace string) (
 	return confgMap, nil
 }
 
-func generateBlueSecret(secret *corev1.Secret, secretType utils.SecretLabelType, uniqueName string, sc string, managedCluster string, customData map[string][]byte) (nsecret corev1.Secret, err error) {
+func generateBlueSecret(secret *corev1.Secret, secretType utils.SecretLabelType, uniqueName string, sc string, managedCluster string, customData map[string][]byte) (nsecret *corev1.Secret, err error) {
 	if secret == nil {
 		return nsecret, fmt.Errorf("cannot create secret on the hub, source secret nil")
 	}
@@ -69,7 +69,40 @@ func generateBlueSecret(secret *corev1.Secret, secretType utils.SecretLabelType,
 		Type: utils.SecretLabelTypeKey,
 		Data: data,
 	}
-	return nSecret, nil
+	return &nSecret, nil
+}
+
+func generateBlueSecretForExternal(rookCephMon *corev1.Secret, labelType utils.SecretLabelType, name string, managedClusterName string, customData map[string][]byte) (*corev1.Secret, error) {
+	if rookCephMon == nil {
+		return nil, fmt.Errorf("Failed to create secret on the hub, secret is nil")
+	}
+
+	secretData, err := json.Marshal(rookCephMon.Data)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to marshal secret data err: %v", err)
+	}
+
+	data := make(map[string][]byte)
+	for key, value := range customData {
+		data[key] = value
+	}
+
+	data[utils.SecretDataKey] = secretData
+
+	nSecret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: managedClusterName,
+			Labels: map[string]string{
+				utils.SecretLabelTypeKey: string(labelType),
+			},
+		},
+		Type: utils.SecretLabelTypeKey,
+		Data: data,
+	}
+
+	return &nSecret, nil
+
 }
 
 func createSecret(client kubernetes.Interface, recorder events.Recorder, newSecret *corev1.Secret) error {

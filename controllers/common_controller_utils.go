@@ -175,6 +175,58 @@ func createOrUpdateRamenS3Secret(ctx context.Context, rc client.Client, secret *
 	return nil
 }
 
+func createOrUpdateExternalSecret(ctx context.Context, rc client.Client, secret *corev1.Secret, data map[string][]byte, namespace string) error {
+	logger := log.FromContext(ctx)
+
+	rookToken, err := utils.UnmarshalRookSecret(secret)
+
+	if err != nil {
+		logger.Error(err, "Failed to unmarshal rook secret", "Secret", secret.Name)
+		return err
+	}
+
+	expectedSecret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secret.Name,
+			Namespace: namespace,
+			Labels: map[string]string{
+				utils.CreatedByLabelKey: utils.MirrorPeerSecret,
+			},
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			// May add more parameters for external mode
+			utils.FSID: []byte(rookToken.FSID),
+		},
+	}
+
+	localSecret := corev1.Secret{}
+	namespacedName := types.NamespacedName{
+		Name:      secret.Name,
+		Namespace: namespace,
+	}
+	err = rc.Get(ctx, namespacedName, &localSecret)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			logger.Info("Creating a external; secret", "secret", expectedSecret.Name, "namespace", expectedSecret.Namespace)
+			return rc.Create(ctx, &expectedSecret)
+		}
+		logger.Error(err, "unable to fetch the external secret", "secret", secret.Name, "namespace", namespace)
+		return err
+	}
+
+	if !reflect.DeepEqual(expectedSecret.Data, localSecret.Data) {
+		logger.Info("Updating the external secret", "secret", expectedSecret.Name, "namespace", namespace)
+		_, err := controllerutil.CreateOrUpdate(ctx, rc, &localSecret, func() error {
+			localSecret.Data = expectedSecret.Data
+			return nil
+		})
+		return err
+	}
+
+	return nil
+}
+
 func isS3ProfileManagedPeerRef(clusterPeerRef multiclusterv1alpha1.PeerRef, mirrorPeers []multiclusterv1alpha1.MirrorPeer) bool {
 	for _, mirrorpeer := range mirrorPeers {
 		for _, peerRef := range mirrorpeer.Spec.Items {
@@ -314,6 +366,13 @@ func createOrUpdateSecretsFromInternalSecret(ctx context.Context, rc client.Clie
 		}
 		// update ramen hub operator config using s3 bucket config and ramen s3 secret reference
 		err = updateRamenHubOperatorConfig(ctx, rc, secret, data, mirrorPeers, currentNamespace)
+		if err != nil {
+			return err
+		}
+	}
+	if string(secret.Data[utils.SecretOriginKey]) == utils.OriginMap["RookOrigin"] {
+		currentNamespace := os.Getenv("POD_NAMESPACE")
+		err := createOrUpdateExternalSecret(ctx, rc, secret, data, currentNamespace)
 		if err != nil {
 			return err
 		}
