@@ -29,6 +29,7 @@ const (
 	SecretOriginKey                       = "secret-origin"
 	MirrorPeerSecret                      = "mirrorpeersecret"
 	RookTokenKey                          = "token"
+	ClusterType                           = "cluster_type"
 )
 
 type RookToken struct {

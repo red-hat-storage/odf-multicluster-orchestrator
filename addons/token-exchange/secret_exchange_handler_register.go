@@ -9,7 +9,7 @@ import (
 )
 
 type SecretExchangeHandler struct {
-	RegisteredHandlers map[string]SecretExchangeHandlerInerface
+	RegisteredHandlers map[string]SecretExchangeHandlerInterface
 }
 
 var secretExchangeHandler *SecretExchangeHandler
@@ -33,7 +33,7 @@ func registerHandler(mode multiclusterv1alpha1.DRType, spokeKubeConfig *rest.Con
 	}
 
 	secretExchangeHandler = &SecretExchangeHandler{
-		RegisteredHandlers: make(map[string]SecretExchangeHandlerInerface),
+		RegisteredHandlers: make(map[string]SecretExchangeHandlerInterface),
 	}
 
 	switch mode {

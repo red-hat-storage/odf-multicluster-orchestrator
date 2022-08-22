@@ -59,7 +59,7 @@ func newblueSecretTokenExchangeAgentController(
 	eventFilterFn := func(obj interface{}) bool {
 		isMatched := false
 		for _, handler := range secretExchangeHandler.RegisteredHandlers {
-			isMatched = isMatched || handler.getBlueSecretFilter(obj)
+			_, isMatched = handler.getBlueSecretFilter(obj)
 		}
 		return isMatched
 	}
