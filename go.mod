@@ -1,6 +1,6 @@
 module github.com/red-hat-storage/odf-multicluster-orchestrator
 
-go 1.17
+go 1.18
 
 require (
 	github.com/csi-addons/volume-replication-operator v0.3.0
