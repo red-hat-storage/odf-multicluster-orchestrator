@@ -6,7 +6,7 @@ TMP_DIR=$$(mktemp -d) ;\
 cd $$TMP_DIR ;\
 go mod init tmp ;\
 echo "Downloading $(2)" ;\
-GOBIN=$(PROJECT_DIR)/bin go get $(2) ;\
+GOBIN=$(PROJECT_DIR)/bin go install $(2) ;\
 rm -rf $$TMP_DIR ;\
 }
 endef
@@ -19,7 +19,7 @@ controller-gen: ## Download controller-gen locally if necessary.
 
 KUSTOMIZE = $(CWD)/bin/kustomize
 kustomize: ## Download kustomize locally if necessary.
-	$(call go-get-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v3@v3.8.7)
+	$(call go-get-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v4@v4.5.7)
 
 .PHONY: opm
 OPM = ./bin/opm
@@ -57,7 +57,7 @@ endif
 endif
 
 GOLANGCI_URL := https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh
-GOLANGCI_VERSION := 1.41.1
+GOLANGCI_VERSION := 1.49.0
 
 .PHONY: golangci-bin
 GOLANGCI_BIN := $(CWD)/bin/golangci-lint
