@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	replicationv1alpha1 "github.com/csi-addons/volume-replication-operator/api/v1alpha1"
+	replicationv1alpha1 "github.com/csi-addons/kubernetes-csi-addons/apis/replication.storage/v1alpha1"
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	routev1 "github.com/openshift/api/route/v1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
