@@ -39,8 +39,13 @@ const (
 
 func (rookSecretHandler) getBlueSecretFilter(obj interface{}) (ClusterType, bool) {
 	blueSecretMatchString := os.Getenv("TOKEN_EXCHANGE_SOURCE_SECRET_STRING_MATCH")
+
+	if blueSecretMatchString == "" {
+		blueSecretMatchString = RookDefaultBlueSecretMatchConvergedString
+	}
+
 	if s, ok := obj.(*corev1.Secret); ok {
-		if s.Type == RookType && (strings.Contains(s.ObjectMeta.Name, blueSecretMatchString) || strings.Contains(s.ObjectMeta.Name, RookDefaultBlueSecretMatchConvergedString)) {
+		if s.Type == RookType && strings.Contains(s.ObjectMeta.Name, blueSecretMatchString) {
 			return CONVERGED, true
 		}
 
