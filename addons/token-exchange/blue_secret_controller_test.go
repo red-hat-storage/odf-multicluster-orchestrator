@@ -35,12 +35,11 @@ type testCase struct {
 	syncExpected  bool
 }
 
-func (fakeSecretHandler) getBlueSecretFilter(obj interface{}) (ClusterType, bool) {
-	defaultClusterType := CONVERGED
+func (fakeSecretHandler) getBlueSecretFilter(obj interface{}) bool {
 	if metaObj, has := obj.(metav1.Object); has {
-		return defaultClusterType, metaObj.GetName() == "sourcesecret"
+		return metaObj.GetName() == "sourcesecret"
 	}
-	return defaultClusterType, false
+	return false
 }
 
 func (f fakeSecretHandler) syncBlueSecret(name string, namespace string, c *blueSecretTokenExchangeAgentController) error {
@@ -49,7 +48,7 @@ func (f fakeSecretHandler) syncBlueSecret(name string, namespace string, c *blue
 	if err != nil {
 		return err
 	}
-	if _, ok := f.getBlueSecretFilter(secret); !ok {
+	if ok := f.getBlueSecretFilter(secret); !ok {
 		return fmt.Errorf("not blue secret")
 	}
 	return nil

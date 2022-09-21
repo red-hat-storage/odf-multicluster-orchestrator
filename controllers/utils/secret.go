@@ -29,7 +29,7 @@ const (
 	SecretOriginKey                       = "secret-origin"
 	MirrorPeerSecret                      = "mirrorpeersecret"
 	RookTokenKey                          = "token"
-	ClusterType                           = "cluster_type"
+	ClusterTypeKey                        = "cluster_type"
 )
 
 type RookToken struct {
@@ -38,6 +38,13 @@ type RookToken struct {
 	MonHost   string `json:"mon_host"`
 	ClientId  string `json:"client_id"`
 	Key       string `json:"key"`
+}
+
+type RookTokenExternal struct {
+	CephSecret   string `json:"ceph-secret,omitempty"`
+	CephUsername string `json:"ceph-username,omitempty"`
+	FSID         string `json:"fsid"`
+	MonSecret    string `json:"mon-secret,omitempty"`
 }
 
 type HubToken struct {
@@ -268,6 +275,25 @@ func UnmarshalRookSecret(rookSecret *corev1.Secret) (*RookToken, error) {
 	err = json.Unmarshal(encodedData, &token)
 	if err != nil {
 		return nil, err
+	}
+
+	return &token, nil
+}
+
+func UnmarshalRookSecretExternal(rookSecret *corev1.Secret) (*RookTokenExternal, error) {
+	fsid := string(rookSecret.Data["fsid"])
+
+	cephUsername := string(rookSecret.Data["ceph-username"])
+
+	cephSecret := string(rookSecret.Data["ceph-secret"])
+
+	monSecret := string(rookSecret.Data["mon-secret"])
+
+	token := RookTokenExternal{
+		FSID:         string(fsid),
+		CephSecret:   string(cephSecret),
+		CephUsername: string(cephUsername),
+		MonSecret:    string(monSecret),
 	}
 
 	return &token, nil

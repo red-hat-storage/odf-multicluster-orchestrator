@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"time"
 
 	replicationv1alpha1 "github.com/csi-addons/kubernetes-csi-addons/apis/replication.storage/v1alpha1"
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
@@ -139,7 +140,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		klog.Infof("Fetching clusterFSIDs")
 		err = r.fetchClusterFSIDs(ctx, &mirrorPeer, clusterFSIDs)
 		if err != nil {
-			return ctrl.Result{Requeue: true}, fmt.Errorf("failed to get all cluster FSIDs, retrying again: %v", err)
+			return ctrl.Result{RequeueAfter: 60 * time.Second}, fmt.Errorf("failed to get all cluster FSIDs, retrying again: %v", err)
 		}
 		klog.Infof("enabling async mode dependencies")
 		err = r.enableCSIAddons(ctx, scr.Namespace)
@@ -303,28 +304,61 @@ func (r *MirrorPeerReconciler) toggleCSIAddons(ctx context.Context, namespace st
 
 func (r *MirrorPeerReconciler) fetchClusterFSIDs(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer, clusterFSIDs map[string]string) error {
 	for _, pr := range mp.Spec.Items {
-		var secretName string
+		clusterType, err := utils.GetClusterType(pr.StorageClusterRef.Name, pr.StorageClusterRef.Namespace, r.SpokeClient)
+		if err != nil {
+			return err
+		}
+		secretName := r.getSecretNameByType(clusterType, pr)
+
+		klog.Info("Checking secret ", secretName, "Mode", clusterType)
+		secret, err := utils.FetchSecretWithName(ctx, r.SpokeClient, types.NamespacedName{Name: secretName, Namespace: pr.StorageClusterRef.Namespace})
+		if err != nil {
+			klog.Error(err, "Error while fetching peer secret; ", "peerSecret ", secretName)
+			return err
+		}
+
+		fsid, err := r.getFsidFromSecretByType(clusterType, secret)
+		if err != nil {
+			return err
+		}
+
+		clusterFSIDs[pr.ClusterName] = fsid
+	}
+	return nil
+}
+
+func (r *MirrorPeerReconciler) getFsidFromSecretByType(clusterType utils.ClusterType, secret *corev1.Secret) (string, error) {
+	var fsid string
+	if clusterType == utils.CONVERGED {
+		token, err := utils.UnmarshalRookSecret(secret)
+		if err != nil {
+			klog.Error(err, "Error while unmarshalling converged mode peer secret; ", "peerSecret ", secret.Name)
+			return "", err
+		}
+		fsid = token.FSID
+	} else if clusterType == utils.EXTERNAL {
+		token, err := utils.UnmarshalRookSecretExternal(secret)
+		if err != nil {
+			klog.Error(err, "Error while unmarshalling external mode peer secret; ", "peerSecret ", secret.Name)
+			return "", err
+		}
+		fsid = token.FSID
+	}
+	return fsid, nil
+}
+
+func (r *MirrorPeerReconciler) getSecretNameByType(clusterType utils.ClusterType, pr multiclusterv1alpha1.PeerRef) string {
+	var secretName string
+	if clusterType == utils.CONVERGED {
 		if pr.ClusterName == r.SpokeClusterName {
 			secretName = fmt.Sprintf("cluster-peer-token-%s-cephcluster", pr.StorageClusterRef.Name)
 		} else {
 			secretName = utils.GetSecretNameByPeerRef(pr)
 		}
-		klog.Info("Checking secret ", secretName)
-		secret, err := utils.FetchSecretWithName(ctx, r.SpokeClient, types.NamespacedName{Name: secretName, Namespace: pr.StorageClusterRef.Namespace})
-		if err != nil {
-			klog.Error(err, "Error while fetching peer secret", "peerSecret ", secretName)
-			return err
-		}
-
-		token, err := utils.UnmarshalRookSecret(secret)
-		if err != nil {
-			klog.Error(err, "Error while unmarshalling peer secret", "peerSecret ", secretName)
-			return err
-		}
-
-		clusterFSIDs[pr.ClusterName] = token.FSID
+	} else if clusterType == utils.EXTERNAL {
+		secretName = RookDefaultBlueSecretMatchExternalString
 	}
-	return nil
+	return secretName
 }
 
 func (r *MirrorPeerReconciler) createVolumeReplicationClass(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer, clusterFSIDs map[string]string) []error {

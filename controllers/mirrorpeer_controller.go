@@ -467,7 +467,12 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multicl
 				logger.Error(err, "Failed to fetch rook secret", "Secret", rookSecretName)
 				return err
 			}
-			fsid = string(hs.Data[utils.FSID])
+			rt, err := utils.UnmarshalRookSecretExternal(hs)
+			if err != nil {
+				logger.Error(err, "Failed to unmarshal rook secret", "Secret", rookSecretName)
+				return err
+			}
+			fsid = rt.FSID
 		} else {
 			hs, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: rookSecretName, Namespace: clusterName})
 			if err != nil {
