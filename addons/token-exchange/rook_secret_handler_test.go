@@ -248,7 +248,7 @@ func getExpectedRookBlueSecret(t *testing.T) *corev1.Secret {
 	data[utils.NamespaceKey] = []byte(TestStorageClusterNamespace)
 	data[utils.StorageClusterNameKey] = []byte(TestStorageClusterName)
 	data[utils.SecretOriginKey] = []byte(utils.OriginMap["RookOrigin"])
-	data[utils.ClusterType] = []byte(CONVERGED)
+	data[utils.ClusterTypeKey] = []byte(utils.CONVERGED)
 
 	expectedSecret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{

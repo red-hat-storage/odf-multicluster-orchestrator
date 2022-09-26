@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"reflect"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -164,5 +165,51 @@ func TestUnmarshalS3Secret(t *testing.T) {
 		if actualOutput.S3Region != testCase.expectedOutput.S3Region {
 			t.Errorf("Expected %s, received value %s", testCase.expectedOutput.S3Region, actualOutput.S3Region)
 		}
+	}
+}
+
+var externalSecret = corev1.Secret{
+	ObjectMeta: metav1.ObjectMeta{
+		Name:      "10d0befe9022a438cb7216391c32e6eba32f19f",
+		Namespace: "openshift-storage",
+	},
+	Data: map[string][]byte{
+		"ceph-username": []byte("user1234"),
+		"mon-secret":    []byte("mon-secret-data"),
+		"ceph-secret":   []byte("ceph-secret-data"),
+		"fsid":          []byte("c4c72c03-c0eb-4cfb-8431-30566434eaed"),
+	},
+}
+
+func TestUnmarshalRookSecretExternal(t *testing.T) {
+
+	tests := []struct {
+		name           string
+		input          *corev1.Secret
+		expectedOutput *RookTokenExternal
+	}{
+		{
+			"rook-ceph-mon secret test",
+			&externalSecret,
+			&RookTokenExternal{
+				CephSecret:   "ceph-secret-data",
+				CephUsername: "user1234",
+				FSID:         "c4c72c03-c0eb-4cfb-8431-30566434eaed",
+				MonSecret:    "mon-secret-data",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := UnmarshalRookSecretExternal(tt.input)
+			if err != nil {
+				t.Errorf("UnmarshalRookSecretExternal() error = %v", err)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.expectedOutput) {
+				t.Errorf("UnmarshalRookSecretExternal() got = %v, want %v", got, tt.expectedOutput)
+			}
+		})
 	}
 }

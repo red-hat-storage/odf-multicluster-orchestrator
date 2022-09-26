@@ -29,15 +29,7 @@ const (
 	RookDefaultBlueSecretMatchExternalString  = "rook-ceph-mon"
 )
 
-type ClusterType string
-
-const (
-	CONVERGED ClusterType = "Converged"
-	EXTERNAL  ClusterType = "External"
-	UNKNOWN   ClusterType = "Unknown"
-)
-
-func (rookSecretHandler) getBlueSecretFilter(obj interface{}) (ClusterType, bool) {
+func (rookSecretHandler) getBlueSecretFilter(obj interface{}) bool {
 	blueSecretMatchString := os.Getenv("TOKEN_EXCHANGE_SOURCE_SECRET_STRING_MATCH")
 
 	if blueSecretMatchString == "" {
@@ -46,15 +38,14 @@ func (rookSecretHandler) getBlueSecretFilter(obj interface{}) (ClusterType, bool
 
 	if s, ok := obj.(*corev1.Secret); ok {
 		if s.Type == RookType && strings.Contains(s.ObjectMeta.Name, blueSecretMatchString) {
-			return CONVERGED, true
+			return true
 		}
 
-		// This secret may be present in converged mode too but we are using the above check to override this in case of converged mode.
-		if s.Type == RookType && strings.Contains(s.ObjectMeta.Name, RookDefaultBlueSecretMatchExternalString) {
-			return EXTERNAL, true
+		if s.Type == RookType && s.ObjectMeta.Name == RookDefaultBlueSecretMatchExternalString {
+			return true
 		}
 	}
-	return UNKNOWN, false
+	return false
 }
 
 func (rookSecretHandler) getGreenSecretFilter(obj interface{}) bool {
@@ -71,7 +62,7 @@ func (r rookSecretHandler) syncBlueSecret(name string, namespace string, c *blue
 	if err != nil {
 		return fmt.Errorf("failed to get the secret %q in namespace %q in managed cluster. Error %v", name, namespace, err)
 	}
-	clusterType, isMatch := r.getBlueSecretFilter(secret)
+	isMatch := r.getBlueSecretFilter(secret)
 	if !isMatch {
 		// ignore handler which secret filter is not matched
 		return nil
@@ -82,14 +73,22 @@ func (r rookSecretHandler) syncBlueSecret(name string, namespace string, c *blue
 	if err != nil {
 		return fmt.Errorf("failed to get the storage cluster name from the secret %q in namespace %q in managed cluster. Error %v", name, namespace, err)
 	}
+
+	clusterType, err := utils.GetClusterType(sc, namespace, r.spokeClient)
+	if err != nil {
+		return fmt.Errorf("failed to get the cluster type (converged, external) for the spoke cluster. Error %v", err)
+	}
+
+	klog.Infof("detected cluster type: %s", string(clusterType))
 	var customData map[string][]byte
 	var labelType utils.SecretLabelType
 	var blueSecret *corev1.Secret
 
-	if clusterType == CONVERGED {
+	// Accept secret with converged mode and secret name should not be rook-ceph-mon
+	if clusterType == utils.CONVERGED && secret.Name != RookDefaultBlueSecretMatchExternalString {
 		customData = map[string][]byte{
 			utils.SecretOriginKey: []byte(utils.OriginMap["RookOrigin"]),
-			utils.ClusterType:     []byte(CONVERGED),
+			utils.ClusterTypeKey:  []byte(utils.CONVERGED),
 		}
 		labelType = utils.SourceLabel
 
@@ -97,16 +96,18 @@ func (r rookSecretHandler) syncBlueSecret(name string, namespace string, c *blue
 		if err != nil {
 			return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: %v", secret.Name, secret.Namespace, c.clusterName, err)
 		}
-	} else if clusterType == EXTERNAL {
+		// Accept secret if the cluster is external and secret name is rook-ceph-mon
+	} else if clusterType == utils.EXTERNAL && secret.Name == RookDefaultBlueSecretMatchExternalString {
 		customData = map[string][]byte{
 			utils.SecretOriginKey: []byte(utils.OriginMap["RookOrigin"]),
-			utils.ClusterType:     []byte(EXTERNAL),
+			utils.ClusterTypeKey:  []byte(utils.EXTERNAL),
 		}
 		labelType = utils.InternalLabel
 		blueSecret, err = generateBlueSecretForExternal(secret, labelType, utils.CreateUniqueSecretName(c.clusterName, secret.Namespace, sc), c.clusterName, customData)
 		if err != nil {
 			return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: %v", secret.Name, secret.Namespace, c.clusterName, err)
 		}
+		// If both the parameters above don't match, then it is unknown secret which is either in external or converged mode.
 	} else {
 		return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: ClusterType is unknown, should be converged or external", secret.Name, secret.Namespace, c.clusterName)
 	}

@@ -41,19 +41,19 @@ func getFilterCondition(ownerReferences []metav1.OwnerReference, name string, bl
 	return false
 }
 
-func (s3SecretHandler) getBlueSecretFilter(obj interface{}) (ClusterType, bool) {
+func (s3SecretHandler) getBlueSecretFilter(obj interface{}) bool {
 	blueSecretMatchString := os.Getenv("S3_EXCHANGE_SOURCE_SECRET_STRING_MATCH")
 	if blueSecretMatchString == "" {
 		blueSecretMatchString = utils.BucketGenerateName
 	}
-	defaultClusterType := CONVERGED
+
 	if s, ok := obj.(*corev1.Secret); ok {
-		return defaultClusterType, getFilterCondition(s.OwnerReferences, s.ObjectMeta.Name, blueSecretMatchString)
+		return getFilterCondition(s.OwnerReferences, s.ObjectMeta.Name, blueSecretMatchString)
 	} else if c, ok := obj.(*corev1.ConfigMap); ok {
-		return defaultClusterType, getFilterCondition(c.OwnerReferences, c.ObjectMeta.Name, blueSecretMatchString)
+		return getFilterCondition(c.OwnerReferences, c.ObjectMeta.Name, blueSecretMatchString)
 	}
 
-	return defaultClusterType, false
+	return false
 }
 
 func (s3SecretHandler) getGreenSecretFilter(obj interface{}) bool {
@@ -67,7 +67,7 @@ func (s s3SecretHandler) syncBlueSecret(name string, namespace string, c *blueSe
 	if err != nil {
 		return fmt.Errorf("failed to get the secret %q in namespace %q in managed cluster. Error %v", name, namespace, err)
 	}
-	_, isMatch := s.getBlueSecretFilter(secret)
+	isMatch := s.getBlueSecretFilter(secret)
 	if !isMatch {
 		// ignore handler which secret filter is not matched
 		return nil
@@ -78,7 +78,7 @@ func (s s3SecretHandler) syncBlueSecret(name string, namespace string, c *blueSe
 	if err != nil {
 		return fmt.Errorf("failed to get the config map %q in namespace %q in managed cluster. Error %v", name, namespace, err)
 	}
-	_, isMatch = s.getBlueSecretFilter(configMap)
+	isMatch = s.getBlueSecretFilter(configMap)
 	if !isMatch {
 		// ignore handler which configmap filter is not matched
 		return nil
