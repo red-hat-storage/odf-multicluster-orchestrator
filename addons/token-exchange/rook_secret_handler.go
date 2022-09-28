@@ -26,7 +26,7 @@ type rookSecretHandler struct {
 const (
 	RookType                                  = "kubernetes.io/rook"
 	RookDefaultBlueSecretMatchConvergedString = "cluster-peer-token"
-	RookDefaultBlueSecretMatchExternalString  = "rook-ceph-mon"
+	DefaultExternalSecretName                 = "rook-ceph-mon"
 )
 
 func (rookSecretHandler) getBlueSecretFilter(obj interface{}) bool {
@@ -41,7 +41,7 @@ func (rookSecretHandler) getBlueSecretFilter(obj interface{}) bool {
 			return true
 		}
 
-		if s.Type == RookType && s.ObjectMeta.Name == RookDefaultBlueSecretMatchExternalString {
+		if s.Type == RookType && s.ObjectMeta.Name == DefaultExternalSecretName {
 			return true
 		}
 	}
@@ -67,6 +67,7 @@ func (r rookSecretHandler) syncBlueSecret(name string, namespace string, c *blue
 		// ignore handler which secret filter is not matched
 		return nil
 	}
+	klog.Infof("detected secret %s in %s namespace", name, namespace)
 
 	// fetch storage cluster name
 	sc, err := getStorageClusterFromRookSecret(secret, r.rookClient)
@@ -85,7 +86,7 @@ func (r rookSecretHandler) syncBlueSecret(name string, namespace string, c *blue
 	var blueSecret *corev1.Secret
 
 	// Accept secret with converged mode and secret name should not be rook-ceph-mon
-	if clusterType == utils.CONVERGED && secret.Name != RookDefaultBlueSecretMatchExternalString {
+	if clusterType == utils.CONVERGED && secret.Name != DefaultExternalSecretName {
 		customData = map[string][]byte{
 			utils.SecretOriginKey: []byte(utils.OriginMap["RookOrigin"]),
 			utils.ClusterTypeKey:  []byte(utils.CONVERGED),
@@ -97,7 +98,7 @@ func (r rookSecretHandler) syncBlueSecret(name string, namespace string, c *blue
 			return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: %v", secret.Name, secret.Namespace, c.clusterName, err)
 		}
 		// Accept secret if the cluster is external and secret name is rook-ceph-mon
-	} else if clusterType == utils.EXTERNAL && secret.Name == RookDefaultBlueSecretMatchExternalString {
+	} else if clusterType == utils.EXTERNAL && secret.Name == DefaultExternalSecretName {
 		customData = map[string][]byte{
 			utils.SecretOriginKey: []byte(utils.OriginMap["RookOrigin"]),
 			utils.ClusterTypeKey:  []byte(utils.EXTERNAL),
@@ -108,7 +109,11 @@ func (r rookSecretHandler) syncBlueSecret(name string, namespace string, c *blue
 			return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: %v", secret.Name, secret.Namespace, c.clusterName, err)
 		}
 		// If both the parameters above don't match, then it is unknown secret which is either in external or converged mode.
+	} else if clusterType == utils.CONVERGED && secret.Name == DefaultExternalSecretName {
+		// detects rook-ceph-mon in converged mode cluster. Likely scenario but we do not need to process this secret.
+		return nil
 	} else {
+		// any other case than the above
 		return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: ClusterType is unknown, should be converged or external", secret.Name, secret.Namespace, c.clusterName)
 	}
 

@@ -148,7 +148,6 @@ func TestMirrorPeerReconcile(t *testing.T) {
 		// Need to initialize this map otherwise it panics during reconcile
 		rcm.Data = make(map[string]string)
 		rcm.Data[RookCSIEnableKey] = "false"
-		rcm.Data[RookVolumeRepKey] = "false"
 
 		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&storageCluster, &rcm, &clusterPeerToken, &exchangedSecret1, &exchangedSecret2, rbdStorageClass, cephfsStorageClass).Build()
 
@@ -177,8 +176,8 @@ func TestMirrorPeerReconcile(t *testing.T) {
 			t.Errorf("Failed to get rook config map %s Error: %s", rcm.Name, err)
 		}
 
-		if foundRcm.Data[RookCSIEnableKey] != "true" || foundRcm.Data[RookVolumeRepKey] != "true" {
-			t.Errorf("Values for %s and %s in %s are not set correctly", RookCSIEnableKey, RookVolumeRepKey, foundRcm.Name)
+		if foundRcm.Data[RookCSIEnableKey] != "true" {
+			t.Errorf("Values for %s in %s is not set correctly", RookCSIEnableKey, foundRcm.Name)
 		}
 
 		var foundSc ocsv1.StorageCluster
@@ -283,45 +282,6 @@ func TestDisableMirroring(t *testing.T) {
 
 		if sc.Spec.Mirroring.Enabled {
 			t.Error("failed to disable mirroring")
-		}
-	}
-}
-
-func TestDisableCSIAddons(t *testing.T) {
-	ctx := context.TODO()
-	scheme := mgrScheme
-	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer1).Build()
-	for _, pr := range mirrorpeer1.Spec.Items {
-		rcm := corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      RookConfigMapName,
-				Namespace: pr.StorageClusterRef.Namespace,
-			},
-		}
-
-		// Need to initialize this map otherwise it panics during reconcile
-		rcm.Data = make(map[string]string)
-		rcm.Data[RookCSIEnableKey] = "true"
-		rcm.Data[RookVolumeRepKey] = "true"
-
-		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&rcm).Build()
-		r := MirrorPeerReconciler{
-			HubClient:        fakeHubClient,
-			SpokeClient:      fakeSpokeClient,
-			Scheme:           scheme,
-			SpokeClusterName: pr.ClusterName,
-		}
-		if err := r.disableCSIAddons(ctx, pr.StorageClusterRef.Namespace); err != nil {
-			t.Error("failed to disable volume replication in CSI addons", err)
-		}
-		if err := r.SpokeClient.Get(ctx, types.NamespacedName{
-			Name:      RookConfigMapName,
-			Namespace: pr.StorageClusterRef.Namespace,
-		}, &rcm); err != nil {
-			t.Error("failed to get rook config map", err)
-		}
-		if rcm.Data[RookCSIEnableKey] != "false" && rcm.Data[RookVolumeRepKey] != "false" {
-			t.Error("failed to disable volume replication in CSI addons")
 		}
 	}
 }

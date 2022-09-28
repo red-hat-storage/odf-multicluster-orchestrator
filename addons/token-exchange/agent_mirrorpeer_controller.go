@@ -21,10 +21,6 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	"sort"
-	"strconv"
-	"time"
-
 	replicationv1alpha1 "github.com/csi-addons/kubernetes-csi-addons/apis/replication.storage/v1alpha1"
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
@@ -42,6 +38,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sort"
+	"strconv"
+	"time"
 )
 
 // MirrorPeerReconciler reconciles a MirrorPeer object
@@ -54,7 +53,6 @@ type MirrorPeerReconciler struct {
 
 const (
 	RookCSIEnableKey                      = "CSI_ENABLE_OMAP_GENERATOR"
-	RookVolumeRepKey                      = "CSI_ENABLE_VOLUME_REPLICATION"
 	MirroringModeKey                      = "mirroringMode"
 	SchedulingIntervalKey                 = "schedulingInterval"
 	ReplicationSecretNameKey              = "replication.storage.openshift.io/replication-secret-name"
@@ -135,13 +133,14 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
+	klog.Infof("creating s3 buckets")
+	err = r.createS3(ctx, req, mirrorPeer, scr.Namespace)
+	if err != nil {
+		klog.Error(err, "Failed to create ODR S3 resources")
+		return ctrl.Result{}, err
+	}
+
 	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
-		clusterFSIDs := make(map[string]string)
-		klog.Infof("Fetching clusterFSIDs")
-		err = r.fetchClusterFSIDs(ctx, &mirrorPeer, clusterFSIDs)
-		if err != nil {
-			return ctrl.Result{RequeueAfter: 60 * time.Second}, fmt.Errorf("failed to get all cluster FSIDs, retrying again: %v", err)
-		}
 		klog.Infof("enabling async mode dependencies")
 		err = r.enableCSIAddons(ctx, scr.Namespace)
 		if err != nil {
@@ -151,6 +150,16 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		err = r.enableMirroring(ctx, scr.Name, scr.Namespace, &mirrorPeer)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to enable mirroring the storagecluster %q in namespace %q in managed cluster. Error %v", scr.Name, scr.Namespace, err)
+		}
+
+		clusterFSIDs := make(map[string]string)
+		klog.Infof("Fetching clusterFSIDs")
+		err = r.fetchClusterFSIDs(ctx, &mirrorPeer, clusterFSIDs)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
+			}
+			return ctrl.Result{}, fmt.Errorf("an unknown error occured while fetching the cluster fsids, retrying again: %v", err)
 		}
 
 		errs := r.createVolumeReplicationClass(ctx, &mirrorPeer, clusterFSIDs)
@@ -163,13 +172,6 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if len(errs) > 0 {
 			return ctrl.Result{}, fmt.Errorf("few failures occured while labeling RBD StorageClasses: %v", errs)
 		}
-	}
-
-	klog.Infof("creating s3 buckets")
-	err = r.createS3(ctx, req, mirrorPeer, scr.Namespace)
-	if err != nil {
-		klog.Error(err, "Failed to create ODR S3 resources")
-		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
@@ -296,8 +298,10 @@ func (r *MirrorPeerReconciler) toggleCSIAddons(ctx context.Context, namespace st
 		return err
 	}
 
+	if rcm.Data == nil {
+		rcm.Data = make(map[string]string, 0)
+	}
 	rcm.Data[RookCSIEnableKey] = strconv.FormatBool(enabled)
-	rcm.Data[RookVolumeRepKey] = strconv.FormatBool(enabled)
 
 	return r.SpokeClient.Update(ctx, &rcm)
 }
@@ -310,10 +314,9 @@ func (r *MirrorPeerReconciler) fetchClusterFSIDs(ctx context.Context, mp *multic
 		}
 		secretName := r.getSecretNameByType(clusterType, pr)
 
-		klog.Info("Checking secret ", secretName, "Mode", clusterType)
+		klog.Info("Checking secret: ", secretName, " Mode:", clusterType)
 		secret, err := utils.FetchSecretWithName(ctx, r.SpokeClient, types.NamespacedName{Name: secretName, Namespace: pr.StorageClusterRef.Namespace})
 		if err != nil {
-			klog.Error(err, "Error while fetching peer secret; ", "peerSecret ", secretName)
 			return err
 		}
 
@@ -356,7 +359,7 @@ func (r *MirrorPeerReconciler) getSecretNameByType(clusterType utils.ClusterType
 			secretName = utils.GetSecretNameByPeerRef(pr)
 		}
 	} else if clusterType == utils.EXTERNAL {
-		secretName = RookDefaultBlueSecretMatchExternalString
+		secretName = DefaultExternalSecretName
 	}
 	return secretName
 }
