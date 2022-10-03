@@ -205,6 +205,10 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 			err = r.Client.Get(ctx, namespacedName, &s3Secret)
 			if err != nil {
+				if k8serrors.IsNotFound(err) {
+					logger.Info("s3 secret is not yet synchronised. retrying till it is available", "peerref", peerRef.ClusterName, "MirrorPeer", mirrorPeer)
+					return ctrl.Result{Requeue: true}, nil
+				}
 				logger.Error(err, "error in fetching s3 internal secret", "peerref", peerRef.ClusterName, "MirrorPeer", mirrorPeer)
 				return ctrl.Result{}, err
 			}
@@ -223,8 +227,8 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	err = r.createDRClusters(ctx, &mirrorPeer)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			logger.Info("resource not found, retrying to create DRCluster", "MirrorPeer", mirrorPeer)
-			return ctrl.Result{}, nil
+			logger.Info("secret not synchronised yet, retrying to create DRCluster", "MirrorPeer", mirrorPeer)
+			return ctrl.Result{Requeue: true}, nil
 		}
 		logger.Error(err, "failed to create DRClusters for MirrorPeer", "MirrorPeer", mirrorPeer.Name)
 		return ctrl.Result{}, err
@@ -462,11 +466,12 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multicl
 
 		var fsid string
 		if mp.Spec.Type == multiclusterv1alpha1.Sync {
+			logger.Info("Fetching rook secret ", "Secret Name:", rookSecretName)
 			hs, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: rookSecretName, Namespace: currentNamespace})
 			if err != nil {
-				logger.Error(err, "Failed to fetch rook secret", "Secret", rookSecretName)
 				return err
 			}
+			logger.Info("Unmarshalling rook secret ", "Secret Name:", rookSecretName)
 			rt, err := utils.UnmarshalRookSecretExternal(hs)
 			if err != nil {
 				logger.Error(err, "Failed to unmarshal rook secret", "Secret", rookSecretName)
@@ -474,11 +479,12 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multicl
 			}
 			fsid = rt.FSID
 		} else {
+			logger.Info("Fetching rook secret ", "Secret Name:", rookSecretName)
 			hs, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: rookSecretName, Namespace: clusterName})
 			if err != nil {
-				logger.Error(err, "Failed to fetch rook secret", "Secret", rookSecretName)
 				return err
 			}
+			logger.Info("Unmarshalling rook secret ", "Secret Name:", rookSecretName)
 			rt, err := utils.UnmarshalHubSecret(hs)
 			if err != nil {
 				logger.Error(err, "Failed to unmarshal rook secret", "Secret", rookSecretName)
@@ -488,18 +494,19 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multicl
 		}
 
 		dc.Spec.Region = ramenv1alpha1.Region(fsid)
+		logger.Info("Fetching s3 secret ", "Secret Name:", s3SecretName)
 		ss, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: s3SecretName, Namespace: clusterName})
 		if err != nil {
-			logger.Error(err, "Failed to fetch s3 secret", "Secret", s3SecretName)
 			return err
 		}
 
+		logger.Info("Unmarshalling s3 secret ", "Secret Name:", s3SecretName)
 		st, err := utils.UnmarshalS3Secret(ss)
 		if err != nil {
-			logger.Error(err, "Failed to unmarshal s3 secret", "Secret", s3SecretName)
 			return err
 		}
 
+		logger.Info("creating and updating dr clusters")
 		_, err = controllerutil.CreateOrUpdate(ctx, r.Client, &dc, func() error {
 			dc.Spec.S3ProfileName = st.S3ProfileName
 			return nil
