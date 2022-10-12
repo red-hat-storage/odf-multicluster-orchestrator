@@ -3,13 +3,13 @@ module github.com/red-hat-storage/odf-multicluster-orchestrator
 go 1.18
 
 require (
-	github.com/csi-addons/kubernetes-csi-addons v0.5.0
+	github.com/csi-addons/kubernetes-csi-addons v0.5.1-0.20220913110921-9fff8e43e344
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20220420154035-5eb5ff03d30a
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.20.1
+	github.com/onsi/gomega v1.20.2
 	github.com/openshift/api v3.9.1-0.20191111211345-a27ff30ebf09+incompatible
 	github.com/openshift/library-go v0.0.0-20220902131052-245d1ca16d15
-	github.com/ramendr/ramen v0.0.0-20220526174239-bcee5ec314d8
+	github.com/ramendr/ramen v0.0.0-20221004165615-ba6b6b454658
 	github.com/red-hat-storage/ocs-operator v0.4.10
 	github.com/rook/rook v1.9.4
 	github.com/spf13/cobra v1.4.0
@@ -18,10 +18,10 @@ require (
 	k8s.io/api v0.25.0
 	k8s.io/apimachinery v0.25.0
 	k8s.io/client-go v0.25.0
-	k8s.io/klog/v2 v2.70.1
+	k8s.io/klog/v2 v2.80.1
 	open-cluster-management.io/addon-framework v0.4.0
 	open-cluster-management.io/api v0.8.0
-	sigs.k8s.io/controller-runtime v0.12.3
+	sigs.k8s.io/controller-runtime v0.13.0
 	sigs.k8s.io/yaml v1.3.0
 )
 
@@ -50,6 +50,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/emicklei/go-restful/v3 v3.9.0 // indirect
 	github.com/evanphx/json-patch v5.6.0+incompatible // indirect
+	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/felixge/httpsnoop v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
@@ -124,7 +125,7 @@ require (
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/stolostron/multicloud-operators-placementrule v1.2.4-0-20220112-8eedb3f // indirect
+	github.com/stolostron/multicloud-operators-placementrule v1.2.4-1-20220311-8eedb3f.0.20220411162042-3de0a2f908f1 // indirect
 	go.etcd.io/etcd/api/v3 v3.5.4 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.5.4 // indirect
 	go.etcd.io/etcd/client/v3 v3.5.4 // indirect
