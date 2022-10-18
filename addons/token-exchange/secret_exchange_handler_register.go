@@ -16,6 +16,9 @@ var secretExchangeHandler *SecretExchangeHandler
 
 // intialize secretExchangeHandler with handlers
 func registerHandler(mode multiclusterv1alpha1.DRType, spokeKubeConfig *rest.Config, hubKubeConfig *rest.Config) error {
+	if mode != multiclusterv1alpha1.Sync && mode != multiclusterv1alpha1.Async {
+		return fmt.Errorf("unknown mode %q detected, please check the mirrorpeer created", mode)
+	}
 	// rook specific client
 	rookClient, err := rookclient.NewForConfig(spokeKubeConfig)
 	if err != nil {
@@ -36,24 +39,14 @@ func registerHandler(mode multiclusterv1alpha1.DRType, spokeKubeConfig *rest.Con
 		RegisteredHandlers: make(map[string]SecretExchangeHandlerInterface),
 	}
 
-	switch mode {
-	case multiclusterv1alpha1.Async:
-		secretExchangeHandler.RegisteredHandlers[utils.RookSecretHandlerName] = rookSecretHandler{
-			rookClient:  rookClient,
-			spokeClient: genericSpokeClient,
-			hubClient:   genericHubClient,
-		}
-		secretExchangeHandler.RegisteredHandlers[utils.S3SecretHandlerName] = s3SecretHandler{
-			spokeClient: genericSpokeClient,
-			hubClient:   genericHubClient,
-		}
-	case multiclusterv1alpha1.Sync:
-		secretExchangeHandler.RegisteredHandlers[utils.S3SecretHandlerName] = s3SecretHandler{
-			spokeClient: genericSpokeClient,
-			hubClient:   genericHubClient,
-		}
-	default:
-		return fmt.Errorf("unsupported DR mode: %v", mode)
+	secretExchangeHandler.RegisteredHandlers[utils.S3SecretHandlerName] = s3SecretHandler{
+		spokeClient: genericSpokeClient,
+		hubClient:   genericHubClient,
+	}
+	secretExchangeHandler.RegisteredHandlers[utils.RookSecretHandlerName] = rookSecretHandler{
+		rookClient:  rookClient,
+		spokeClient: genericSpokeClient,
+		hubClient:   genericHubClient,
 	}
 
 	return nil
