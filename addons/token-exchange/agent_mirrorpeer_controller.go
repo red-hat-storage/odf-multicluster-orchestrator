@@ -21,6 +21,10 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"sort"
+	"strconv"
+	"time"
+
 	replicationv1alpha1 "github.com/csi-addons/kubernetes-csi-addons/apis/replication.storage/v1alpha1"
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
@@ -38,9 +42,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sort"
-	"strconv"
-	"time"
 )
 
 // MirrorPeerReconciler reconciles a MirrorPeer object

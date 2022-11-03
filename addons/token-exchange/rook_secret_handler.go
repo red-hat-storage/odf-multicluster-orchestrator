@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"os"
 	"strings"
+
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	rookclient "github.com/rook/rook/pkg/client/clientset/versioned"
@@ -37,12 +38,20 @@ func (rookSecretHandler) getBlueSecretFilter(obj interface{}) bool {
 	}
 
 	if s, ok := obj.(*corev1.Secret); ok {
-		if s.Type == RookType && strings.Contains(s.ObjectMeta.Name, blueSecretMatchString) {
-			return true
+		if strings.Contains(s.ObjectMeta.Name, blueSecretMatchString) {
+			for _, owner := range s.ObjectMeta.OwnerReferences {
+				if owner.Kind == "CephCluster" {
+					return true
+				}
+			}
 		}
 
-		if s.Type == RookType && s.ObjectMeta.Name == DefaultExternalSecretName {
-			return true
+		if s.ObjectMeta.Name == DefaultExternalSecretName {
+			for _, owner := range s.ObjectMeta.OwnerReferences {
+				if owner.Kind == "StorageCluster" {
+					return true
+				}
+			}
 		}
 	}
 	return false
@@ -104,7 +113,7 @@ func (r rookSecretHandler) syncBlueSecret(name string, namespace string, c *blue
 			utils.ClusterTypeKey:  []byte(utils.EXTERNAL),
 		}
 		labelType = utils.InternalLabel
-		blueSecret, err = generateBlueSecretForExternal(secret, labelType, utils.CreateUniqueSecretName(c.clusterName, secret.Namespace, sc), c.clusterName, customData)
+		blueSecret, err = generateBlueSecretForExternal(secret, labelType, utils.CreateUniqueSecretName(c.clusterName, secret.Namespace, sc), sc, c.clusterName, customData)
 		if err != nil {
 			return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: %v", secret.Name, secret.Namespace, c.clusterName, err)
 		}
@@ -116,7 +125,6 @@ func (r rookSecretHandler) syncBlueSecret(name string, namespace string, c *blue
 		// any other case than the above
 		return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: ClusterType is unknown, should be converged or external", secret.Name, secret.Namespace, c.clusterName)
 	}
-
 	err = createSecret(c.hubKubeClient, c.recorder, blueSecret)
 	if err != nil {
 		return fmt.Errorf("failed to sync managed cluster secret %q from namespace %v to the hub cluster in namespace %q err: %v", name, namespace, c.clusterName, err)
@@ -172,20 +180,25 @@ func (r rookSecretHandler) syncGreenSecret(name string, namespace string, c *gre
 
 func getStorageClusterFromRookSecret(secret *corev1.Secret, rclient rookclient.Interface) (storageCluster string, err error) {
 	for _, v := range secret.ObjectMeta.OwnerReferences {
-		if v.Kind != "CephCluster" {
+		if v.Kind != "CephCluster" && v.Kind != "StorageCluster" {
 			continue
 		}
 
-		found, err := rclient.CephV1().CephClusters(secret.Namespace).Get(context.TODO(), v.Name, metav1.GetOptions{})
-		if err != nil {
-			return "", fmt.Errorf("unable to fetch ceph cluster err: %v", err)
-		}
-
-		for _, owner := range found.ObjectMeta.OwnerReferences {
-			if owner.Kind != "StorageCluster" {
-				continue
+		if v.Kind == "CephCluster" {
+			found, err := rclient.CephV1().CephClusters(secret.Namespace).Get(context.TODO(), v.Name, metav1.GetOptions{})
+			if err != nil {
+				return "", fmt.Errorf("unable to fetch ceph cluster err: %v", err)
 			}
-			storageCluster = owner.Name
+
+			for _, owner := range found.ObjectMeta.OwnerReferences {
+				if owner.Kind != "StorageCluster" {
+					continue
+				}
+				storageCluster = owner.Name
+			}
+
+		} else if v.Kind == "StorageCluster" {
+			storageCluster = v.Name
 		}
 
 		if storageCluster != "" {

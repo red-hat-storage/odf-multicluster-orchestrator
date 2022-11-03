@@ -72,7 +72,7 @@ func generateBlueSecret(secret *corev1.Secret, secretType utils.SecretLabelType,
 	return &nSecret, nil
 }
 
-func generateBlueSecretForExternal(rookCephMon *corev1.Secret, labelType utils.SecretLabelType, name string, managedClusterName string, customData map[string][]byte) (*corev1.Secret, error) {
+func generateBlueSecretForExternal(rookCephMon *corev1.Secret, labelType utils.SecretLabelType, name string, sc string, managedClusterName string, customData map[string][]byte) (*corev1.Secret, error) {
 	if rookCephMon == nil {
 		return nil, fmt.Errorf("Failed to create secret on the hub, secret is nil")
 	}
@@ -83,6 +83,8 @@ func generateBlueSecretForExternal(rookCephMon *corev1.Secret, labelType utils.S
 	}
 
 	data := make(map[string][]byte)
+	data[utils.NamespaceKey] = []byte(rookCephMon.Namespace)
+	data[utils.StorageClusterNameKey] = []byte(sc)
 	for key, value := range customData {
 		data[key] = value
 	}
