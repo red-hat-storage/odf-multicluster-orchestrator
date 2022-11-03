@@ -27,11 +27,12 @@ import (
 )
 
 var (
-	TestManagedClusterName      = "test"
-	TestStorageClusterName      = "StorageCluster"
-	TestCephClusterName         = "CephCluter"
-	TestStorageClusterNamespace = "spokeNS"
-	TestPeerTokenSecretName     = "cluster-peer-token-ocs-storagecluster-cephcluster"
+	TestManagedClusterName         = "test"
+	TestStorageClusterName         = "StorageCluster"
+	TestExternalStorageClusterName = "ExternalStorageCluster"
+	TestCephClusterName            = "CephCluter"
+	TestStorageClusterNamespace    = "spokeNS"
+	TestPeerTokenSecretName        = "cluster-peer-token-ocs-storagecluster-cephcluster"
 )
 
 func fakeSpokeClientForGreenSecret(t *testing.T) client.Client {
@@ -44,6 +45,20 @@ func fakeSpokeClientForGreenSecret(t *testing.T) client.Client {
 			Spec: ocsv1.StorageClusterSpec{
 				Mirroring: ocsv1.MirroringSpec{
 					PeerSecretNames: []string{},
+				},
+			},
+		},
+		&ocsv1.StorageCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      TestExternalStorageClusterName,
+				Namespace: TestStorageClusterNamespace,
+			},
+			Spec: ocsv1.StorageClusterSpec{
+				Mirroring: ocsv1.MirroringSpec{
+					PeerSecretNames: []string{},
+				},
+				ExternalStorage: ocsv1.ExternalStorageClusterSpec{
+					Enable: true,
 				},
 			},
 		},
@@ -80,6 +95,16 @@ func getFakeToken() map[string][]byte {
 	return map[string][]byte{"token": []byte("fakeToken")}
 }
 
+func getFakeExternalClusterSecretData() map[string][]byte {
+	return map[string][]byte{
+		"admin-secret":  []byte("fakeAdminSecret"),
+		"ceph-secret":   []byte("fakeCephSecret"),
+		"ceph-username": []byte("fakeCephUserName"),
+		"fsid":          []byte("fakeFSID"),
+		"mon-secret":    []byte("fakeMonSecret"),
+	}
+}
+
 func fakeSecretData(t *testing.T) []byte {
 	tokenBytes, err := json.Marshal(getFakeToken())
 	assert.NoError(t, err)
@@ -100,6 +125,20 @@ func getFakeRookBlueSecretExchangeController(t *testing.T) *blueSecretTokenExcha
 				},
 			},
 			Data: getFakeToken(),
+			Type: RookType,
+		},
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      DefaultExternalSecretName,
+				Namespace: TestStorageClusterNamespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						Kind: "StorageCluster",
+						Name: TestExternalStorageClusterName,
+					},
+				},
+			},
+			Data: getFakeExternalClusterSecretData(),
 			Type: RookType,
 		},
 	}
@@ -265,6 +304,32 @@ func getExpectedRookBlueSecret(t *testing.T) *corev1.Secret {
 	return &expectedSecret
 }
 
+func getExpectedExternalClusterRookBlueSecret(t *testing.T) *corev1.Secret {
+	secretData, err := json.Marshal(getFakeExternalClusterSecretData())
+	assert.NoError(t, err)
+
+	data := make(map[string][]byte)
+	data[utils.SecretDataKey] = secretData
+	data[utils.NamespaceKey] = []byte(TestStorageClusterNamespace)
+	data[utils.StorageClusterNameKey] = []byte(TestExternalStorageClusterName)
+	data[utils.SecretOriginKey] = []byte(utils.OriginMap["RookOrigin"])
+	data[utils.ClusterTypeKey] = []byte(utils.EXTERNAL)
+
+	expectedSecret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      utils.CreateUniqueSecretName(TestManagedClusterName, TestStorageClusterNamespace, TestExternalStorageClusterName),
+			Namespace: TestManagedClusterName,
+			Labels: map[string]string{
+				utils.SecretLabelTypeKey: string(utils.InternalLabel),
+			},
+		},
+		Type: utils.SecretLabelTypeKey,
+		Data: data,
+	}
+
+	return &expectedSecret
+}
+
 func TestRookBlueSecretSnyc(t *testing.T) {
 	rookHandler := rookSecretHandler{
 		spokeClient: fakeSpokeClientForGreenSecret(t),
@@ -289,6 +354,12 @@ func TestRookBlueSecretSnyc(t *testing.T) {
 			errExpected:   false,
 			syncExpected:  true,
 		},
+		{
+			name:          "blue secret for external cluster created in hub",
+			namespaceName: fmt.Sprintf("%s/%s", TestStorageClusterNamespace, DefaultExternalSecretName),
+			errExpected:   false,
+			syncExpected:  true,
+		},
 	}
 
 	registerFakeSecretHandler()
@@ -304,9 +375,15 @@ func TestRookBlueSecretSnyc(t *testing.T) {
 				assert.NoError(t, err)
 			}
 			if c.syncExpected {
-				actualSecret, err := fakeCtrl.hubKubeClient.CoreV1().Secrets(TestManagedClusterName).Get(context.TODO(), utils.CreateUniqueSecretName(TestManagedClusterName, TestStorageClusterNamespace, TestStorageClusterName), metav1.GetOptions{})
-				assert.NoError(t, err)
-				assert.True(t, reflect.DeepEqual(getExpectedRookBlueSecret(t), actualSecret))
+				if name == DefaultExternalSecretName {
+					actualSecret, err := fakeCtrl.hubKubeClient.CoreV1().Secrets(TestManagedClusterName).Get(context.TODO(), utils.CreateUniqueSecretName(TestManagedClusterName, TestStorageClusterNamespace, TestExternalStorageClusterName), metav1.GetOptions{})
+					assert.NoError(t, err)
+					assert.True(t, reflect.DeepEqual(getExpectedExternalClusterRookBlueSecret(t), actualSecret))
+				} else {
+					actualSecret, err := fakeCtrl.hubKubeClient.CoreV1().Secrets(TestManagedClusterName).Get(context.TODO(), utils.CreateUniqueSecretName(TestManagedClusterName, TestStorageClusterNamespace, TestStorageClusterName), metav1.GetOptions{})
+					assert.NoError(t, err)
+					assert.True(t, reflect.DeepEqual(getExpectedRookBlueSecret(t), actualSecret))
+				}
 			} else {
 				assert.Error(t, err)
 			}
