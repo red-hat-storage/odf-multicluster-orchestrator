@@ -178,13 +178,6 @@ func createOrUpdateRamenS3Secret(ctx context.Context, rc client.Client, secret *
 func createOrUpdateExternalSecret(ctx context.Context, rc client.Client, secret *corev1.Secret, data map[string][]byte, namespace string) error {
 	logger := log.FromContext(ctx)
 
-	rookToken, err := utils.UnmarshalRookSecret(secret)
-
-	if err != nil {
-		logger.Error(err, "Failed to unmarshal rook secret", "Secret", secret.Name)
-		return err
-	}
-
 	expectedSecret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secret.Name,
@@ -196,7 +189,7 @@ func createOrUpdateExternalSecret(ctx context.Context, rc client.Client, secret 
 		Type: corev1.SecretTypeOpaque,
 		Data: map[string][]byte{
 			// May add more parameters for external mode
-			utils.FSID: []byte(rookToken.FSID),
+			"fsid": data["fsid"],
 		},
 	}
 
@@ -205,7 +198,7 @@ func createOrUpdateExternalSecret(ctx context.Context, rc client.Client, secret 
 		Name:      secret.Name,
 		Namespace: namespace,
 	}
-	err = rc.Get(ctx, namespacedName, &localSecret)
+	err := rc.Get(ctx, namespacedName, &localSecret)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.Info("Creating a external; secret", "secret", expectedSecret.Name, "namespace", expectedSecret.Namespace)
