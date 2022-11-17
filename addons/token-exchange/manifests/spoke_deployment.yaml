@@ -24,6 +24,18 @@ spec:
       - name: token-exchange-agent
         image: {{ .Image }}
         imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          failureThreshold: 3
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8000
+          failureThreshold: 3
+          periodSeconds: 10
         command:
         - "/manager"
         args:
