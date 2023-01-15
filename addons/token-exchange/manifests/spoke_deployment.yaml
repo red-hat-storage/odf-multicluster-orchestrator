@@ -29,13 +29,15 @@ spec:
             path: /healthz
             port: 8000
           failureThreshold: 3
-          periodSeconds: 10
+          periodSeconds: 30
+          initialDelaySeconds: 60
         readinessProbe:
           httpGet:
             path: /readyz
             port: 8000
           failureThreshold: 3
-          periodSeconds: 10
+          periodSeconds: 30
+          initialDelaySeconds: 60
         command:
         - "/manager"
         args:
