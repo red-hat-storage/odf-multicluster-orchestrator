@@ -105,7 +105,11 @@ bundle: manifests kustomize operator-sdk ## Generate bundle manifests and metada
 	cd config/manifests/bases && $(KUSTOMIZE) edit add annotation --force 'olm.skipRange':"$(SKIP_RANGE)" && \
 		$(KUSTOMIZE) edit add patch --name odf-multicluster-orchestrator.v0.0.0 --kind ClusterServiceVersion\
 		--patch '[{"op": "replace", "path": "/spec/replaces", "value": "$(REPLACES)"}]'
+ifeq ($(FUSION) , true)
+	export IMG=$(IMG) MULTICLUSTER_CONSOLE_IMG=$(MULTICLUSTER_CONSOLE_IMG) && $(KUSTOMIZE) build config/fusion | envsubst | $(OSDK) generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
+else
 	export IMG=$(IMG) MULTICLUSTER_CONSOLE_IMG=$(MULTICLUSTER_CONSOLE_IMG) && $(KUSTOMIZE) build config/manifests | envsubst | $(OSDK) generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
+endif
 	$(OSDK) bundle validate ./bundle
 
 .PHONY: bundle-build

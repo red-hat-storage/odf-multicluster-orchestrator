@@ -1,0 +1,56 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+    console.openshift.io/plugins: '["odf-multicluster-console"]'
+    operators.openshift.io/infrastructure-features: '["disconnected"]'
+  name: odf-multicluster-orchestrator.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: MirrorPeer is the Schema for the mirrorpeers API
+      displayName: Mirror Peer
+      kind: MirrorPeer
+      name: mirrorpeers.multicluster.odf.openshift.io
+      version: v1alpha1
+  description: |
+    Orchestrator for Fusion Data Foundation clusters running across multiple OpenShift clusters.
+    It uses Open Cluster Management for Kubernetes as the multicluster control plane.
+  displayName: FDF Multicluster Orchestrator
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - multicluster
+  - orchestrator
+  - storage
+  - acm
+  links:
+  - name: FDF Multicluster Orchestrator
+    url: https://github.com/red-hat-storage/odf-multicluster-orchestrator
+  maintainers:
+  - email: mysphelp@us.ibm.com
+    name: IBM Support
+  maturity: alpha
+  provider:
+    name: IBM
+  relatedImages:
+  - image: $IMG
+    name: odf-multicluster-operator
+  - image: $MULTICLUSTER_CONSOLE_IMG
+    name: odf-multicluster-console
+  version: 0.0.0
