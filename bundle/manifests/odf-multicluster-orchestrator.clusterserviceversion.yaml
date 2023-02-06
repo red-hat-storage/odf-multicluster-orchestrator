@@ -37,6 +37,7 @@ metadata:
     capabilities: Basic Install
     console.openshift.io/plugins: '["odf-multicluster-console"]'
     olm.skipRange: ""
+    operators.openshift.io/infrastructure-features: '["disconnected"]'
     operators.operatorframework.io/builder: operator-sdk-v1.16.0+git
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
   name: odf-multicluster-orchestrator.v0.0.1
@@ -373,6 +374,11 @@ spec:
   maturity: alpha
   provider:
     name: Red Hat
+  relatedImages:
+  - image: quay.io/ocs-dev/odf-multicluster-orchestrator:latest
+    name: odf-multicluster-operator
+  - image: quay.io/ocs-dev/odf-multicluster-console:latest
+    name: odf-multicluster-console
   version: 0.0.1
   webhookdefinitions:
   - admissionReviewVersions:
