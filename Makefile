@@ -102,13 +102,16 @@ bundle: manifests kustomize operator-sdk ## Generate bundle manifests and metada
 	$(OSDK) generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	cd config/console && $(KUSTOMIZE) edit set image odf-multicluster-console=$(MULTICLUSTER_CONSOLE_IMG)
-	cd config/manifests/bases && $(KUSTOMIZE) edit add annotation --force 'olm.skipRange':"$(SKIP_RANGE)" && \
-		$(KUSTOMIZE) edit add patch --name odf-multicluster-orchestrator.v0.0.0 --kind ClusterServiceVersion\
-		--patch '[{"op": "replace", "path": "/spec/replaces", "value": "$(REPLACES)"}]'
 ifeq ($(FUSION) , true)
 	export IMG=$(IMG) MULTICLUSTER_CONSOLE_IMG=$(MULTICLUSTER_CONSOLE_IMG) && $(KUSTOMIZE) build config/fusion | envsubst | $(OSDK) generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
+	cd config/fusion/bases && $(KUSTOMIZE) edit add annotation --force 'olm.skipRange':"$(SKIP_RANGE)" && \
+		$(KUSTOMIZE) edit add patch --name odf-multicluster-orchestrator.v0.0.0 --kind ClusterServiceVersion \
+		--patch '[{"op": "replace", "path": "/spec/replaces", "value": "$(REPLACES)"}]'
 else
 	export IMG=$(IMG) MULTICLUSTER_CONSOLE_IMG=$(MULTICLUSTER_CONSOLE_IMG) && $(KUSTOMIZE) build config/manifests | envsubst | $(OSDK) generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
+	cd config/manifests/bases && $(KUSTOMIZE) edit add annotation --force 'olm.skipRange':"$(SKIP_RANGE)" && \
+		$(KUSTOMIZE) edit add patch --name odf-multicluster-orchestrator.v0.0.0 --kind ClusterServiceVersion \
+		--patch '[{"op": "replace", "path": "/spec/replaces", "value": "$(REPLACES)"}]'
 endif
 	$(OSDK) bundle validate ./bundle
 
