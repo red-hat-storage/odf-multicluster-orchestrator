@@ -67,8 +67,10 @@ spec:
                 default: false
                 type: boolean
               schedulingIntervals:
-                description: SchedulingIntervals is a list of intervals at which mirroring
-                  snapshots are taken
+                description: 'SchedulingIntervals is a list of intervals at which
+                  mirroring snapshots are taken. DEPRECATED :  Any changes to this
+                  field will not affect the cluster state. Use DRPolicy.Spec.SchedulingInterval
+                  instead.'
                 items:
                   type: string
                 type: array
