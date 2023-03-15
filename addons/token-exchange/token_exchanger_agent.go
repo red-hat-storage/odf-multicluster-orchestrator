@@ -2,11 +2,12 @@ package addons
 
 import (
 	"context"
-	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"net"
 	"net/http"
-	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"time"
+
+	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
 	"github.com/openshift/library-go/pkg/controller/controllercmd"
 	"github.com/spf13/cobra"
@@ -25,13 +26,18 @@ const (
 
 func NewAgentCommand() *cobra.Command {
 	o := NewAgentOptions()
-	cmd := controllercmd.
-		NewControllerCommandConfig(TokenExchangeName, version.Info{Major: "0", Minor: "1"}, o.RunAgent).
-		NewCommand()
+	cmdConfig := controllercmd.
+		NewControllerCommandConfig(TokenExchangeName, version.Info{Major: "0", Minor: "1"}, o.RunAgent)
+
+	cmd := cmdConfig.NewCommand()
 	cmd.Use = TokenExchangeName
 	cmd.Short = "Start the token exchange addon agent"
 
 	o.AddFlags(cmd)
+
+	flags := cmd.Flags()
+	flags.BoolVar(&cmdConfig.DisableLeaderElection, "disable-leader-election", true, "Disable leader election for the agent")
+
 	return cmd
 }
 
@@ -152,13 +158,12 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 		controllerContext.OperatorNamespace,
 	)
 
+	go leaseUpdater.Start(ctx)
 	go hubKubeInformerFactory.Start(ctx.Done())
 	go spokeKubeInformerFactory.Start(ctx.Done())
 	go greenSecretAgent.Run(ctx, 1)
 	go blueSecretAgent.Run(ctx, 1)
-	go leaseUpdater.Start(ctx)
 	runManager(ctx, hubRestConfig, controllerContext.KubeConfig, o.SpokeClusterName)
-
 	<-ctx.Done()
 	return nil
 }

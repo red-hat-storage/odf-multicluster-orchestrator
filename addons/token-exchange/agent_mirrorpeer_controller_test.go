@@ -3,14 +3,14 @@ package addons
 import (
 	"context"
 	"fmt"
+	"testing"
+
 	"github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"testing"
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	storagev1 "k8s.io/api/storage/v1"
 
-	replicationv1alpha1 "github.com/csi-addons/kubernetes-csi-addons/apis/replication.storage/v1alpha1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -19,11 +19,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
-
-type ReconcilerStorageCluster struct {
-	r  MirrorPeerReconciler
-	sc ocsv1.StorageCluster
-}
 
 var (
 	mpItems = []multiclusterv1alpha1.PeerRef{
@@ -47,9 +42,8 @@ var (
 			Name: "mirrorpeer-with-proper-scheduling-intervals",
 		},
 		Spec: multiclusterv1alpha1.MirrorPeerSpec{
-			Type:                "async",
-			Items:               mpItems,
-			SchedulingIntervals: []string{"10m", "5m", "30m", "1h", "5m"},
+			Type:  "async",
+			Items: mpItems,
 		},
 	}
 	// Validating webhooks in place won't allow for this to be created
@@ -58,9 +52,8 @@ var (
 			Name: "mirrorpeer-with-invalid-scheduling-intervals",
 		},
 		Spec: multiclusterv1alpha1.MirrorPeerSpec{
-			Type:                "async",
-			Items:               mpItems,
-			SchedulingIntervals: []string{"1p", "2o", "3h", "4hh", "5md"},
+			Type:  "async",
+			Items: mpItems,
 		},
 	}
 
@@ -119,7 +112,6 @@ func TestMirrorPeerReconcile(t *testing.T) {
 		oppositePeerRefsArray = append(oppositePeerRefsArray, peerRefs)
 	}
 
-	reconcilers := make([]ReconcilerStorageCluster, 0)
 	for i, pr := range mirrorpeer1.Spec.Items {
 		secretNames := make([]string, 0)
 		for _, ref := range oppositePeerRefsArray[i] {
@@ -188,57 +180,6 @@ func TestMirrorPeerReconcile(t *testing.T) {
 
 		if !foundSc.Spec.Mirroring.Enabled {
 			t.Errorf("Mirroring not enabled; Error: %s", err)
-		}
-
-		reconcilers = append(reconcilers, ReconcilerStorageCluster{
-			r:  r,
-			sc: foundSc,
-		})
-	}
-
-	for _, reconciler := range reconcilers {
-		// For each schedulingInterval in MirrorPeer, check if the corresponding VolumeReplicationClass has been created.
-		for _, interval := range mirrorpeer1.Spec.SchedulingIntervals {
-			vrcName := fmt.Sprintf(RBDVolumeReplicationClassNameTemplate, utils.FnvHash(interval))
-			found := &replicationv1alpha1.VolumeReplicationClass{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: vrcName,
-				},
-			}
-			err := reconciler.r.SpokeClient.Get(ctx, types.NamespacedName{
-				Name: found.Name,
-			}, found)
-
-			if err != nil {
-				t.Errorf("Failed to get VolumeReplicationClass %s Error: %s", found.Name, err)
-			}
-
-			if found.Spec.Provisioner != fmt.Sprintf(RBDProvisionerTemplate, reconciler.sc.Namespace) &&
-				found.Spec.Parameters[ReplicationSecretNameKey] != RBDReplicationSecretName ||
-				found.Spec.Parameters[MirroringModeKey] != DefaultMirroringMode {
-				t.Errorf("VolumeReplicatonClass %s not created or updated properly; Please check Provisioner, Parameters and MirroringMode", found.Name)
-				break
-			}
-
-			if val, ok := found.Labels[fmt.Sprintf(RamenLabelTemplate, ReplicationIDKey)]; !ok || val != "47bd66cfd330837b0e19179e73a64583b986357" {
-				t.Errorf("VolumeReplicatonClass %s not created or updated properly; Please check Labels ", found.Name)
-				break
-			}
-		}
-
-		// Loops through all storageclasses and check for the label
-		scs := &storagev1.StorageClassList{}
-		err := reconciler.r.SpokeClient.List(ctx, scs)
-		if err != nil {
-			t.Errorf("Failed to get StorageClasses Error: %s", err)
-		}
-		for _, sc := range scs.Items {
-			if sc.Provisioner == fmt.Sprintf(RBDProvisionerTemplate, "test-namespace") || sc.Provisioner == fmt.Sprintf(CephFSProvisionerTemplate, "test-namespace") {
-				if _, ok := sc.Labels[fmt.Sprintf(RamenLabelTemplate, StorageIDKey)]; !ok {
-					t.Errorf("StorageClass %s not updated properly; Please check Labels ", sc.Name)
-					break
-				}
-			}
 		}
 
 	}
@@ -370,56 +311,4 @@ func TestDeleteS3(t *testing.T) {
 			t.Error("S3 bucket did not get deleted")
 		}
 	}
-}
-
-func TestDeleteVolumeReplication(t *testing.T) {
-	ctx := context.TODO()
-	scheme := mgrScheme
-	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer1).Build()
-	for _, pr := range mirrorpeer1.Spec.Items {
-		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects().Build()
-		r := MirrorPeerReconciler{
-			HubClient:        fakeHubClient,
-			SpokeClient:      fakeSpokeClient,
-			Scheme:           scheme,
-			SpokeClusterName: pr.ClusterName,
-		}
-		for _, interval := range mirrorpeer1.Spec.SchedulingIntervals {
-			vrc := getFakeVRC(interval)
-			err := r.SpokeClient.Create(ctx, &vrc)
-			if err != nil {
-				if !errors.IsAlreadyExists(err) {
-					t.Errorf("%v Failed to create VolumeReplicationClass: %s", err, vrc.Name)
-				}
-				continue
-			}
-		}
-		if err := r.deleteVolumeReplicationClass(ctx, &mirrorpeer1, &pr); err != nil {
-			if !errors.IsNotFound(err) {
-				t.Error("failed to delete volume replication classes", err)
-			}
-			t.Log("the volume replication class has already been deleted")
-		}
-		for _, interval := range mirrorpeer1.Spec.SchedulingIntervals {
-			vrc := getFakeVRC(interval)
-			if err := fakeSpokeClient.Get(ctx, types.NamespacedName{
-				Name: vrc.Name}, &vrc); err != nil {
-				if !errors.IsNotFound(err) {
-					t.Error(err, "Volume replication class ", vrc.Name, " did not get deleted")
-				}
-			} else {
-				t.Errorf("volume replication %s class did not get deleted", vrc.Name)
-			}
-		}
-	}
-}
-
-func getFakeVRC(interval string) replicationv1alpha1.VolumeReplicationClass {
-	vrcName := fmt.Sprintf(RBDVolumeReplicationClassNameTemplate, utils.FnvHash(interval))
-	vrc := replicationv1alpha1.VolumeReplicationClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: vrcName,
-		},
-	}
-	return vrc
 }
