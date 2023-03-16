@@ -18,8 +18,8 @@ package v1alpha1
 
 import (
 	"fmt"
+
 	"k8s.io/apimachinery/pkg/runtime"
-	"regexp"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -51,12 +51,7 @@ func (r *MirrorPeer) SetupWebhookWithManager(mgr ctrl.Manager) error {
 var _ webhook.Defaulter = &MirrorPeer{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
-func (r *MirrorPeer) Default() {
-	if len(r.Spec.SchedulingIntervals) == 0 {
-		mirrorpeerlog.Info("No values set for schedulingIntervals, defaulting to 5m", "MirrorPeer", r.ObjectMeta.Name)
-		r.Spec.SchedulingIntervals = []string{"5m"}
-	}
-}
+func (r *MirrorPeer) Default() {}
 
 //+kubebuilder:webhook:path=/validate-multicluster-odf-openshift-io-v1alpha1-mirrorpeer,mutating=false,failurePolicy=fail,sideEffects=None,groups=multicluster.odf.openshift.io,resources=mirrorpeers,verbs=create;update;delete,versions=v1alpha1,name=vmirrorpeer.kb.io,admissionReviewVersions=v1;v1beta1
 
@@ -100,33 +95,10 @@ func (r *MirrorPeer) ValidateUpdate(old runtime.Object) error {
 	return validateMirrorPeer(r)
 }
 
-/*
-  validateSchedulingInterval checks if the scheduling interval is valid and ending with a 'm' or 'h' or 'd'
-  else it will return error.
-*/
-func validateSchedulingInterval(interval string) error {
-	re := regexp.MustCompile(`^\d+[mhd]$`)
-	if re.MatchString(interval) {
-		return nil
-	}
-	return fmt.Errorf("invalid scheduling interval %q. interval should have suffix 'm|h|d' ", interval)
-}
-
 // validateMirrorPeer validates the MirrorPeer
 func validateMirrorPeer(instance *MirrorPeer) error {
-
 	if instance.Spec.Items == nil {
 		return fmt.Errorf("Spec.Items can not be nil")
-	}
-
-	if instance.Spec.SchedulingIntervals == nil || len(instance.Spec.SchedulingIntervals) == 0 {
-		return fmt.Errorf("Spec.SchedulingIntervals can not be nil or empty")
-	}
-
-	for _, interval := range instance.Spec.SchedulingIntervals {
-		if err := validateSchedulingInterval(interval); err != nil {
-			return err
-		}
 	}
 	return nil
 }

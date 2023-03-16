@@ -71,7 +71,7 @@ const spokeClusterRoleBindingName = "spoke-clusterrole-bindings"
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;create;update;watch
 //+kubebuilder:rbac:groups=console.openshift.io,resources=consoleplugins,verbs=get;list;create;update;watch
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;create;update;watch
-//+kubebuilder:rbac:groups=ramendr.openshift.io,resources=drclusters,verbs=get;list;create;update;watch
+//+kubebuilder:rbac:groups=ramendr.openshift.io,resources=drclusters;drpolicies,verbs=get;list;create;update;watch
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;create;update;delete;watch,resourceNames=spoke-clusterrole-bindings
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to

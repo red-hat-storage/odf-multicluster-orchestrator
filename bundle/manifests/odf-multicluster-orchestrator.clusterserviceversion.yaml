@@ -190,6 +190,7 @@ spec:
           - ramendr.openshift.io
           resources:
           - drclusters
+          - drpolicies
           verbs:
           - create
           - get
