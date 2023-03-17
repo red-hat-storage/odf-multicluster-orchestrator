@@ -21,17 +21,15 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	"sort"
+	storagev1 "k8s.io/api/storage/v1"
 	"strconv"
 	"time"
 
-	replicationv1alpha1 "github.com/csi-addons/kubernetes-csi-addons/apis/replication.storage/v1alpha1"
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
-	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -53,21 +51,13 @@ type MirrorPeerReconciler struct {
 }
 
 const (
-	RookCSIEnableKey                      = "CSI_ENABLE_OMAP_GENERATOR"
-	MirroringModeKey                      = "mirroringMode"
-	SchedulingIntervalKey                 = "schedulingInterval"
-	ReplicationSecretNameKey              = "replication.storage.openshift.io/replication-secret-name"
-	ReplicationSecretNamespaceKey         = "replication.storage.openshift.io/replication-secret-namespace"
-	RBDProvisionerTemplate                = "%s.rbd.csi.ceph.com"
-	RookConfigMapName                     = "rook-ceph-operator-config"
-	RBDVolumeReplicationClassNameTemplate = "rbd-volumereplicationclass-%v"
-	RBDReplicationSecretName              = "rook-csi-rbd-provisioner"
-	DefaultMirroringMode                  = "snapshot"
-	RamenLabelTemplate                    = "ramendr.openshift.io/%s"
-	StorageIDKey                          = "storageid"
-	ReplicationIDKey                      = "replicationid"
-	CephFSProvisionerTemplate             = "%s.cephfs.csi.ceph.com"
-	SpokeMirrorPeerFinalizer              = "spoke.multicluster.odf.openshift.io"
+	RookCSIEnableKey          = "CSI_ENABLE_OMAP_GENERATOR"
+	RookConfigMapName         = "rook-ceph-operator-config"
+	RBDProvisionerTemplate    = "%s.rbd.csi.ceph.com"
+	RamenLabelTemplate        = "ramendr.openshift.io/%s"
+	StorageIDKey              = "storageid"
+	CephFSProvisionerTemplate = "%s.cephfs.csi.ceph.com"
+	SpokeMirrorPeerFinalizer  = "spoke.multicluster.odf.openshift.io"
 )
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -142,6 +132,16 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
+		clusterFSIDs := make(map[string]string)
+		klog.Infof("Fetching clusterFSIDs")
+		err = r.fetchClusterFSIDs(ctx, &mirrorPeer, clusterFSIDs)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
+			}
+			return ctrl.Result{}, fmt.Errorf("an unknown error occured while fetching the cluster fsids, retrying again: %v", err)
+		}
+
 		klog.Infof("enabling async mode dependencies")
 		err = r.enableCSIAddons(ctx, scr.Namespace)
 		if err != nil {
@@ -153,29 +153,104 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{}, fmt.Errorf("failed to enable mirroring the storagecluster %q in namespace %q in managed cluster. Error %v", scr.Name, scr.Namespace, err)
 		}
 
-		clusterFSIDs := make(map[string]string)
-		klog.Infof("Fetching clusterFSIDs")
-		err = r.fetchClusterFSIDs(ctx, &mirrorPeer, clusterFSIDs)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
-			}
-			return ctrl.Result{}, fmt.Errorf("an unknown error occured while fetching the cluster fsids, retrying again: %v", err)
-		}
-
-		errs := r.createVolumeReplicationClass(ctx, &mirrorPeer, clusterFSIDs)
-		if len(errs) > 0 {
-			return ctrl.Result{}, fmt.Errorf("few failures occured while creating VolumeReplicationClasses: %v", errs)
-		}
-
 		klog.Infof("labeling rbd storageclasses")
-		errs = r.labelRBDStorageClasses(ctx, mirrorPeer, scr.Namespace, clusterFSIDs)
+		errs := r.labelRBDStorageClasses(ctx, scr.Namespace, clusterFSIDs)
 		if len(errs) > 0 {
 			return ctrl.Result{}, fmt.Errorf("few failures occured while labeling RBD StorageClasses: %v", errs)
 		}
+
+	}
+	return ctrl.Result{}, nil
+}
+
+func (r *MirrorPeerReconciler) fetchClusterFSIDs(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer, clusterFSIDs map[string]string) error {
+	for _, pr := range mp.Spec.Items {
+		clusterType, err := utils.GetClusterType(pr.StorageClusterRef.Name, pr.StorageClusterRef.Namespace, r.SpokeClient)
+		if err != nil {
+			return err
+		}
+		secretName := r.getSecretNameByType(clusterType, pr)
+
+		klog.Info("Checking secret: ", secretName, " Mode:", clusterType)
+		secret, err := utils.FetchSecretWithName(ctx, r.SpokeClient, types.NamespacedName{Name: secretName, Namespace: pr.StorageClusterRef.Namespace})
+		if err != nil {
+			return err
+		}
+
+		fsid, err := r.getFsidFromSecretByType(clusterType, secret)
+		if err != nil {
+			return err
+		}
+
+		clusterFSIDs[pr.ClusterName] = fsid
+	}
+	return nil
+}
+
+func (r *MirrorPeerReconciler) getFsidFromSecretByType(clusterType utils.ClusterType, secret *corev1.Secret) (string, error) {
+	var fsid string
+	if clusterType == utils.CONVERGED {
+		token, err := utils.UnmarshalRookSecret(secret)
+		if err != nil {
+			klog.Error(err, "Error while unmarshalling converged mode peer secret; ", "peerSecret ", secret.Name)
+			return "", err
+		}
+		fsid = token.FSID
+	} else if clusterType == utils.EXTERNAL {
+		token, err := utils.UnmarshalRookSecretExternal(secret)
+		if err != nil {
+			klog.Error(err, "Error while unmarshalling external mode peer secret; ", "peerSecret ", secret.Name)
+			return "", err
+		}
+		fsid = token.FSID
+	}
+	return fsid, nil
+}
+
+func (r *MirrorPeerReconciler) getSecretNameByType(clusterType utils.ClusterType, pr multiclusterv1alpha1.PeerRef) string {
+	var secretName string
+	if clusterType == utils.CONVERGED {
+		if pr.ClusterName == r.SpokeClusterName {
+			secretName = fmt.Sprintf("cluster-peer-token-%s-cephcluster", pr.StorageClusterRef.Name)
+		} else {
+			secretName = utils.GetSecretNameByPeerRef(pr)
+		}
+	} else if clusterType == utils.EXTERNAL {
+		secretName = DefaultExternalSecretName
+	}
+	return secretName
+}
+
+func (r *MirrorPeerReconciler) labelRBDStorageClasses(ctx context.Context, storageClusterNamespace string, clusterFSIDs map[string]string) []error {
+	klog.Info(clusterFSIDs)
+	// Get all StorageClasses in storageClusterNamespace
+	scs := &storagev1.StorageClassList{}
+	err := r.SpokeClient.List(ctx, scs)
+	var errs []error
+	if err != nil {
+		errs = append(errs, err)
+		return errs
+	}
+	klog.Infof("Found %d StorageClasses", len(scs.Items))
+	key := r.SpokeClusterName
+	for _, sc := range scs.Items {
+		if _, ok := clusterFSIDs[key]; !ok {
+			errs = append(errs, fmt.Errorf("no value found for key: %s, unable to update StorageClass for %s", key, key))
+			continue
+		}
+		if sc.Provisioner == fmt.Sprintf(RBDProvisionerTemplate, storageClusterNamespace) || sc.Provisioner == fmt.Sprintf(CephFSProvisionerTemplate, storageClusterNamespace) {
+			klog.Infof("Updating StorageClass %q with label storageid %q", sc.Name, clusterFSIDs[key])
+			sc.Labels = make(map[string]string)
+			sc.Labels[fmt.Sprintf(RamenLabelTemplate, StorageIDKey)] = clusterFSIDs[key]
+			err = r.SpokeClient.Update(ctx, &sc)
+			if err != nil {
+				klog.Error(err, "Failed to update StorageClass: %s", sc.Name)
+				errs = append(errs, err)
+			}
+		}
 	}
 
-	return ctrl.Result{}, nil
+	return errs
 }
 
 func (r *MirrorPeerReconciler) createS3(ctx context.Context, req ctrl.Request, mirrorPeer multiclusterv1alpha1.MirrorPeer, scNamespace string) error {
@@ -307,133 +382,6 @@ func (r *MirrorPeerReconciler) toggleCSIAddons(ctx context.Context, namespace st
 	return r.SpokeClient.Update(ctx, &rcm)
 }
 
-func (r *MirrorPeerReconciler) fetchClusterFSIDs(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer, clusterFSIDs map[string]string) error {
-	for _, pr := range mp.Spec.Items {
-		clusterType, err := utils.GetClusterType(pr.StorageClusterRef.Name, pr.StorageClusterRef.Namespace, r.SpokeClient)
-		if err != nil {
-			return err
-		}
-		secretName := r.getSecretNameByType(clusterType, pr)
-
-		klog.Info("Checking secret: ", secretName, " Mode:", clusterType)
-		secret, err := utils.FetchSecretWithName(ctx, r.SpokeClient, types.NamespacedName{Name: secretName, Namespace: pr.StorageClusterRef.Namespace})
-		if err != nil {
-			return err
-		}
-
-		fsid, err := r.getFsidFromSecretByType(clusterType, secret)
-		if err != nil {
-			return err
-		}
-
-		clusterFSIDs[pr.ClusterName] = fsid
-	}
-	return nil
-}
-
-func (r *MirrorPeerReconciler) getFsidFromSecretByType(clusterType utils.ClusterType, secret *corev1.Secret) (string, error) {
-	var fsid string
-	if clusterType == utils.CONVERGED {
-		token, err := utils.UnmarshalRookSecret(secret)
-		if err != nil {
-			klog.Error(err, "Error while unmarshalling converged mode peer secret; ", "peerSecret ", secret.Name)
-			return "", err
-		}
-		fsid = token.FSID
-	} else if clusterType == utils.EXTERNAL {
-		token, err := utils.UnmarshalRookSecretExternal(secret)
-		if err != nil {
-			klog.Error(err, "Error while unmarshalling external mode peer secret; ", "peerSecret ", secret.Name)
-			return "", err
-		}
-		fsid = token.FSID
-	}
-	return fsid, nil
-}
-
-func (r *MirrorPeerReconciler) getSecretNameByType(clusterType utils.ClusterType, pr multiclusterv1alpha1.PeerRef) string {
-	var secretName string
-	if clusterType == utils.CONVERGED {
-		if pr.ClusterName == r.SpokeClusterName {
-			secretName = fmt.Sprintf("cluster-peer-token-%s-cephcluster", pr.StorageClusterRef.Name)
-		} else {
-			secretName = utils.GetSecretNameByPeerRef(pr)
-		}
-	} else if clusterType == utils.EXTERNAL {
-		secretName = DefaultExternalSecretName
-	}
-	return secretName
-}
-
-func (r *MirrorPeerReconciler) createVolumeReplicationClass(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer, clusterFSIDs map[string]string) []error {
-	scr, err := utils.GetCurrentStorageClusterRef(mp, r.SpokeClusterName)
-	var errs []error
-	if err != nil {
-		klog.Error(err, "Failed to get current storage cluster ref")
-		errs = append(errs, err)
-	}
-	if len(errs) > 0 {
-		return errs
-	}
-	var fsids []string
-	for _, v := range clusterFSIDs {
-		fsids = append(fsids, v)
-	}
-
-	// To ensure reliability of hash generation
-	sort.Strings(fsids)
-
-	replicationId := utils.CreateUniqueReplicationId(fsids)
-
-	for _, interval := range mp.Spec.SchedulingIntervals {
-		params := make(map[string]string)
-		params[MirroringModeKey] = DefaultMirroringMode
-		params[SchedulingIntervalKey] = interval
-		params[ReplicationSecretNameKey] = RBDReplicationSecretName
-		params[ReplicationSecretNamespaceKey] = scr.Namespace
-		vrcName := fmt.Sprintf(RBDVolumeReplicationClassNameTemplate, utils.FnvHash(interval))
-		klog.Infof("Creating volume replication class %q with label replicationId %q", vrcName, replicationId)
-		found := &replicationv1alpha1.VolumeReplicationClass{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: vrcName,
-			},
-		}
-		err = r.SpokeClient.Get(ctx, types.NamespacedName{
-			Name: found.Name,
-		}, found)
-
-		switch {
-		case err == nil:
-			klog.Infof("VolumeReplicationClass already exists: %s", vrcName)
-			continue
-		case !errors.IsNotFound(err):
-			klog.Error(err, "Failed to get VolumeReplicationClass: %s", vrcName)
-			errs = append(errs, err)
-			continue
-		}
-		labels := make(map[string]string)
-		labels[fmt.Sprintf(RamenLabelTemplate, ReplicationIDKey)] = replicationId
-		vrc := replicationv1alpha1.VolumeReplicationClass{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   vrcName,
-				Labels: labels,
-			},
-			Spec: replicationv1alpha1.VolumeReplicationClassSpec{
-				Parameters:  params,
-				Provisioner: fmt.Sprintf(RBDProvisionerTemplate, scr.Namespace),
-			},
-		}
-		err = r.SpokeClient.Create(ctx, &vrc)
-		if err != nil {
-			klog.Error(err, "Failed to create VolumeReplicationClass: %s", vrcName)
-			errs = append(errs, err)
-			continue
-		}
-		klog.Infof("VolumeReplicationClass created: %s", vrcName)
-	}
-	return errs
-}
-
 func (r *MirrorPeerReconciler) hasSpokeCluster(obj client.Object) bool {
 	mp, ok := obj.(*multiclusterv1alpha1.MirrorPeer)
 	if !ok {
@@ -468,38 +416,6 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(mpPredicate)).
 		Complete(r)
-}
-
-func (r *MirrorPeerReconciler) labelRBDStorageClasses(ctx context.Context, mp multiclusterv1alpha1.MirrorPeer, storageClusterNamespace string, clusterFSIDs map[string]string) []error {
-	klog.Info(clusterFSIDs)
-	// Get all StorageClasses in storageClusterNamespace
-	scs := &storagev1.StorageClassList{}
-	err := r.SpokeClient.List(ctx, scs)
-	var errs []error
-	if err != nil {
-		errs = append(errs, err)
-		return errs
-	}
-	klog.Infof("Found %d StorageClasses", len(scs.Items))
-	key := r.SpokeClusterName
-	for _, sc := range scs.Items {
-		if _, ok := clusterFSIDs[key]; !ok {
-			errs = append(errs, fmt.Errorf("no value found for key: %s, unable to update StorageClass for %s", key, key))
-			continue
-		}
-		if sc.Provisioner == fmt.Sprintf(RBDProvisionerTemplate, storageClusterNamespace) || sc.Provisioner == fmt.Sprintf(CephFSProvisionerTemplate, storageClusterNamespace) {
-			klog.Infof("Updating StorageClass %q with label storageid %q", sc.Name, clusterFSIDs[key])
-			sc.Labels = make(map[string]string)
-			sc.Labels[fmt.Sprintf(RamenLabelTemplate, StorageIDKey)] = clusterFSIDs[key]
-			err = r.SpokeClient.Update(ctx, &sc)
-			if err != nil {
-				klog.Error(err, "Failed to update StorageClass: %s", sc.Name)
-				errs = append(errs, err)
-			}
-		}
-	}
-
-	return errs
 }
 
 func (r *MirrorPeerReconciler) disableMirroring(ctx context.Context, storageClusterName string, namespace string, mp *multiclusterv1alpha1.MirrorPeer) error {
@@ -564,37 +480,6 @@ func (r *MirrorPeerReconciler) deleteS3(ctx context.Context, mirrorPeer multiclu
 	return err
 }
 
-// deleteVolumeReplicationClass deletes the volume replication class present in the storage cluster resource,
-// we check if another mirrorpeer is using the same scheduling interval while pointing to the same peer ref
-func (r *MirrorPeerReconciler) deleteVolumeReplicationClass(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer, peerRef *multiclusterv1alpha1.PeerRef) error {
-	for _, interval := range mp.Spec.SchedulingIntervals {
-		intervalUsed, err := utils.DoesAnotherMirrorPeerContainTheSchedulingInterval(ctx, r.HubClient, mp, interval, peerRef)
-		if err != nil {
-			return err
-		}
-		if intervalUsed {
-			return nil
-		}
-
-		vrcName := fmt.Sprintf(RBDVolumeReplicationClassNameTemplate, utils.FnvHash(interval))
-
-		vrc := &replicationv1alpha1.VolumeReplicationClass{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: vrcName,
-			},
-		}
-		err = r.SpokeClient.Delete(ctx, vrc)
-		if errors.IsNotFound(err) {
-			klog.Error("Cannot find volume replication class for interval", interval, " ", err)
-			return nil
-		}
-
-		klog.Info("Succesfully deleted interval ", interval)
-
-	}
-	return nil
-}
-
 func (r *MirrorPeerReconciler) deleteMirrorPeer(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, scr *multiclusterv1alpha1.StorageClusterRef) (ctrl.Result, error) {
 	klog.Infof("Mirrorpeer is being deleted %q", mirrorPeer.Name)
 	peerRef, err := utils.GetPeerRefForSpokeCluster(&mirrorPeer, r.SpokeClusterName)
@@ -620,9 +505,6 @@ func (r *MirrorPeerReconciler) deleteMirrorPeer(ctx context.Context, mirrorPeer 
 		return ctrl.Result{}, fmt.Errorf("failed to delete green secrets: %v", err)
 	}
 
-	if err := r.deleteVolumeReplicationClass(ctx, &mirrorPeer, peerRef); err != nil {
-		return ctrl.Result{}, fmt.Errorf("few failures occured while deleting VolumeReplicationClasses: %v", err)
-	}
 	if err := r.deleteS3(ctx, mirrorPeer, scr.Namespace); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to delete s3 buckets")
 	}

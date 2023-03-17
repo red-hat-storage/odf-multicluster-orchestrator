@@ -3,6 +3,8 @@ package controllers
 import (
 	"context"
 	"flag"
+	"os"
+
 	consolev1alpha1 "github.com/openshift/api/console/v1alpha1"
 	"github.com/openshift/library-go/pkg/operator/events"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
@@ -18,7 +20,7 @@ import (
 	"open-cluster-management.io/addon-framework/pkg/addonmanager"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	"os"
+	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -38,6 +40,7 @@ func init() {
 	utilruntime.Must(consolev1alpha1.AddToScheme(mgrScheme))
 
 	utilruntime.Must(ramenv1alpha1.AddToScheme(mgrScheme))
+	utilruntime.Must(workv1.AddToScheme(mgrScheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -172,6 +175,14 @@ func (o *ManagerOptions) runManager() {
 	err = addonMgr.AddAgent(&tokenExchangeAddon)
 	if err != nil {
 		setupLog.Error(err, "problem adding token exchange addon to addon manager")
+	}
+
+	if err = (&DRPolicyReconciler{
+		HubClient: mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DRPolicy")
+		os.Exit(1)
 	}
 
 	g, ctx := errgroup.WithContext(ctrl.SetupSignalHandler())

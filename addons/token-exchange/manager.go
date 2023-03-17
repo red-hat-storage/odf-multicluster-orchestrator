@@ -79,7 +79,7 @@ func runManager(ctx context.Context, hubConfig *rest.Config, spokeConfig *rest.C
 
 	g, _ := errgroup.WithContext(ctrl.SetupSignalHandler())
 
-	klog.Info("starting mirror peer controller manager")
+	klog.Info("starting mirrorpeer controller manager")
 	g.Go(func() error {
 		err := mgr.Start(ctx)
 		return err

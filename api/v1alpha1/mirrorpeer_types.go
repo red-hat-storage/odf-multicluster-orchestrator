@@ -61,9 +61,10 @@ type MirrorPeerSpec struct {
 	// +kubebuilder:validation:MinItems=2
 	Items []PeerRef `json:"items"`
 
-	// SchedulingIntervals is a list of intervals at which mirroring snapshots are taken
+	// SchedulingIntervals is a list of intervals at which mirroring snapshots are taken.
+	//  DEPRECATED :  Any changes to this field will not affect the cluster state. Use DRPolicy.Spec.SchedulingInterval instead.
 	// +kubebuilder:validation:Optional
-	SchedulingIntervals []string `json:"schedulingIntervals,omitempty"`
+	SchedulingIntervals []string `json:"schedulingIntervals,omitempty" deprecated:"true"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=false
