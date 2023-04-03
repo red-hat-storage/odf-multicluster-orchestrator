@@ -25,13 +25,18 @@ const (
 
 func NewAgentCommand() *cobra.Command {
 	o := NewAgentOptions()
-	cmd := controllercmd.
-		NewControllerCommandConfig(TokenExchangeName, version.Info{Major: "0", Minor: "1"}, o.RunAgent).
-		NewCommand()
+	cmdConfig := controllercmd.
+		NewControllerCommandConfig(TokenExchangeName, version.Info{Major: "0", Minor: "1"}, o.RunAgent)
+
+	cmd := cmdConfig.NewCommand()
 	cmd.Use = TokenExchangeName
 	cmd.Short = "Start the token exchange addon agent"
 
 	o.AddFlags(cmd)
+
+	flags := cmd.Flags()
+	flags.BoolVar(&cmdConfig.DisableLeaderElection, "disable-leader-election", true, "Disable leader election for the agent")
+
 	return cmd
 }
 
