@@ -2,14 +2,11 @@ package addons
 
 import (
 	"context"
-	"net"
-	"net/http"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	"time"
 
-	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"sigs.k8s.io/controller-runtime/pkg/healthz"
-
 	"github.com/openshift/library-go/pkg/controller/controllercmd"
+	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/informers"
@@ -20,17 +17,13 @@ import (
 	addonutils "open-cluster-management.io/addon-framework/pkg/utils"
 )
 
-const (
-	TokenExchangeName = "tokenexchange"
-)
-
 func NewAgentCommand() *cobra.Command {
 	o := NewAgentOptions()
 	cmdConfig := controllercmd.
-		NewControllerCommandConfig(TokenExchangeName, version.Info{Major: "0", Minor: "1"}, o.RunAgent)
+		NewControllerCommandConfig(setup.TokenExchangeName, version.Info{Major: "0", Minor: "1"}, o.RunAgent)
 
 	cmd := cmdConfig.NewCommand()
-	cmd.Use = TokenExchangeName
+	cmd.Use = setup.TokenExchangeName
 	cmd.Short = "Start the token exchange addon agent"
 
 	o.AddFlags(cmd)
@@ -53,45 +46,6 @@ func NewAgentOptions() *AgentOptions {
 	return &AgentOptions{}
 }
 
-// ServeHealthProbes starts a server to check healthz and readyz probes
-func ServeHealthProbes(stop <-chan struct{}, healthProbeBindAddress string, configCheck healthz.Checker) {
-	healthzHandler := &healthz.Handler{Checks: map[string]healthz.Checker{
-		"healthz-ping": healthz.Ping,
-		"configz-ping": configCheck,
-	}}
-	readyzHandler := &healthz.Handler{Checks: map[string]healthz.Checker{
-		"readyz-ping": healthz.Ping,
-	}}
-
-	mux := http.NewServeMux()
-	mux.Handle("/readyz", http.StripPrefix("/readyz", readyzHandler))
-	mux.Handle("/healthz", http.StripPrefix("/healthz", healthzHandler))
-
-	server := http.Server{
-		Handler: mux,
-	}
-
-	ln, err := net.Listen("tcp", healthProbeBindAddress)
-	if err != nil {
-		klog.Errorf("error listening on %s: %v", healthProbeBindAddress, err)
-		return
-	}
-
-	klog.Infof("Health probes server is running.")
-	// Run server
-	go func() {
-		if err := server.Serve(ln); err != nil && err != http.ErrServerClosed {
-			klog.Fatal(err)
-		}
-	}()
-
-	// Shutdown the server when stop is closed
-	<-stop
-	if err := server.Shutdown(context.Background()); err != nil {
-		klog.Fatal(err)
-	}
-}
-
 func (o *AgentOptions) AddFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 	flags.StringVar(&o.HubKubeconfigFile, "hub-kubeconfig", o.HubKubeconfigFile, "Location of kubeconfig file to connect to hub cluster.")
@@ -101,7 +55,7 @@ func (o *AgentOptions) AddFlags(cmd *cobra.Command) {
 
 // RunAgent starts the controllers on agent to process work from hub.
 func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
-	klog.Infof("Running %q", TokenExchangeName)
+	klog.Infof("Running %q", setup.TokenExchangeName)
 
 	spokeKubeClient, err := kubernetes.NewForConfig(controllerContext.KubeConfig)
 	if err != nil {
@@ -123,7 +77,7 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 		return err
 	}
 
-	go ServeHealthProbes(ctx.Done(), ":8000", cc.Check)
+	go setup.ServeHealthProbes(ctx.Done(), ":8000", cc.Check)
 
 	hubKubeInformerFactory := informers.NewSharedInformerFactoryWithOptions(hubKubeClient, 2*time.Minute, informers.WithNamespace(o.SpokeClusterName))
 	err = registerHandler(multiclusterv1alpha1.DRType(o.DRMode), controllerContext.KubeConfig, hubRestConfig)
@@ -154,7 +108,7 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 
 	leaseUpdater := lease.NewLeaseUpdater(
 		spokeKubeClient,
-		TokenExchangeName,
+		setup.TokenExchangeName,
 		controllerContext.OperatorNamespace,
 	)
 

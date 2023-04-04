@@ -3,6 +3,7 @@ package addons
 import (
 	"context"
 	"fmt"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 
 	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/events"
@@ -63,7 +64,7 @@ func newgreenSecretTokenExchangeAgentController(
 	return factory.New().
 		WithFilteredEventsInformersQueueKeyFunc(queueKeyFn, eventFilterFn, hubSecretInformer).
 		WithSync(c.sync).
-		ToController(fmt.Sprintf("%s-controller", TokenExchangeName), recorder)
+		ToController(fmt.Sprintf("%s-controller", setup.TokenExchangeName), recorder)
 }
 
 // sync secrets with label `multicluster.odf.openshift.io/secret-type: GREEN` from hub to managed cluster
