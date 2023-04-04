@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	"reflect"
 	"testing"
 	"time"
@@ -265,7 +266,7 @@ func TestRookGreenSecretSnyc(t *testing.T) {
 			if c.syncExpected {
 				actualSecret, err := fakeCtrl.spokeKubeClient.CoreV1().Secrets(TestStorageClusterNamespace).Get(context.TODO(), name, metav1.GetOptions{})
 				assert.NoError(t, err)
-				assert.Equal(t, actualSecret.GetLabels()[utils.CreatedByLabelKey], TokenExchangeName)
+				assert.Equal(t, actualSecret.GetLabels()[utils.CreatedByLabelKey], setup.TokenExchangeName)
 				ctx := context.TODO()
 				sc := &ocsv1.StorageCluster{}
 				err = rookHandler.spokeClient.Get(ctx, types.NamespacedName{Name: TestStorageClusterName, Namespace: TestStorageClusterNamespace}, sc)

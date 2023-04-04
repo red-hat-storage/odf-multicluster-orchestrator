@@ -1,0 +1,50 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: maintenance-agent
+  namespace: {{ .AddonInstallNamespace }}
+  labels:
+    app: maintenance-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: maintenance-agent
+  template:
+    metadata:
+      labels:
+        app: maintenance-agent
+    spec:
+      serviceAccountName: maintenance-agent-sa
+      volumes:
+      - name: hub-config
+        secret:
+          secretName: {{ .KubeConfigSecret }}
+      containers:
+      - name: maintenance-agent
+        image: {{ .Image }}
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          failureThreshold: 3
+          periodSeconds: 30
+          initialDelaySeconds: 60
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8000
+          failureThreshold: 3
+          periodSeconds: 30
+          initialDelaySeconds: 60
+        command:
+        - "/manager"
+        args:
+          - "maintenance"
+          - "--hub-kubeconfig=/var/run/hub/kubeconfig"
+          - "--cluster-name={{ .ClusterName }}"
+          - "--namespace={{ .AddonInstallNamespace }}"
+        volumeMounts:
+          - name: hub-config
+            mountPath: /var/run/hub
