@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	"os"
 	"strings"
 
@@ -156,7 +157,7 @@ func (r rookSecretHandler) syncGreenSecret(name string, namespace string, c *gre
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secret.Name,
 			Namespace: toNamespace,
-			Labels:    map[string]string{utils.CreatedByLabelKey: TokenExchangeName},
+			Labels:    map[string]string{utils.CreatedByLabelKey: setup.TokenExchangeName},
 		},
 		Data: data,
 	}
