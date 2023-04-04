@@ -21,7 +21,7 @@ package controllers
 
 import (
 	"context"
-	tokenExchange "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
@@ -149,7 +149,7 @@ func TestProcessManagedClusterAddons(t *testing.T) {
 	for i := range mirrorpeer.Spec.Items {
 		managedClusterAddon := addonapiv1alpha1.ManagedClusterAddOn{}
 		if err := r.Get(ctx, types.NamespacedName{
-			Name:      tokenExchange.TokenExchangeName,
+			Name:      setup.TokenExchangeName,
 			Namespace: mirrorpeer.Spec.Items[i].ClusterName,
 		}, &managedClusterAddon); err != nil {
 			t.Error("Failed to create ManagedClusterAddon")

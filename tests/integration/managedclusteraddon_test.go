@@ -27,7 +27,7 @@ import (
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	tokenexchange "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	v1 "k8s.io/api/core/v1"
@@ -54,8 +54,8 @@ var (
 		},
 	}
 	mirrorPeer1LookupKey = types.NamespacedName{Namespace: mirrorPeer1.Namespace, Name: mirrorPeer1.Name}
-	mcAddOn1LookupKey    = types.NamespacedName{Namespace: "cluster1", Name: tokenexchange.TokenExchangeName}
-	mcAddOn2LookupKey    = types.NamespacedName{Namespace: "cluster2", Name: tokenexchange.TokenExchangeName}
+	mcAddOn1LookupKey    = types.NamespacedName{Namespace: "cluster1", Name: setup.TokenExchangeName}
+	mcAddOn2LookupKey    = types.NamespacedName{Namespace: "cluster2", Name: setup.TokenExchangeName}
 	mcAddOn1             = addonapiv1alpha1.ManagedClusterAddOn{}
 	mcAddOn2             = addonapiv1alpha1.ManagedClusterAddOn{}
 )

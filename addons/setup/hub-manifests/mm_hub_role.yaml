@@ -1,0 +1,18 @@
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: open-cluster-management:maintenance:agent
+  namespace: {{ .ClusterName }}
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
+- apiGroups: ["addon.open-cluster-management.io"]
+  resources: ["managedclusteraddons"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+- apiGroups: ["addon.open-cluster-management.io"]
+  resources: ["managedclusteraddons/finalizers"]
+  verbs: ["update"]
+- apiGroups: ["addon.open-cluster-management.io"]
+  resources: ["managedclusteraddons/status"]
+  verbs: ["patch", "update"]

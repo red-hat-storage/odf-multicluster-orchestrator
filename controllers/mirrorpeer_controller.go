@@ -18,11 +18,11 @@ package controllers
 
 import (
 	"context"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	"os"
 
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	addons "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
-	tokenExchange "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
@@ -245,7 +245,7 @@ func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, m
 	for i := range mirrorPeer.Spec.Items {
 		var managedClusterAddOn addonapiv1alpha1.ManagedClusterAddOn
 		if err := r.Client.Get(ctx, types.NamespacedName{
-			Name:      tokenExchange.TokenExchangeName,
+			Name:      setup.TokenExchangeName,
 			Namespace: mirrorPeer.Spec.Items[i].ClusterName,
 		}, &managedClusterAddOn); err != nil {
 			if k8serrors.IsNotFound(err) {
@@ -255,7 +255,7 @@ func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, m
 
 				managedClusterAddOn = addonapiv1alpha1.ManagedClusterAddOn{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:        tokenExchange.TokenExchangeName,
+						Name:        setup.TokenExchangeName,
 						Namespace:   mirrorPeer.Spec.Items[i].ClusterName,
 						Annotations: annotations,
 					},
@@ -648,13 +648,13 @@ func getSubjectByPeerRef(pr multiclusterv1alpha1.PeerRef, kind string) *rbacv1.S
 	case "User":
 		return &rbacv1.Subject{
 			Kind:     kind,
-			Name:     agent.DefaultUser(pr.ClusterName, addons.TokenExchangeName, addons.TokenExchangeName),
+			Name:     agent.DefaultUser(pr.ClusterName, setup.TokenExchangeName, setup.TokenExchangeName),
 			APIGroup: "rbac.authorization.k8s.io",
 		}
 	case "Group":
 		return &rbacv1.Subject{
 			Kind:     kind,
-			Name:     agent.DefaultGroups(pr.ClusterName, addons.TokenExchangeName)[0],
+			Name:     agent.DefaultGroups(pr.ClusterName, setup.TokenExchangeName)[0],
 			APIGroup: "rbac.authorization.k8s.io",
 		}
 	default:
