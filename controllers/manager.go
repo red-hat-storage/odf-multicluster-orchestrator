@@ -3,14 +3,13 @@ package controllers
 import (
 	"context"
 	"flag"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	"os"
 
 	consolev1alpha1 "github.com/openshift/api/console/v1alpha1"
 	"github.com/openshift/library-go/pkg/operator/events"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
-	tokenexchange "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/console"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -24,7 +23,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 var (
@@ -119,7 +117,7 @@ func (o *ManagerOptions) runManager() {
 		os.Exit(1)
 	}
 
-	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+	/*if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		err = console.InitConsole(ctx, mgr.GetClient(), o.MulticlusterConsolePort, namespace)
 		if err != nil {
 			setupLog.Error(err, "unable to initialize multicluster console to manager")
@@ -129,7 +127,7 @@ func (o *ManagerOptions) runManager() {
 	})); err != nil {
 		setupLog.Error(err, "unable to add multicluster console to manager")
 		os.Exit(1)
-	}
+	}*/
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
@@ -150,14 +148,35 @@ func (o *ManagerOptions) runManager() {
 	if err != nil {
 		setupLog.Info("unable to get owner reference (falling back to namespace)", "error", err)
 	}
-	eventRecorder := events.NewKubeRecorder(kubeClient.CoreV1().Events(namespace), tokenexchange.TokenExchangeName, controllerRef)
+	teEventRecorder := events.NewKubeRecorder(kubeClient.CoreV1().Events(namespace), setup.TokenExchangeName, controllerRef)
+	mEventRecorder := events.NewKubeRecorder(kubeClient.CoreV1().Events(namespace), setup.MaintainAgentName, controllerRef)
 
 	agentImage := os.Getenv("TOKEN_EXCHANGE_IMAGE")
 
-	tokenExchangeAddon := tokenexchange.TokenExchangeAddon{
-		KubeClient: kubeClient,
-		Recorder:   eventRecorder,
-		AgentImage: agentImage,
+	tokenExchangeAddon := setup.TokenExchangeAddon{
+		Addons: struct {
+			KubeClient kubernetes.Interface
+			Recorder   events.Recorder
+			AgentImage string
+			AddonName  string
+		}{
+			KubeClient: kubeClient,
+			Recorder:   teEventRecorder,
+			AgentImage: agentImage,
+			AddonName:  setup.TokenExchangeName},
+	}
+
+	maintainenceModeAddon := setup.MaintainenceAddon{
+		Addons: struct {
+			KubeClient kubernetes.Interface
+			Recorder   events.Recorder
+			AgentImage string
+			AddonName  string
+		}{
+			KubeClient: kubeClient,
+			Recorder:   mEventRecorder,
+			AgentImage: agentImage,
+			AddonName:  setup.MaintainAgentName},
 	}
 
 	err = (&multiclusterv1alpha1.MirrorPeer{}).SetupWebhookWithManager(mgr)
@@ -175,6 +194,11 @@ func (o *ManagerOptions) runManager() {
 	err = addonMgr.AddAgent(&tokenExchangeAddon)
 	if err != nil {
 		setupLog.Error(err, "problem adding token exchange addon to addon manager")
+	}
+
+	err = addonMgr.AddAgent(&maintainenceModeAddon)
+	if err != nil {
+		setupLog.Error(err, "problem adding maintainence addon to addon manager")
 	}
 
 	if err = (&DRPolicyReconciler{
