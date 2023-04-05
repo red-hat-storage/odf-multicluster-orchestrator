@@ -40,8 +40,10 @@ func NewNamedPeerRefWithSecretData(secret *corev1.Secret, peerRef multiclusterv1
 
 // GenerateSecret will generate a secret of provided type.
 // nPeerRef object contains TWO parts,
-//	 a. details of the secret, like name,namespace etc; that is to be generated
-// 	 b. data part that is to be passed on to the newly created secret
+//
+//	a. details of the secret, like name,namespace etc; that is to be generated
+//	b. data part that is to be passed on to the newly created secret
+//
 // The type of secret (ie; source or destination) is passed as the argument
 func (nPR *NamedPeerRefWithSecretData) GenerateSecret(secretLabelType utils.SecretLabelType) *corev1.Secret {
 	if nPR == nil {
