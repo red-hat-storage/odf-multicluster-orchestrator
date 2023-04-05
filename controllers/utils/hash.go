@@ -8,8 +8,8 @@ import (
 )
 
 /*
-	fnv64a is a 64-bit non-cryptographic hash algorithm with a low collision and a high distribution rate.
-	https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
+fnv64a is a 64-bit non-cryptographic hash algorithm with a low collision and a high distribution rate.
+https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
 */
 func FnvHash(s string) uint32 {
 	h := fnv.New32a()
