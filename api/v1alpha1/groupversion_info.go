@@ -15,8 +15,8 @@ limitations under the License.
 */
 
 // Package v1alpha1 contains API Schema definitions for the multicluster v1alpha1 API group
-//+kubebuilder:object:generate=true
-//+groupName=multicluster.odf.openshift.io
+// +kubebuilder:object:generate=true
+// +groupName=multicluster.odf.openshift.io
 package v1alpha1
 
 import (
