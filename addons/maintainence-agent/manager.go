@@ -8,7 +8,10 @@ import (
 	routev1 "github.com/openshift/api/route/v1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 
+	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
+	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	"golang.org/x/sync/errgroup"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -18,7 +21,6 @@ import (
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
@@ -35,15 +37,11 @@ func init() {
 	utilruntime.Must(ocsv1.AddToScheme(mgrScheme))
 	utilruntime.Must(obv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(routev1.AddToScheme(mgrScheme))
-	//+kubebuilder:scaffold:scheme
-}
 
-func getClient(config *rest.Config) (client.Client, error) {
-	cl, err := client.New(config, client.Options{Scheme: mgrScheme})
-	if err != nil {
-		return nil, err
-	}
-	return cl, nil
+	utilruntime.Must(ramenv1alpha1.AddToScheme(mgrScheme))
+	utilruntime.Must(rookv1.AddToScheme(mgrScheme))
+	utilruntime.Must(appsv1.AddToScheme(mgrScheme))
+	//+kubebuilder:scaffold:scheme
 }
 
 func runManager(ctx context.Context, spokeConfig *rest.Config, spokeClusterName string) {
@@ -57,7 +55,7 @@ func runManager(ctx context.Context, spokeConfig *rest.Config, spokeClusterName 
 		os.Exit(1)
 	}
 
-	if err = (&ModeReconciler{
+	if err = (&MaintenanceModeReconciler{
 		SpokeClient:      mgr.GetClient(),
 		Scheme:           mgr.GetScheme(),
 		SpokeClusterName: spokeClusterName,

@@ -201,6 +201,7 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 		vrcName := fmt.Sprintf(RBDVolumeReplicationClassNameTemplate, utils.FnvHash(interval))
 		labels := make(map[string]string)
 		labels[fmt.Sprintf(RamenLabelTemplate, ReplicationIDKey)] = replicationId
+		labels[fmt.Sprintf(RamenLabelTemplate, "maintenancemodes")] = "Failover"
 		vrc := replicationv1alpha1.VolumeReplicationClass{
 			TypeMeta: metav1.TypeMeta{
 				Kind: "VolumeReplicationClass", APIVersion: "replication.storage.openshift.io/v1alpha1",
