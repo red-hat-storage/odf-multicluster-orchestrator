@@ -69,7 +69,7 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 	)
 
 	go leaseUpdater.Start(ctx)
-	go runManager(ctx, controllerContext.KubeConfig, o.SpokeClusterName)
+	runManager(ctx, controllerContext.KubeConfig, o.SpokeClusterName)
 	<-ctx.Done()
 	return nil
 }
