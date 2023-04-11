@@ -8,16 +8,21 @@ import (
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	k8smeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"time"
 )
 
-type ModeReconciler struct {
+type MaintenanceModeReconciler struct {
 	Scheme           *runtime.Scheme
 	SpokeClient      client.Client
 	SpokeClusterName string
@@ -29,32 +34,32 @@ const (
 	RBDMirrorDeploymentNamePrefix = "rook-ceph-rbd-mirror"
 )
 
-func (r *ModeReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *MaintenanceModeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ramenv1alpha1.MaintenanceMode{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
 }
 
-func (r *ModeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
+func (r *MaintenanceModeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	klog.Info("starting reconcile for maintenancemode")
 	// Fetch MaintenanceMode for given Request
 	var mmode ramenv1alpha1.MaintenanceMode
 	err := r.SpokeClient.Get(ctx, req.NamespacedName, &mmode)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			logger.Info("could not find MaintenanceMode. ignoring since object must have been deleted")
+			klog.Info("could not find MaintenanceMode. ignoring since object must have been deleted")
 			return ctrl.Result{}, nil
 		}
-		logger.Error(err, "failed to get MaintenanceMode")
+		klog.Error(err, "failed to get MaintenanceMode")
 		return ctrl.Result{}, err
 	}
 
 	if mmode.GetDeletionTimestamp().IsZero() {
 		if !utils.ContainsString(mmode.GetFinalizers(), MaintenanceModeFinalizer) {
-			logger.Info("finalizer not found on MaintenanceMode. adding Finalizer ", MaintenanceModeFinalizer)
+			klog.Info("finalizer not found on MaintenanceMode. adding Finalizer ", MaintenanceModeFinalizer)
 			mmode.Finalizers = append(mmode.Finalizers, MaintenanceModeFinalizer)
 			if err := r.SpokeClient.Update(ctx, &mmode); err != nil {
-				logger.Error(err, "failed to add finalizer to MaintenanceMode", mmode.Name)
+				klog.Error(err, "failed to add finalizer to MaintenanceMode", mmode.Name)
 				return ctrl.Result{}, err
 			}
 		}
@@ -66,14 +71,14 @@ func (r *ModeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	if cephClusters == nil || len(cephClusters.Items) == 0 {
-		logger.Info("no CephClusters available on the cluster")
+		klog.Info("no CephClusters available on the cluster")
 		return ctrl.Result{}, nil
 	}
 
 	actionableCephClusters := filterCephClustersByStorageId(cephClusters, mmode.Spec.TargetID, mmode.Spec.StorageProvisioner)
 
 	if len(actionableCephClusters) == 0 {
-		logger.Info("no CephClusters present with required parameters for maintenance", "StorageId", mmode.Spec.TargetID, "Provisioner", mmode.Spec.StorageProvisioner)
+		klog.Info("no CephClusters present with required parameters for maintenance", "StorageId", mmode.Spec.TargetID, "Provisioner", mmode.Spec.StorageProvisioner)
 		return ctrl.Result{}, nil
 	}
 
@@ -85,10 +90,10 @@ func (r *ModeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		mmode.Finalizers = utils.RemoveString(mmode.Finalizers, MaintenanceModeFinalizer)
 
 		if err := r.SpokeClient.Update(ctx, &mmode); err != nil {
-			logger.Error(err, "failed to remove finalizer from MaintenanceMode ", err)
+			klog.Error(err, "failed to remove finalizer from MaintenanceMode ", err)
 			return ctrl.Result{}, err
 		}
-		logger.Info("MaintenanceMode deleted, skipping reconciliation")
+		klog.Info("MaintenanceMode deleted, skipping reconciliation")
 		return ctrl.Result{}, nil
 	} else {
 		_, err := r.startMaintenanceActions(ctx, mmode, actionableCephClusters, true)
@@ -100,9 +105,8 @@ func (r *ModeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	return ctrl.Result{}, nil
 }
 
-func (r *ModeReconciler) startMaintenanceActions(ctx context.Context, mmode ramenv1alpha1.MaintenanceMode, clusters []rookv1.CephCluster, scaleDown bool) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-	logger.Info("Starting actions on MaintenanceMode", "MaintenanceMode", mmode.Name)
+func (r *MaintenanceModeReconciler) startMaintenanceActions(ctx context.Context, mmode ramenv1alpha1.MaintenanceMode, clusters []rookv1.CephCluster, scaleDown bool) (ctrl.Result, error) {
+	klog.Info("starting actions on MaintenanceMode", "MaintenanceMode ", mmode.Name)
 	for _, mode := range mmode.Spec.Modes {
 		res, err := r.updateStatus(ctx, mmode, mode, ramenv1alpha1.MModeStateProgressing, nil)
 		if err != nil {
@@ -112,23 +116,23 @@ func (r *ModeReconciler) startMaintenanceActions(ctx context.Context, mmode rame
 		case ramenv1alpha1.MMode(ramenv1alpha1.ActionFailover):
 			var replicas int
 			if scaleDown {
-				logger.Info("Scaling down RBD mirror deployments")
+				klog.Info("Scaling down RBD mirror deployments")
 				replicas = 0
 			} else {
-				logger.Info("Scaling up RBD mirror deployments")
+				klog.Info("Scaling up RBD mirror deployments")
 				replicas = 1
 			}
 			_, err := r.scaleRBDMirrorDeployment(ctx, clusters, replicas)
 			if err != nil {
-				_, statusErr := r.updateStatus(ctx, mmode, mode, ramenv1alpha1.MModeStateError, err)
+				res, statusErr := r.updateStatus(ctx, mmode, mode, ramenv1alpha1.MModeStateError, err)
 				if statusErr != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to update error status %v while having error %v", statusErr, err)
+					return res, fmt.Errorf("failed to update error status %v while having error %v", statusErr, err)
 				}
-				return ctrl.Result{}, err
+				return res, err
 			}
-			_, err = r.updateStatus(ctx, mmode, mode, ramenv1alpha1.MModeStateCompleted, nil)
+			res, err = r.updateStatus(ctx, mmode, mode, ramenv1alpha1.MModeStateCompleted, nil)
 			if err != nil {
-				return ctrl.Result{}, err
+				return res, err
 			}
 		default:
 			return ctrl.Result{}, fmt.Errorf("no actions found for %q mode", mode)
@@ -137,7 +141,7 @@ func (r *ModeReconciler) startMaintenanceActions(ctx context.Context, mmode rame
 	return ctrl.Result{}, nil
 }
 
-func (r *ModeReconciler) scaleRBDMirrorDeployment(ctx context.Context, clusters []rookv1.CephCluster, replicas int) (ctrl.Result, error) {
+func (r *MaintenanceModeReconciler) scaleRBDMirrorDeployment(ctx context.Context, clusters []rookv1.CephCluster, replicas int) (ctrl.Result, error) {
 	for _, cephCluster := range clusters {
 		deployments, err := GetDeploymentsStartingWith(ctx, r.SpokeClient, cephCluster.Namespace, RBDMirrorDeploymentNamePrefix)
 		if err != nil {
@@ -152,21 +156,77 @@ func (r *ModeReconciler) scaleRBDMirrorDeployment(ctx context.Context, clusters 
 	return ctrl.Result{}, nil
 }
 
-func (r *ModeReconciler) updateStatus(ctx context.Context, mmode ramenv1alpha1.MaintenanceMode, mode ramenv1alpha1.MMode, state ramenv1alpha1.MModeState, err error) (ctrl.Result, error) {
+func (r *MaintenanceModeReconciler) updateStatus(ctx context.Context, mmode ramenv1alpha1.MaintenanceMode, mode ramenv1alpha1.MMode, state ramenv1alpha1.MModeState, err error) (ctrl.Result, error) {
+	klog.Infof("mode: %s, status: %s, generation: %d, error: %v ", mode, state, mmode.Generation, err)
 	mmode.Status.State = state
-	mmode.Status.ObservedGeneration = int(mmode.Generation)
-	// TODO Add status conditions
+	mmode.Status.ObservedGeneration = mmode.Generation
+	var conditions []metav1.Condition
+	if len(mmode.Status.Conditions) == 0 {
+		conditions = make([]metav1.Condition, 0)
+		conditions = append(conditions, newCondition(state, mode, mmode.Generation, err))
+	}
+	k8smeta.SetStatusCondition(&conditions, newCondition(state, mode, mmode.Generation, err))
+	mmode.Status.Conditions = conditions
+	statusErr := r.SpokeClient.Status().Update(ctx, &mmode)
+	if statusErr != nil {
+		klog.Error(statusErr)
+		if k8serrors.IsConflict(statusErr) {
+			// The object is being updated, and we need to requeue the request again for updates.
+			klog.Info("the object is being updated, retrying the request again...")
+			return ctrl.Result{RequeueAfter: time.Second * 5}, nil
+		}
+		return ctrl.Result{}, statusErr
+	}
+	return ctrl.Result{}, nil
+}
 
-	err = r.SpokeClient.Status().Update(ctx, &mmode)
-	return ctrl.Result{}, err
+func newCondition(state ramenv1alpha1.MModeState, mode ramenv1alpha1.MMode, generation int64, err error) metav1.Condition {
+	var reason string
+	var message string
+	var status metav1.ConditionStatus
+
+	switch state {
+	case ramenv1alpha1.MModeStateProgressing:
+		reason = "MaintenanceProgressing"
+		message = fmt.Sprintf("Maintenance(mode=%s) of cluster is in progress", mode)
+		status = metav1.ConditionTrue
+	case ramenv1alpha1.MModeStateError:
+		reason = "MaintenanceError"
+		message = fmt.Sprintf("Maintenance(mode=%s) of cluster is in error state, err: %v", mode, err)
+		status = metav1.ConditionTrue
+	case ramenv1alpha1.MModeStateCompleted:
+		reason = "MaintenanceCompleted"
+		message = fmt.Sprintf("Maintenance(mode=%s) of cluster has completed successfully", mode)
+		status = metav1.ConditionTrue
+	default:
+		reason = "MaintenanceUnknown"
+		message = fmt.Sprintf("Maintenance(mode=%s) of cluster is unknown state", mode)
+		status = metav1.ConditionUnknown
+	}
+	return metav1.Condition{
+		Type:               string(mode),
+		Status:             status,
+		ObservedGeneration: generation,
+		LastTransitionTime: metav1.Now(),
+		Reason:             reason,
+		Message:            message,
+	}
 }
 
 func GetDeploymentsStartingWith(ctx context.Context, spokeClient client.Client, namespace string, prefix string) ([]string, error) {
 	deploymentList := &appsv1.DeploymentList{}
-	listOpts := &client.ListOptions{
-		Namespace: namespace,
+	rookMirrorDeploymentLabel, err := labels.NewRequirement("app", selection.In, []string{"rook-ceph-rbd-mirror"})
+	if err != nil {
+		klog.Error(err, "cannot parse new requirement")
 	}
-	err := spokeClient.List(ctx, deploymentList, listOpts)
+
+	deploymentSelector := labels.NewSelector().Add(*rookMirrorDeploymentLabel)
+	listOpts := &client.ListOptions{
+		Namespace:     namespace,
+		LabelSelector: deploymentSelector,
+	}
+
+	err = spokeClient.List(ctx, deploymentList, listOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +284,6 @@ func filterCephClustersByStorageId(clusters *rookv1.CephClusterList, storageId s
 }
 
 func fetchAllCephClusters(ctx context.Context, client client.Client) (*rookv1.CephClusterList, error) {
-	logger := log.FromContext(ctx)
 	var cephClusters rookv1.CephClusterList
 	err := client.List(ctx, &cephClusters)
 	if err != nil {
@@ -232,7 +291,7 @@ func fetchAllCephClusters(ctx context.Context, client client.Client) (*rookv1.Ce
 	}
 
 	if len(cephClusters.Items) == 0 {
-		logger.Info("no CephClusters found on current cluster")
+		klog.Info("no CephClusters found on current cluster")
 		return nil, nil
 	}
 	return &cephClusters, nil
