@@ -92,6 +92,10 @@ func (r *MirrorPeer) ValidateUpdate(old runtime.Object) error {
 			return fmt.Errorf("error validating update: new MirrorPeer %s references a StorageCluster %s/%s that is not in the old MirrorPeer", r.ObjectMeta.Name, pr.StorageClusterRef.Namespace, pr.StorageClusterRef.Name)
 		}
 	}
+
+	if oldMirrorPeer.Spec.OverlappingCIDR && !r.Spec.OverlappingCIDR {
+		return fmt.Errorf("error updating MirrorPeer: OverlappingCIDR value can not be changed from %t to %t. This is to prevent Disaster Recovery from being unusable between clusters that have overlapping IPs", oldMirrorPeer.Spec.OverlappingCIDR, r.Spec.OverlappingCIDR)
+	}
 	return validateMirrorPeer(r)
 }
 

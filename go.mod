@@ -6,14 +6,15 @@ require (
 	github.com/csi-addons/kubernetes-csi-addons v0.5.1-0.20220913110921-9fff8e43e344
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.27.1
+	github.com/onsi/gomega v1.27.4
 	github.com/openshift/api v3.9.1-0.20191111211345-a27ff30ebf09+incompatible
 	github.com/openshift/library-go v0.0.0-20230127195720-edf819b079cf
-	github.com/ramendr/ramen v0.0.0-20221004165615-ba6b6b454658
-	github.com/red-hat-storage/ocs-operator v0.0.1-master.0.20230401010509-91dfd1590040
-	github.com/rook/rook v1.11.2
+	github.com/ramendr/ramen v0.0.0-20230417210457-6d88803e39ed
+	github.com/red-hat-storage/ocs-operator v0.0.1-master.0.20230417124524-f67100d2dde1
+	github.com/rook/rook v1.11.4
 	github.com/spf13/cobra v1.6.1
 	github.com/stretchr/testify v1.8.2
+	github.com/submariner-io/submariner-operator v0.14.3
 	golang.org/x/sync v0.1.0
 	k8s.io/api v0.26.3
 	k8s.io/apimachinery v0.26.3
@@ -36,7 +37,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/coreos/go-semver v0.3.0 // indirect
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
-	github.com/coreos/go-systemd/v22 v22.3.2 // indirect
+	github.com/coreos/go-systemd/v22 v22.3.3-0.20220203105225-a9a7ef127534 // indirect
 	github.com/coreos/pkg v0.0.0-20230327231512-ba87abf18a23 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/emicklei/go-restful/v3 v3.10.2 // indirect
@@ -111,6 +112,8 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stoewer/go-strcase v1.2.0 // indirect
 	github.com/stolostron/multicloud-operators-placementrule v1.2.4-1-20220311-8eedb3f.0.20220411162042-3de0a2f908f1 // indirect
+	github.com/submariner-io/admiral v0.14.3 // indirect
+	github.com/submariner-io/submariner v0.14.3 // indirect
 	go.etcd.io/etcd/api/v3 v3.5.5 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.5.5 // indirect
 	go.etcd.io/etcd/client/v3 v3.5.5 // indirect
