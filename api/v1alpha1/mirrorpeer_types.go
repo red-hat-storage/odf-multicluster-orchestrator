@@ -69,6 +69,14 @@ type MirrorPeerSpec struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=false
 	ManageS3 bool `json:"manageS3,omitempty"`
+
+	// OverlappingCIDR should be set to true if the peer clusters
+	// have overlapping Pod or Service CIDR. This will enable storage
+	// clusters to use submariner globalnet. Enabling this will cause
+	// storage service disruption while network is being reconfigured.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=false
+	OverlappingCIDR bool `json:"overlappingCIDR,omitempty"`
 }
 
 // MirrorPeerStatus defines the observed state of MirrorPeer
