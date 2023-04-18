@@ -1,4 +1,4 @@
-package addons
+package setup
 
 import (
 	"context"
@@ -36,33 +36,60 @@ func init() {
 	utilruntime.Must(scheme.AddToScheme(genericScheme))
 }
 
-var agentDeploymentFiles = []string{
-	"manifests/spoke_serviceaccount.yaml",
-	"manifests/spoke_clusterrole.yaml",
-	"manifests/spoke_role.yaml",
-	"manifests/spoke_clusterrolebinding.yaml",
-	"manifests/spoke_rolebinding.yaml",
-	"manifests/spoke_deployment.yaml",
+var tokenExchangeDeploymentFiles = []string{
+	"tokenexchange-manifests/spoke_serviceaccount.yaml",
+	"tokenexchange-manifests/spoke_clusterrole.yaml",
+	"tokenexchange-manifests/spoke_role.yaml",
+	"tokenexchange-manifests/spoke_clusterrolebinding.yaml",
+	"tokenexchange-manifests/spoke_rolebinding.yaml",
+	"tokenexchange-manifests/spoke_deployment.yaml",
+}
+
+var maintenanceDeploymentFiles = []string{
+	"maintenance-manifests/spoke_serviceaccount.yaml",
+	"maintenance-manifests/spoke_clusterrole.yaml",
+	"maintenance-manifests/spoke_role.yaml",
+	"maintenance-manifests/spoke_clusterrolebinding.yaml",
+	"maintenance-manifests/spoke_rolebinding.yaml",
+	"maintenance-manifests/spoke_deployment.yaml",
 }
 
 var agentHubPermissionFiles = []string{
-	"manifests/hub_role.yaml",
-	"manifests/hub_rolebinding.yaml",
-	"manifests/hub_clusterrole.yaml",
-	"manifests/hub_clusterrolebinding.yaml",
+	"hub-manifests/te_hub_role.yaml",
+	"hub-manifests/te_hub_rolebinding.yaml",
+	"hub-manifests/te_hub_clusterrole.yaml",
+	"hub-manifests/te_hub_clusterrolebinding.yaml",
+	"hub-manifests/mm_hub_role.yaml",
+	"hub-manifests/mm_hub_rolebinding.yaml",
+	"hub-manifests/mm_hub_clusterrole.yaml",
+	"hub-manifests/mm_hub_clusterrolebinding.yaml",
 }
 
-//go:embed manifests
-var manifestFiles embed.FS
+//go:embed tokenexchange-manifests
+var exchangeManifestFiles embed.FS
 
-type TokenExchangeAddon struct {
+//go:embed maintenance-manifests
+var maintenanceManifestFiles embed.FS
+
+//go:embed hub-manifests
+var hubManifests embed.FS
+
+type Addons struct {
 	KubeClient kubernetes.Interface
 	Recorder   events.Recorder
 	AgentImage string
+	AddonName  string
+}
+type TokenExchangeAddon struct {
+	Addons
+}
+
+type MaintainenceAddon struct {
+	Addons
 }
 
 // Manifests generates manifestworks to deploy the token exchange addon agent on the managed cluster
-func (a *TokenExchangeAddon) Manifests(cluster *clusterv1.ManagedCluster, addon *addonapiv1alpha1.ManagedClusterAddOn) ([]runtime.Object, error) {
+func (a *Addons) Manifests(cluster *clusterv1.ManagedCluster, addon *addonapiv1alpha1.ManagedClusterAddOn) ([]runtime.Object, error) {
 	objects := []runtime.Object{}
 
 	installNamespace := addon.Spec.InstallNamespace
@@ -71,11 +98,11 @@ func (a *TokenExchangeAddon) Manifests(cluster *clusterv1.ManagedCluster, addon 
 	}
 
 	if len(a.AgentImage) == 0 {
-		return objects, fmt.Errorf("image not provided for agent %q", TokenExchangeName)
+		return objects, fmt.Errorf("image not provided for agent %q", a.AddonName)
 	}
 
-	groups := agent.DefaultGroups(cluster.Name, TokenExchangeName)
-	user := agent.DefaultUser(cluster.Name, TokenExchangeName, TokenExchangeName)
+	groups := agent.DefaultGroups(cluster.Name, a.AddonName)
+	user := agent.DefaultUser(cluster.Name, a.AddonName, a.AddonName)
 
 	manifestConfig := struct {
 		KubeConfigSecret      string
@@ -86,7 +113,7 @@ func (a *TokenExchangeAddon) Manifests(cluster *clusterv1.ManagedCluster, addon 
 		Group                 string
 		User                  string
 	}{
-		KubeConfigSecret:      fmt.Sprintf("%s-hub-kubeconfig", TokenExchangeName),
+		KubeConfigSecret:      fmt.Sprintf("%s-hub-kubeconfig", a.AddonName),
 		AddonInstallNamespace: installNamespace,
 		ClusterName:           cluster.Name,
 		Image:                 a.AgentImage,
@@ -95,7 +122,16 @@ func (a *TokenExchangeAddon) Manifests(cluster *clusterv1.ManagedCluster, addon 
 		User:                  user,
 	}
 
-	for _, file := range agentDeploymentFiles {
+	var deploymentFiles []string
+	var manifestFiles embed.FS
+	if a.AddonName == MaintainAgentName {
+		deploymentFiles = maintenanceDeploymentFiles
+		manifestFiles = maintenanceManifestFiles
+	} else {
+		deploymentFiles = tokenExchangeDeploymentFiles
+		manifestFiles = exchangeManifestFiles
+	}
+	for _, file := range deploymentFiles {
 		template, err := manifestFiles.ReadFile(file)
 		if err != nil {
 			return objects, err
@@ -111,12 +147,12 @@ func (a *TokenExchangeAddon) Manifests(cluster *clusterv1.ManagedCluster, addon 
 	return objects, nil
 }
 
-// GetAgentAddonOptions returns the options of token exchange addon agent
-func (a *TokenExchangeAddon) GetAgentAddonOptions() agent.AgentAddonOptions {
+// GetAgentAddonOptions returns the options of  addon agent
+func (a *Addons) GetAgentAddonOptions() agent.AgentAddonOptions {
 	return agent.AgentAddonOptions{
-		AddonName: TokenExchangeName,
+		AddonName: a.AddonName,
 		Registration: &agent.RegistrationOption{
-			CSRConfigurations: agent.KubeClientSignerConfigurations(TokenExchangeName, TokenExchangeName),
+			CSRConfigurations: agent.KubeClientSignerConfigurations(a.AddonName, a.AddonName),
 			CSRApproveCheck:   a.csrApproveCheck,
 			PermissionConfig:  a.permissionConfig,
 		},
@@ -127,12 +163,12 @@ func (a *TokenExchangeAddon) GetAgentAddonOptions() agent.AgentAddonOptions {
 // 1. if the signer name in csr request is valid.
 // 2. if organization field and commonName field in csr request is valid.
 // 3. if user name in csr is the same as commonName field in csr request.
-func (a *TokenExchangeAddon) csrApproveCheck(cluster *clusterv1.ManagedCluster, addon *addonapiv1alpha1.ManagedClusterAddOn, csr *certificatesv1.CertificateSigningRequest) bool {
-	groups := agent.DefaultGroups(cluster.Name, TokenExchangeName)
+func (a *Addons) csrApproveCheck(cluster *clusterv1.ManagedCluster, addon *addonapiv1alpha1.ManagedClusterAddOn, csr *certificatesv1.CertificateSigningRequest) bool {
+	groups := agent.DefaultGroups(cluster.Name, a.AddonName)
 	clusterAddOnGroup := groups[0]
 	addOnGroup := groups[1]
 	authenticatedGroup := groups[2]
-	agentUserName := agent.DefaultUser(cluster.Name, TokenExchangeName, TokenExchangeName)
+	agentUserName := agent.DefaultUser(cluster.Name, a.AddonName, a.AddonName)
 
 	if csr.Spec.SignerName != certificatesv1.KubeAPIServerClientSignerName {
 		klog.V(4).Infof("csr %q was not recognized: SignerName not recognized", csr.Name)
@@ -175,10 +211,10 @@ func (a *TokenExchangeAddon) csrApproveCheck(cluster *clusterv1.ManagedCluster, 
 	return agentUserName == x509cr.Subject.CommonName
 }
 
-// Generates manifestworks to deploy the required roles of token exchange addon agent
-func (a *TokenExchangeAddon) permissionConfig(cluster *clusterv1.ManagedCluster, addon *addonapiv1alpha1.ManagedClusterAddOn) error {
-	groups := agent.DefaultGroups(cluster.Name, TokenExchangeName)
-	user := agent.DefaultUser(cluster.Name, TokenExchangeName, TokenExchangeName)
+// Generates manifestworks to deploy the required roles of addon agent
+func (a *Addons) permissionConfig(cluster *clusterv1.ManagedCluster, addon *addonapiv1alpha1.ManagedClusterAddOn) error {
+	groups := agent.DefaultGroups(cluster.Name, a.AddonName)
+	user := agent.DefaultUser(cluster.Name, a.AddonName, a.AddonName)
 	config := struct {
 		ClusterName string
 		Group       string
@@ -195,7 +231,7 @@ func (a *TokenExchangeAddon) permissionConfig(cluster *clusterv1.ManagedCluster,
 		a.Recorder,
 		resourceapply.NewResourceCache(),
 		func(name string) ([]byte, error) {
-			template, err := manifestFiles.ReadFile(name)
+			template, err := hubManifests.ReadFile(name)
 			if err != nil {
 				return nil, err
 			}
