@@ -21,7 +21,6 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	storagev1 "k8s.io/api/storage/v1"
 	"strconv"
 	"time"
 
@@ -29,7 +28,10 @@ import (
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
+	submarinerv1alpha1 "github.com/submariner-io/submariner-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -159,6 +161,14 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{}, fmt.Errorf("few failures occured while labeling RBD StorageClasses: %v", errs)
 		}
 
+		// Trying this at last to allow bootstrapping to be completed
+		if mirrorPeer.Spec.OverlappingCIDR {
+			klog.Infof("enabling multiclusterservice", "MirrorPeer", mirrorPeer.GetName(), "Peers", mirrorPeer.Spec.Items)
+			err := r.enableMulticlusterService(ctx, scr.Name, scr.Namespace, &mirrorPeer)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to enable multiclusterservice for storagecluster %q in namespace %q: %v", scr.Name, scr.Namespace, err)
+			}
+		}
 	}
 	return ctrl.Result{}, nil
 }
@@ -295,6 +305,39 @@ func (r *MirrorPeerReconciler) getS3bucket(ctx context.Context, mirrorPeer multi
 	}
 	err := r.SpokeClient.Get(ctx, types.NamespacedName{Name: bucket, Namespace: namespace}, noobaaOBC)
 	return noobaaOBC, err
+}
+
+// enableMulticlusterService sets the multiclusterservice flag on StorageCluster if submariner globalnet is enabled
+func (r *MirrorPeerReconciler) enableMulticlusterService(ctx context.Context, storageClusterName string, namespace string, mp *multiclusterv1alpha1.MirrorPeer) error {
+	var sc ocsv1.StorageCluster
+	err := r.SpokeClient.Get(ctx, types.NamespacedName{
+		Name:      storageClusterName,
+		Namespace: namespace,
+	}, &sc)
+	if err != nil {
+		return err
+	}
+
+	var submariner submarinerv1alpha1.Submariner
+	err = r.SpokeClient.Get(ctx, types.NamespacedName{
+		Name:      "submariner",
+		Namespace: "submariner-operator"},
+		&submariner)
+	if err != nil {
+		return err
+	}
+
+	if sc.Spec.Network == nil {
+		sc.Spec.Network = &rookv1.NetworkSpec{}
+	}
+
+	if !sc.Spec.Network.MultiClusterService.Enabled || sc.Spec.Network.MultiClusterService.ClusterID == "" {
+		sc.Spec.Network.MultiClusterService.Enabled = true
+		sc.Spec.Network.MultiClusterService.ClusterID = submariner.Spec.ClusterID
+		return r.SpokeClient.Update(ctx, &sc)
+	}
+
+	return nil
 }
 
 // enableMirroring is a wrapper function around toggleMirroring to enable mirroring in a storage cluster
