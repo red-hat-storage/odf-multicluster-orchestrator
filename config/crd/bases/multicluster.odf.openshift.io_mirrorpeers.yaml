@@ -66,6 +66,13 @@ spec:
               manageS3:
                 default: false
                 type: boolean
+              overlappingCIDR:
+                default: false
+                description: OverlappingCIDR should be set to true if the peer clusters
+                  have overlapping Pod or Service CIDR. This will enable storage clusters
+                  to use submariner globalnet. Enabling this will cause storage service
+                  disruption while network is being reconfigured.
+                type: boolean
               schedulingIntervals:
                 description: 'SchedulingIntervals is a list of intervals at which
                   mirroring snapshots are taken. DEPRECATED :  Any changes to this
