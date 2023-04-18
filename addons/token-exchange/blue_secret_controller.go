@@ -3,6 +3,7 @@ package addons
 import (
 	"context"
 	"fmt"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 
 	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/events"
@@ -67,7 +68,7 @@ func newblueSecretTokenExchangeAgentController(
 	return factory.New().
 		WithFilteredEventsInformersQueueKeyFunc(queueKeyFn, eventFilterFn, spokeSecretInformers.Informer(), spokeConfigMapInformers.Informer()).
 		WithSync(c.sync).
-		ToController(fmt.Sprintf("managedcluster-secret-%s-controller", TokenExchangeName), recorder)
+		ToController(fmt.Sprintf("managedcluster-secret-%s-controller", setup.TokenExchangeName), recorder)
 }
 
 // sync is the main reconcile function that syncs secret from the managed cluster to the hub cluster

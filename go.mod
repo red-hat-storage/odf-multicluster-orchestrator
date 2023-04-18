@@ -6,10 +6,10 @@ require (
 	github.com/csi-addons/kubernetes-csi-addons v0.5.1-0.20220913110921-9fff8e43e344
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.27.1
+	github.com/onsi/gomega v1.27.4
 	github.com/openshift/api v3.9.1-0.20191111211345-a27ff30ebf09+incompatible
 	github.com/openshift/library-go v0.0.0-20230127195720-edf819b079cf
-	github.com/ramendr/ramen v0.0.0-20221004165615-ba6b6b454658
+	github.com/ramendr/ramen v0.0.0-20230417210457-6d88803e39ed
 	github.com/red-hat-storage/ocs-operator v0.0.1-master.0.20230401010509-91dfd1590040
 	github.com/rook/rook v1.11.2
 	github.com/spf13/cobra v1.6.1
@@ -167,6 +167,7 @@ replace (
 	github.com/metal3-io/baremetal-operator/apis => github.com/openshift/baremetal-operator/apis v0.0.0-20211201170610-92ffa60c683d
 	github.com/metal3-io/baremetal-operator/pkg/hardwareutils => github.com/openshift/baremetal-operator/pkg/hardwareutils v0.0.0-20211201170610-92ffa60c683d
 	github.com/noobaa/noobaa-operator/v5 => github.com/noobaa/noobaa-operator/v5 v5.0.0-20220412093540-8972af85cac4
+	github.com/open-cluster-management-io/api => github.com/open-cluster-management-io/api v0.10.1
 	github.com/openshift/api => github.com/openshift/api v0.0.0-20230217170555-ab002e9c06da
 	github.com/openshift/hive => github.com/openshift/hive v1.1.17-0.20220223000051-b1c8fa5853b1
 	github.com/openshift/hive/apis => github.com/openshift/hive/apis v0.0.0-20220221165319-b389a65758da
