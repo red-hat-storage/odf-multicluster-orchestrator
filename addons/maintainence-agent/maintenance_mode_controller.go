@@ -3,6 +3,7 @@ package maintenance
 import (
 	"context"
 	"fmt"
+
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
@@ -19,7 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"time"
 )
 
 type MaintenanceModeReconciler struct {
@@ -54,17 +54,6 @@ func (r *MaintenanceModeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	if mmode.GetDeletionTimestamp().IsZero() {
-		if !utils.ContainsString(mmode.GetFinalizers(), MaintenanceModeFinalizer) {
-			klog.Info("finalizer not found on MaintenanceMode. adding Finalizer ", MaintenanceModeFinalizer)
-			mmode.Finalizers = append(mmode.Finalizers, MaintenanceModeFinalizer)
-			if err := r.SpokeClient.Update(ctx, &mmode); err != nil {
-				klog.Error(err, "failed to add finalizer to MaintenanceMode", mmode.Name)
-				return ctrl.Result{}, err
-			}
-		}
-	}
-
 	cephClusters, err := fetchAllCephClusters(ctx, r.SpokeClient)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -72,7 +61,7 @@ func (r *MaintenanceModeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	if cephClusters == nil || len(cephClusters.Items) == 0 {
 		klog.Info("no CephClusters available on the cluster")
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, nil // TODO: We should requeue here, in case in the future a cluster is created
 	}
 
 	actionableCephClusters := filterCephClustersByStorageId(cephClusters, mmode.Spec.TargetID, mmode.Spec.StorageProvisioner)
@@ -83,29 +72,51 @@ func (r *MaintenanceModeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	if !mmode.GetDeletionTimestamp().IsZero() || len(mmode.Spec.Modes) == 0 {
-		result, err := r.startMaintenanceActions(ctx, mmode, actionableCephClusters, false)
+		if !utils.ContainsString(mmode.GetFinalizers(), MaintenanceModeFinalizer) {
+			return ctrl.Result{}, nil
+		}
+
+		result, err := r.startMaintenanceActions(ctx, &mmode, actionableCephClusters, false)
 		if err != nil {
 			return result, err
 		}
-		mmode.Finalizers = utils.RemoveString(mmode.Finalizers, MaintenanceModeFinalizer)
 
+		mmode.Finalizers = utils.RemoveString(mmode.Finalizers, MaintenanceModeFinalizer)
 		if err := r.SpokeClient.Update(ctx, &mmode); err != nil {
 			klog.Error(err, "failed to remove finalizer from MaintenanceMode ", err)
 			return ctrl.Result{}, err
 		}
-		klog.Info("MaintenanceMode deleted, skipping reconciliation")
+
+		klog.Info("MaintenanceMode disabled")
 		return ctrl.Result{}, nil
-	} else {
-		_, err := r.startMaintenanceActions(ctx, mmode, actionableCephClusters, true)
-		if err != nil {
+	}
+
+	if !utils.ContainsString(mmode.GetFinalizers(), MaintenanceModeFinalizer) {
+		klog.Info("finalizer not found on MaintenanceMode. adding Finalizer ", MaintenanceModeFinalizer)
+		mmode.Finalizers = append(mmode.Finalizers, MaintenanceModeFinalizer)
+		if err := r.SpokeClient.Update(ctx, &mmode); err != nil {
+			klog.Error(err, "failed to add finalizer to MaintenanceMode", mmode.Name)
 			return ctrl.Result{}, err
 		}
 	}
 
-	return ctrl.Result{}, nil
+	if mmode.Status.State == ramenv1alpha1.MModeStateCompleted && mmode.Status.ObservedGeneration == mmode.Generation {
+		// All done for the current generation, return success
+		return ctrl.Result{}, nil
+	}
+
+	_, err = r.startMaintenanceActions(ctx, &mmode, actionableCephClusters, true)
+	statusErr := r.SpokeClient.Status().Update(ctx, &mmode)
+	if statusErr != nil {
+		klog.Error(statusErr)
+
+		return ctrl.Result{}, statusErr
+	}
+
+	return ctrl.Result{}, err
 }
 
-func (r *MaintenanceModeReconciler) startMaintenanceActions(ctx context.Context, mmode ramenv1alpha1.MaintenanceMode, clusters []rookv1.CephCluster, scaleDown bool) (ctrl.Result, error) {
+func (r *MaintenanceModeReconciler) startMaintenanceActions(ctx context.Context, mmode *ramenv1alpha1.MaintenanceMode, clusters []rookv1.CephCluster, scaleDown bool) (ctrl.Result, error) {
 	klog.Info("starting actions on MaintenanceMode", "MaintenanceMode ", mmode.Name)
 	for _, mode := range mmode.Spec.Modes {
 		res, err := r.updateStatus(ctx, mmode, mode, ramenv1alpha1.MModeStateProgressing, nil)
@@ -113,7 +124,7 @@ func (r *MaintenanceModeReconciler) startMaintenanceActions(ctx context.Context,
 			return res, err
 		}
 		switch mode {
-		case ramenv1alpha1.MMode(ramenv1alpha1.ActionFailover):
+		case ramenv1alpha1.MModeFailover:
 			var replicas int
 			if scaleDown {
 				klog.Info("Scaling down RBD mirror deployments")
@@ -156,27 +167,13 @@ func (r *MaintenanceModeReconciler) scaleRBDMirrorDeployment(ctx context.Context
 	return ctrl.Result{}, nil
 }
 
-func (r *MaintenanceModeReconciler) updateStatus(ctx context.Context, mmode ramenv1alpha1.MaintenanceMode, mode ramenv1alpha1.MMode, state ramenv1alpha1.MModeState, err error) (ctrl.Result, error) {
+func (r *MaintenanceModeReconciler) updateStatus(ctx context.Context, mmode *ramenv1alpha1.MaintenanceMode, mode ramenv1alpha1.MMode, state ramenv1alpha1.MModeState, err error) (ctrl.Result, error) {
 	klog.Infof("mode: %s, status: %s, generation: %d, error: %v ", mode, state, mmode.Generation, err)
 	mmode.Status.State = state
 	mmode.Status.ObservedGeneration = mmode.Generation
-	var conditions []metav1.Condition
-	if len(mmode.Status.Conditions) == 0 {
-		conditions = make([]metav1.Condition, 0)
-		conditions = append(conditions, newCondition(state, mode, mmode.Generation, err))
-	}
-	k8smeta.SetStatusCondition(&conditions, newCondition(state, mode, mmode.Generation, err))
-	mmode.Status.Conditions = conditions
-	statusErr := r.SpokeClient.Status().Update(ctx, &mmode)
-	if statusErr != nil {
-		klog.Error(statusErr)
-		if k8serrors.IsConflict(statusErr) {
-			// The object is being updated, and we need to requeue the request again for updates.
-			klog.Info("the object is being updated, retrying the request again...")
-			return ctrl.Result{RequeueAfter: time.Second * 5}, nil
-		}
-		return ctrl.Result{}, statusErr
-	}
+
+	k8smeta.SetStatusCondition(&mmode.Status.Conditions, newCondition(state, mode, mmode.Generation, err))
+
 	return ctrl.Result{}, nil
 }
 
@@ -204,12 +201,12 @@ func newCondition(state ramenv1alpha1.MModeState, mode ramenv1alpha1.MMode, gene
 		status = metav1.ConditionUnknown
 	}
 	return metav1.Condition{
-		Type:               string(mode),
+		Type:               string(ramenv1alpha1.MModeConditionFailoverActivated),
 		Status:             status,
 		ObservedGeneration: generation,
-		LastTransitionTime: metav1.Now(),
-		Reason:             reason,
-		Message:            message,
+		//LastTransitionTime: metav1.Now(),
+		Reason:  reason,
+		Message: message,
 	}
 }
 
@@ -258,7 +255,7 @@ func scaleDeployment(ctx context.Context, client client.Client, deploymentName s
 		return err
 	}
 	var updatedDeployment appsv1.Deployment
-	for {
+	for { // for loop? Just exponentially backoff requesting a reconcile requeue instead
 		err := client.Get(context.TODO(), types.NamespacedName{
 			Namespace: namespace, Name: deploymentName,
 		}, &updatedDeployment)
