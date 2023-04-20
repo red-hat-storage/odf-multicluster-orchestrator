@@ -9,6 +9,7 @@ import (
 	routev1 "github.com/openshift/api/route/v1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	submarinerv1alpha1 "github.com/submariner-io/submariner-operator/api/v1alpha1"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,6 +40,7 @@ func init() {
 	utilruntime.Must(ocsv1.AddToScheme(mgrScheme))
 	utilruntime.Must(obv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(routev1.AddToScheme(mgrScheme))
+	utilruntime.Must(submarinerv1alpha1.AddToScheme(mgrScheme))
 	//+kubebuilder:scaffold:scheme
 }
 
