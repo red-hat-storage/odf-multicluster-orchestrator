@@ -309,12 +309,14 @@ func (r *MirrorPeerReconciler) getS3bucket(ctx context.Context, mirrorPeer multi
 
 // enableMulticlusterService sets the multiclusterservice flag on StorageCluster if submariner globalnet is enabled
 func (r *MirrorPeerReconciler) enableMulticlusterService(ctx context.Context, storageClusterName string, namespace string, mp *multiclusterv1alpha1.MirrorPeer) error {
+	klog.Infof("Enabling MCS for StorageCluster %q in %q namespace.", storageClusterName, namespace)
 	var sc ocsv1.StorageCluster
 	err := r.SpokeClient.Get(ctx, types.NamespacedName{
 		Name:      storageClusterName,
 		Namespace: namespace,
 	}, &sc)
 	if err != nil {
+		klog.Errorf("Error fetching StorageCluster while enabling MCS. Error: %v", err)
 		return err
 	}
 
@@ -324,19 +326,27 @@ func (r *MirrorPeerReconciler) enableMulticlusterService(ctx context.Context, st
 		Namespace: "submariner-operator"},
 		&submariner)
 	if err != nil {
+		klog.Errorf("Error fetching Submariner config while enabling MCS. Error: %v", err)
 		return err
 	}
 
 	if sc.Spec.Network == nil {
 		sc.Spec.Network = &rookv1.NetworkSpec{}
+		klog.Infof("StorageCluster %q in %q namespace has no network config defined. Initializing it now. New NetworkSpec: %v", storageClusterName, namespace, sc.Spec.Network)
 	}
 
 	if !sc.Spec.Network.MultiClusterService.Enabled || sc.Spec.Network.MultiClusterService.ClusterID == "" {
 		sc.Spec.Network.MultiClusterService.Enabled = true
 		sc.Spec.Network.MultiClusterService.ClusterID = submariner.Spec.ClusterID
-		return r.SpokeClient.Update(ctx, &sc)
+		klog.Infof("StorageCluster %q in %q namespace has MCS disabled. Enabling it now. New MCS spec: %v", storageClusterName, namespace, sc.Spec.Network.MultiClusterService)
+		err := r.SpokeClient.Update(ctx, &sc)
+		if err != nil {
+			klog.Errorf("Error updating MCS config for StorageCluster %q in %q namespace. Error: %v", storageClusterName, namespace, err)
+		}
+		return err
 	}
 
+	klog.Infof("StorageCluster %q in %q namespace has MCS enabled already. Current MCS spec: %v", storageClusterName, namespace, sc.Spec.Network.MultiClusterService)
 	return nil
 }
 
