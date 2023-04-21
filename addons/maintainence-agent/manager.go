@@ -41,6 +41,7 @@ func init() {
 	utilruntime.Must(ramenv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(rookv1.AddToScheme(mgrScheme))
 	utilruntime.Must(appsv1.AddToScheme(mgrScheme))
+	utilruntime.Must(ocsv1.AddToScheme(mgrScheme))
 	//+kubebuilder:scaffold:scheme
 }
 
