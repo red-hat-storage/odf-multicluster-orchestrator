@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
+	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -60,4 +61,13 @@ func ScaleDeployment(ctx context.Context, client client.Client, deploymentName s
 	}
 
 	return nil
+}
+
+func FetchAllCephClusters(ctx context.Context, client client.Client) (*rookv1.CephClusterList, error) {
+	var cephClusters rookv1.CephClusterList
+	err := client.List(ctx, &cephClusters)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list CephClusters %v", err)
+	}
+	return &cephClusters, nil
 }
