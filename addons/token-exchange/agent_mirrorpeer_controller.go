@@ -21,6 +21,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"strconv"
 	"time"
 
@@ -145,6 +146,10 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 
 		klog.Infof("enabling async mode dependencies")
+		err = r.labelCephClusters(ctx, scr, clusterFSIDs)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to label cephcluster: %v", err)
+		}
 		err = r.enableCSIAddons(ctx, scr.Namespace)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to start CSI Addons for rook: %v", err)
@@ -562,4 +567,44 @@ func (r *MirrorPeerReconciler) deleteMirrorPeer(ctx context.Context, mirrorPeer 
 		return ctrl.Result{}, fmt.Errorf("failed to delete s3 buckets")
 	}
 	return ctrl.Result{}, nil
+}
+
+func (r *MirrorPeerReconciler) labelCephClusters(ctx context.Context, scr *multiclusterv1alpha1.StorageClusterRef, clusterFSIDs map[string]string) error {
+	cephClusters, err := utils.FetchAllCephClusters(ctx, r.SpokeClient)
+	if cephClusters == nil || len(cephClusters.Items) == 0 {
+		klog.Info("failed to find any cephclusters to label")
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var found rookv1.CephCluster
+	for _, cc := range cephClusters.Items {
+		for _, ref := range cc.OwnerReferences {
+			if ref.Kind != "StorageCluster" {
+				continue
+			}
+
+			if ref.Name == scr.Name {
+				found = cc
+				break
+			}
+		}
+	}
+	if found.Labels == nil {
+		found.Labels = make(map[string]string)
+	}
+	var fsids []string
+	for _, v := range clusterFSIDs {
+		fsids = append(fsids, v)
+	}
+	// To ensure reliability of hash generation
+	sort.Strings(fsids)
+	replicationId := utils.CreateUniqueReplicationId(fsids)
+	found.Labels[utils.CephClusterReplicationIdLabel] = replicationId
+	err = r.SpokeClient.Update(ctx, &found)
+	if err != nil {
+		return err
+	}
+	return nil
 }
