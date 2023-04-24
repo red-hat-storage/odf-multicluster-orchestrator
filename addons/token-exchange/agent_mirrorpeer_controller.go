@@ -148,7 +148,8 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		klog.Infof("enabling async mode dependencies")
 		err = r.labelCephClusters(ctx, scr, clusterFSIDs)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to label cephcluster: %v", err)
+			klog.Errorf("failed to label cephcluster. err=%v", err)
+			return ctrl.Result{}, err
 		}
 		err = r.enableCSIAddons(ctx, scr.Namespace)
 		if err != nil {
@@ -570,13 +571,15 @@ func (r *MirrorPeerReconciler) deleteMirrorPeer(ctx context.Context, mirrorPeer 
 }
 
 func (r *MirrorPeerReconciler) labelCephClusters(ctx context.Context, scr *multiclusterv1alpha1.StorageClusterRef, clusterFSIDs map[string]string) error {
+	klog.Info("Labelling cephclusters with replication id")
 	cephClusters, err := utils.FetchAllCephClusters(ctx, r.SpokeClient)
+	if err != nil {
+		klog.Errorf("failed to fetch all cephclusters. err=%v", err)
+		return err
+	}
 	if cephClusters == nil || len(cephClusters.Items) == 0 {
 		klog.Info("failed to find any cephclusters to label")
 		return nil
-	}
-	if err != nil {
-		return err
 	}
 	var found rookv1.CephCluster
 	for _, cc := range cephClusters.Items {
@@ -595,16 +598,23 @@ func (r *MirrorPeerReconciler) labelCephClusters(ctx context.Context, scr *multi
 		found.Labels = make(map[string]string)
 	}
 	var fsids []string
+
 	for _, v := range clusterFSIDs {
 		fsids = append(fsids, v)
 	}
 	// To ensure reliability of hash generation
 	sort.Strings(fsids)
 	replicationId := utils.CreateUniqueReplicationId(fsids)
-	found.Labels[utils.CephClusterReplicationIdLabel] = replicationId
-	err = r.SpokeClient.Update(ctx, &found)
-	if err != nil {
-		return err
+	if found.Labels[utils.CephClusterReplicationIdLabel] != replicationId {
+		klog.Infof("adding label %s/%s to cephcluster %s", utils.CephClusterReplicationIdLabel, replicationId, found.Name)
+		found.Labels[utils.CephClusterReplicationIdLabel] = replicationId
+		err = r.SpokeClient.Update(ctx, &found)
+		if err != nil {
+			return err
+		}
+	} else {
+		klog.Infof("cephcluster %s is already labeled with replicationId=%q", found.Name, replicationId)
 	}
+
 	return nil
 }
