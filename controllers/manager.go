@@ -3,15 +3,14 @@ package controllers
 import (
 	"context"
 	"flag"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/console"
 	"os"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	consolev1alpha1 "github.com/openshift/api/console/v1alpha1"
 	"github.com/openshift/library-go/pkg/operator/events"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/console"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,6 +24,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 var (

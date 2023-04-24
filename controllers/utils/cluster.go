@@ -32,35 +32,24 @@ func GetClusterType(storageClusterName string, namespace string, client client.C
 	return CONVERGED, nil
 }
 
-func ScaleDeployment(ctx context.Context, client client.Client, deploymentName string, namespace string, replicas int32) error {
+func ScaleDeployment(ctx context.Context, client client.Client, deploymentName string, namespace string, replicas int32) (bool, error) {
 	var deployment appsv1.Deployment
 	err := client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: deploymentName}, &deployment)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			return fmt.Errorf("deployment %s not found in namespace %s", deploymentName, namespace)
+			return true, fmt.Errorf("deployment %s not found in namespace %s", deploymentName, namespace)
 		}
-		return err
+		return true, err
 	}
-	deployment.Spec.Replicas = &replicas
-	err = client.Update(ctx, &deployment)
-	if err != nil {
-		return err
+	if *deployment.Spec.Replicas != replicas {
+		deployment.Spec.Replicas = &replicas
+		err = client.Update(ctx, &deployment)
+		return true, err
 	}
-
-	var updatedDeployment appsv1.Deployment
-	for {
-		err := client.Get(context.TODO(), types.NamespacedName{
-			Namespace: namespace, Name: deploymentName,
-		}, &updatedDeployment)
-		if err != nil {
-			return err
-		}
-		if updatedDeployment.Status.Replicas == replicas {
-			break
-		}
+	if deployment.Status.Replicas != replicas {
+		return true, nil
 	}
-
-	return nil
+	return false, nil
 }
 
 func FetchAllCephClusters(ctx context.Context, client client.Client) (*rookv1.CephClusterList, error) {

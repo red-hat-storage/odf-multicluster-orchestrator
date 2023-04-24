@@ -76,22 +76,21 @@ func (r *MaintenanceModeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		if !utils.ContainsString(mmode.GetFinalizers(), MaintenanceModeFinalizer) {
 			return ctrl.Result{}, nil
 		}
-		result, err := r.startMaintenanceActions(ctx, mmode, actionableCephCluster, false)
+		result, err := r.startMaintenanceActions(ctx, &mmode, actionableCephCluster, false)
 		if err != nil {
+			klog.Errorf("failed to complete maintenance actions on %s. err=%v", mmode.Name, err)
 			return result, err
 		}
-		latestMMode, fetchErr := r.fetchLatestVersionMMode(ctx, mmode.Name)
-		if fetchErr != nil {
-			return ctrl.Result{}, fetchErr
-		}
-		latestMMode.Finalizers = utils.RemoveString(latestMMode.Finalizers, MaintenanceModeFinalizer)
-		err = r.SpokeClient.Update(ctx, &mmode)
-		if err != nil {
-			klog.Error("failed to remove finalizer from MaintenanceMode ")
-			return ctrl.Result{}, err
+		if !result.Requeue && err == nil {
+			mmode.Finalizers = utils.RemoveString(mmode.Finalizers, MaintenanceModeFinalizer)
+			err = r.SpokeClient.Update(ctx, &mmode)
+			if err != nil {
+				klog.Errorf("failed to remove finalizer from MaintenanceMode %s. err=%v", mmode.Name, err)
+				return ctrl.Result{}, err
+			}
 		}
 		klog.Info("MaintenanceMode disabled")
-		return ctrl.Result{}, nil
+		return result, nil
 	}
 
 	if !utils.ContainsString(mmode.GetFinalizers(), MaintenanceModeFinalizer) {
@@ -107,19 +106,22 @@ func (r *MaintenanceModeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
-	_, err = r.startMaintenanceActions(ctx, mmode, actionableCephCluster, true)
+	result, err := r.startMaintenanceActions(ctx, &mmode, actionableCephCluster, true)
 	statusErr := r.SpokeClient.Status().Update(ctx, &mmode)
 	if statusErr != nil {
-		klog.Infof("failed to update status of maintenancemode=%s", mmode.Name)
-		return ctrl.Result{}, statusErr
+		klog.Errorf("failed to update status of maintenancemode=%s. err=%v", mmode.Name, statusErr)
+		return result, statusErr
 	}
-	return ctrl.Result{}, err
+	if err != nil {
+		klog.Errorf("failed to complete maintenance actions on %s. err=%v", mmode.Name, err)
+	}
+	return result, err
 }
 
-func (r *MaintenanceModeReconciler) startMaintenanceActions(ctx context.Context, mmode ramenv1alpha1.MaintenanceMode, cluster *rookv1.CephCluster, scaleDown bool) (ctrl.Result, error) {
+func (r *MaintenanceModeReconciler) startMaintenanceActions(ctx context.Context, mmode *ramenv1alpha1.MaintenanceMode, cluster *rookv1.CephCluster, scaleDown bool) (ctrl.Result, error) {
 	klog.Infof("starting actions on MaintenanceMode %q", mmode.Name)
 	for _, mode := range mmode.Spec.Modes {
-		SetStatus(ctx, mmode, mode, ramenv1alpha1.MModeStateProgressing, nil)
+		SetStatus(mmode, mode, ramenv1alpha1.MModeStateProgressing, nil)
 		switch mode {
 		case ramenv1alpha1.MModeFailover:
 			var replicas int
@@ -130,12 +132,15 @@ func (r *MaintenanceModeReconciler) startMaintenanceActions(ctx context.Context,
 				klog.Info("Scaling up RBD mirror deployments")
 				replicas = 1
 			}
-			_, err := r.scaleRBDMirrorDeployment(ctx, *cluster, replicas)
+			result, err := r.scaleRBDMirrorDeployment(ctx, *cluster, replicas)
 			if err != nil {
-				SetStatus(ctx, mmode, mode, ramenv1alpha1.MModeStateError, err)
-				return ctrl.Result{}, err
+				SetStatus(mmode, mode, ramenv1alpha1.MModeStateError, err)
+				return result, err
 			}
-			SetStatus(ctx, mmode, mode, ramenv1alpha1.MModeStateCompleted, nil)
+			if !result.Requeue && err == nil {
+				SetStatus(mmode, mode, ramenv1alpha1.MModeStateCompleted, nil)
+			}
+			return result, err
 		default:
 			return ctrl.Result{}, fmt.Errorf("no actions found for %q mode", mode)
 		}
@@ -159,8 +164,8 @@ func (r *MaintenanceModeReconciler) scaleRBDMirrorDeployment(ctx context.Context
 	}
 
 	for _, deploymentName := range deployments {
-		err = utils.ScaleDeployment(ctx, r.SpokeClient, deploymentName, cluster.Namespace, int32(replicas))
-		return ctrl.Result{}, err
+		requeue, err := utils.ScaleDeployment(ctx, r.SpokeClient, deploymentName, cluster.Namespace, int32(replicas))
+		return ctrl.Result{Requeue: requeue}, err
 	}
 	return ctrl.Result{}, nil
 }
@@ -190,28 +195,11 @@ func getOwnerName(cluster rookv1.CephCluster) string {
 	return ""
 }
 
-func SetStatus(ctx context.Context, mmode ramenv1alpha1.MaintenanceMode, mode ramenv1alpha1.MMode, state ramenv1alpha1.MModeState, err error) {
+func SetStatus(mmode *ramenv1alpha1.MaintenanceMode, mode ramenv1alpha1.MMode, state ramenv1alpha1.MModeState, err error) {
 	klog.Infof("mode: %s, status: %s, generation: %d, error: %v ", mode, state, mmode.Generation, err)
 	mmode.Status.State = state
 	mmode.Status.ObservedGeneration = mmode.Generation
-	var conditions = make([]metav1.Condition, 0)
-	if len(mmode.Status.Conditions) == 0 {
-		conditions = append(conditions, newCondition(state, mode, mmode.Generation, err))
-	} else {
-		conditions = append(conditions, mmode.Status.Conditions...)
-	}
-	k8smeta.SetStatusCondition(&conditions, newCondition(state, mode, mmode.Generation, err))
-	mmode.Status.Conditions = conditions
-}
-
-func (r *MaintenanceModeReconciler) fetchLatestVersionMMode(ctx context.Context, name string) (*ramenv1alpha1.MaintenanceMode, error) {
-	var mmode ramenv1alpha1.MaintenanceMode
-	err := r.SpokeClient.Get(ctx, types.NamespacedName{Name: name}, &mmode)
-	if err != nil {
-		klog.Errorf("error occurred while fetching the latest version of %s", name)
-		return nil, err
-	}
-	return &mmode, nil
+	k8smeta.SetStatusCondition(&mmode.Status.Conditions, newCondition(state, mode, mmode.Generation, err))
 }
 
 func newCondition(state ramenv1alpha1.MModeState, mode ramenv1alpha1.MMode, generation int64, err error) metav1.Condition {
