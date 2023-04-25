@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 
+	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
+
 	replicationv1alpha1 "github.com/csi-addons/kubernetes-csi-addons/apis/replication.storage/v1alpha1"
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	routev1 "github.com/openshift/api/route/v1"
@@ -41,6 +43,7 @@ func init() {
 	utilruntime.Must(obv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(routev1.AddToScheme(mgrScheme))
 	utilruntime.Must(submarinerv1alpha1.AddToScheme(mgrScheme))
+	utilruntime.Must(rookv1.AddToScheme(mgrScheme))
 	//+kubebuilder:scaffold:scheme
 }
 
