@@ -21,6 +21,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -99,24 +100,27 @@ func getConsolePluginCR(consolePort int, serviceName string, deploymentNamespace
 	}
 }
 
-func InitConsole(ctx context.Context, client client.Client, odfPort int, deploymentNamespace string) error {
-	deployment := appsv1.Deployment{}
+func InitConsole(ctx context.Context, client client.Client, scheme *runtime.Scheme, odfPort int, deploymentNamespace string) error {
+	mcoConsoleDeployment := appsv1.Deployment{}
 	if err := client.Get(context.TODO(), types.NamespacedName{
 		Name:      odfMulticlusterPluginName,
 		Namespace: deploymentNamespace,
-	}, &deployment); err != nil {
+	}, &mcoConsoleDeployment); err != nil {
 		return err
 	}
+
 	// Create core ODF multicluster console service
-	odfService := getService(odfMulticlusterPluginName, odfPort, deploymentNamespace)
-	if _, err := controllerutil.CreateOrUpdate(ctx, client, &odfService, func() error {
-		return nil
+	mcoConsoleService := getService(odfMulticlusterPluginName, odfPort, deploymentNamespace)
+	if _, err := controllerutil.CreateOrUpdate(ctx, client, &mcoConsoleService, func() error {
+		// Deployment deletion should delete corresponding Service as well
+		return controllerutil.SetControllerReference(&mcoConsoleDeployment, &mcoConsoleService, scheme)
 	}); err != nil {
 		return err
 	}
+
 	// Create core ODF multicluster plugin
-	odfConsolePlugin := getConsolePluginCR(odfPort, odfService.ObjectMeta.Name, deploymentNamespace)
-	if _, err := controllerutil.CreateOrUpdate(ctx, client, &odfConsolePlugin, func() error {
+	mcoConsolePlugin := getConsolePluginCR(odfPort, mcoConsoleService.ObjectMeta.Name, deploymentNamespace)
+	if _, err := controllerutil.CreateOrUpdate(ctx, client, &mcoConsolePlugin, func() error {
 		return nil
 	}); err != nil {
 		return err

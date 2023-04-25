@@ -120,7 +120,7 @@ func (o *ManagerOptions) runManager() {
 	}
 
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-		err = console.InitConsole(ctx, mgr.GetClient(), o.MulticlusterConsolePort, namespace)
+		err = console.InitConsole(ctx, mgr.GetClient(), mgr.GetScheme(), o.MulticlusterConsolePort, namespace)
 		if err != nil {
 			setupLog.Error(err, "unable to initialize multicluster console to manager")
 			return err
