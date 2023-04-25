@@ -19,7 +19,7 @@ import (
 
 	consolev1alpha1 "github.com/openshift/api/console/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
-	apiv1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -29,8 +29,9 @@ import (
 )
 
 var (
-	odfMulticlusterPluginName = "odf-multicluster-console"
-	pluginBasePath            = "/"
+	odfMulticlusterPluginName         = "odf-multicluster-console"
+	odfMulticlusterNginxConfigMapName = "odf-multicluster-console-nginx-conf"
+	pluginBasePath                    = "/"
 
 	proxyAlias            = "acm-thanos-querier"
 	proxyServiceName      = "rbac-query-proxy"
@@ -43,8 +44,20 @@ var (
 	serviceLabelKey         = "app.kubernetes.io/name"
 )
 
-func getService(serviceName string, port int, deploymentNamespace string) apiv1.Service {
-	return apiv1.Service{
+func getNginxConfConfigMap(namespace string) corev1.ConfigMap {
+	return corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      odfMulticlusterNginxConfigMapName,
+			Namespace: namespace,
+		},
+		Data: map[string]string{
+			"nginx.conf": NginxConf,
+		},
+	}
+}
+
+func getService(serviceName string, port int, deploymentNamespace string) corev1.Service {
+	return corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      serviceName,
 			Namespace: deploymentNamespace,
@@ -55,10 +68,10 @@ func getService(serviceName string, port int, deploymentNamespace string) apiv1.
 				serviceLabelKey: odfMulticlusterPluginName,
 			},
 		},
-		Spec: apiv1.ServiceSpec{
-			Ports: []apiv1.ServicePort{
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
 				{
-					Protocol:   apiv1.ProtocolTCP,
+					Protocol:   corev1.ProtocolTCP,
 					TargetPort: intstr.IntOrString{IntVal: int32(port)},
 					Port:       int32(port),
 					Name:       servicePortName,
@@ -106,6 +119,15 @@ func InitConsole(ctx context.Context, client client.Client, scheme *runtime.Sche
 		Name:      odfMulticlusterPluginName,
 		Namespace: deploymentNamespace,
 	}, &mcoConsoleDeployment); err != nil {
+		return err
+	}
+
+	// Create core ODF multicluster console ConfigMap (nginx configuration)
+	mcoConsoleConfigMap := getNginxConfConfigMap(deploymentNamespace)
+	if _, err := controllerutil.CreateOrUpdate(ctx, client, &mcoConsoleConfigMap, func() error {
+		// Deployment deletion should delete corresponding ConfigMap as well
+		return controllerutil.SetControllerReference(&mcoConsoleDeployment, &mcoConsoleConfigMap, scheme)
+	}); err != nil {
 		return err
 	}
 

@@ -22,7 +22,13 @@ spec:
             - name: odf-multicluster-console-serving-cert
               mountPath: /var/serving-cert
               readOnly: true
+            - name: odf-multicluster-console-nginx-conf
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
       volumes:
         - name: odf-multicluster-console-serving-cert
           secret:
             secretName: odf-multicluster-console-serving-cert
+        - name: odf-multicluster-console-nginx-conf
+          configMap:
+            name: odf-multicluster-console-nginx-conf
