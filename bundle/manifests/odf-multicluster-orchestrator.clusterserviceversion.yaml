@@ -36,9 +36,10 @@ metadata:
       ]
     capabilities: Basic Install
     console.openshift.io/plugins: '["odf-multicluster-console"]'
+    createdAt: "2023-07-20T12:52:54Z"
     olm.skipRange: ""
     operators.openshift.io/infrastructure-features: '["disconnected"]'
-    operators.operatorframework.io/builder: operator-sdk-v1.16.0+git
+    operators.operatorframework.io/builder: operator-sdk-v1.30.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
   labels:
     operatorframework.io/arch.amd64: supported
@@ -231,7 +232,9 @@ spec:
           - '*'
         serviceAccountName: odfmo-controller-manager
       deployments:
-      - name: odfmo-controller-manager
+      - label:
+          control-plane: odfmo-controller-manager
+        name: odfmo-controller-manager
         spec:
           replicas: 1
           selector:
@@ -291,7 +294,9 @@ spec:
                 runAsNonRoot: true
               serviceAccountName: odfmo-controller-manager
               terminationGracePeriodSeconds: 10
-      - name: odf-multicluster-console
+      - label:
+          app.kubernetes.io/name: odf-multicluster-console
+        name: odf-multicluster-console
         spec:
           selector:
             matchLabels:
