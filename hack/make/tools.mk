@@ -30,7 +30,7 @@ ifeq (,$(shell which opm 2>/dev/null))
 	set -e ;\
 	mkdir -p $(dir $(OPM)) ;\
 	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
-	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.15.1/$${OS}-$${ARCH}-opm ;\
+	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.28.0/$${OS}-$${ARCH}-opm ;\
 	chmod +x $(OPM) ;\
 	}
 else
@@ -47,7 +47,7 @@ ifeq (,$(shell which operator-sdk 2>/dev/null))
 	set -e ;\
 	mkdir -p $(dir $(OSDK)) ;\
 	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
-	OSDK_VERSION=v1.17.0 && \
+	OSDK_VERSION=v1.30.0 && \
 	curl -sSLo $(OSDK) https://github.com/operator-framework/operator-sdk/releases/download/$${OSDK_VERSION}/operator-sdk_$${OS}_$${ARCH} ;\
 	chmod +x $(OSDK) ;\
 	}
@@ -57,7 +57,7 @@ endif
 endif
 
 GOLANGCI_URL := https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh
-GOLANGCI_VERSION := 1.49.0
+GOLANGCI_VERSION := 1.53.3
 
 .PHONY: golangci-bin
 GOLANGCI_BIN := $(CWD)/bin/golangci-lint
