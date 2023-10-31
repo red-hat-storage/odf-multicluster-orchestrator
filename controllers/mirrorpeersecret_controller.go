@@ -21,13 +21,21 @@ import (
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 
+	ramendrv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/selection"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
+	"sigs.k8s.io/yaml"
 )
 
 // MirrorPeerSecretReconciler reconciles MirrorPeer CRs,
@@ -97,5 +105,50 @@ func mirrorPeerSecretReconcile(ctx context.Context, rc client.Client, req ctrl.R
 func (r *MirrorPeerSecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Secret{}, builder.WithPredicates(utils.SourceOrDestinationPredicate)).
+		Watches(&source.Kind{Type: &corev1.ConfigMap{}}, handler.EnqueueRequestsFromMapFunc(r.secretConfigMapFunc)).
 		Complete(r)
+}
+
+func (r *MirrorPeerSecretReconciler) secretConfigMapFunc(obj client.Object) []reconcile.Request {
+	ConfigMapRamenConfigKeyName := "ramen_manager_config.yaml"
+	var cm *corev1.ConfigMap
+	cm, ok := obj.(*corev1.ConfigMap)
+	if !ok {
+		return []reconcile.Request{}
+	}
+
+	if _, ok := cm.Data[ConfigMapRamenConfigKeyName]; !ok {
+		return []reconcile.Request{}
+	}
+
+	ramenConfig := &ramendrv1alpha1.RamenConfig{}
+	err := yaml.Unmarshal([]byte(cm.Data[ConfigMapRamenConfigKeyName]), ramenConfig)
+	if err != nil {
+		return []reconcile.Request{}
+	}
+
+	secrets := &corev1.SecretList{}
+	internalSecretLabel, err := labels.NewRequirement(utils.SecretLabelTypeKey, selection.Equals, []string{string(utils.InternalLabel)})
+	if err != nil {
+		klog.Error(err, "cannot parse new requirement")
+		return []reconcile.Request{}
+	}
+
+	internalSecretSelector := labels.NewSelector().Add(*internalSecretLabel)
+	listOpts := &client.ListOptions{
+		Namespace:     "", //All Namespaces
+		LabelSelector: internalSecretSelector,
+	}
+
+	if err := r.Client.List(context.TODO(), secrets, listOpts); err != nil {
+		return []reconcile.Request{}
+	}
+
+	requests := make([]reconcile.Request, len(secrets.Items))
+	for i, secret := range secrets.Items {
+		requests[i].Name = secret.GetName()
+		requests[i].Namespace = secret.GetNamespace()
+	}
+
+	return requests
 }
