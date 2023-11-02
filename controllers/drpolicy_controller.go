@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	"sort"
 	"time"
+
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -20,6 +21,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -101,7 +103,7 @@ func (r *DRPolicyReconciler) getMirrorPeerForClusterSet(ctx context.Context, clu
 
 	if len(mpList.Items) == 0 {
 		klog.Info("no mirrorpeers found on hub yet")
-		return nil, fmt.Errorf("resource not found")
+		return nil, k8serrors.NewNotFound(schema.GroupResource{Group: multiclusterv1alpha1.GroupVersion.Group, Resource: "MirrorPeer"}, "MirrorPeerList")
 	}
 	for _, mp := range mpList.Items {
 		if (mp.Spec.Items[0].ClusterName == clusterSet[0] && mp.Spec.Items[1].ClusterName == clusterSet[1]) ||
@@ -131,8 +133,8 @@ func (r *DRPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// find mirrorpeer for clusterset for the storagecluster namespaces
 	mirrorPeer, err := r.getMirrorPeerForClusterSet(ctx, drpolicy.Spec.DRClusters)
 	if err != nil {
-		if err.Error() == "resource not found" {
-			return ctrl.Result{}, nil
+		if k8serrors.IsNotFound(err) {
+			return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 		}
 		klog.Error("error occurred while trying to fetch MirrorPeer for given DRPolicy")
 		return ctrl.Result{}, err
