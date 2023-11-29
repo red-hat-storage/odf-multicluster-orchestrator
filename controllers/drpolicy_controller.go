@@ -233,13 +233,14 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 					},
 				},
 			},
-			Spec: workv1.ManifestWorkSpec{
-				Workload: workv1.ManifestsTemplate{Manifests: []workv1.Manifest{
-					manifest,
-				}},
-			},
 		}
 		_, err = controllerutil.CreateOrUpdate(ctx, r.HubClient, &mw, func() error {
+			mw.Spec = workv1.ManifestWorkSpec{
+				Workload: workv1.ManifestsTemplate{
+					Manifests: []workv1.Manifest{
+						manifest,
+					}},
+			}
 			return nil
 		})
 
