@@ -21,7 +21,6 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	"sort"
 	"strconv"
 	"time"
 
@@ -597,14 +596,12 @@ func (r *MirrorPeerReconciler) labelCephClusters(ctx context.Context, scr *multi
 	if found.Labels == nil {
 		found.Labels = make(map[string]string)
 	}
-	var fsids []string
 
-	for _, v := range clusterFSIDs {
-		fsids = append(fsids, v)
+	replicationId, err := utils.CreateUniqueReplicationId(clusterFSIDs)
+	if err != nil {
+		return err
 	}
-	// To ensure reliability of hash generation
-	sort.Strings(fsids)
-	replicationId := utils.CreateUniqueReplicationId(fsids)
+
 	if found.Labels[utils.CephClusterReplicationIdLabel] != replicationId {
 		klog.Infof("adding label %s/%s to cephcluster %s", utils.CephClusterReplicationIdLabel, replicationId, found.Name)
 		found.Labels[utils.CephClusterReplicationIdLabel] = replicationId
