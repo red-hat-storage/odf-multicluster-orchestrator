@@ -3,16 +3,18 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"testing"
+
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"testing"
 )
 
 const (
@@ -101,7 +103,33 @@ func getFakeDRPolicyReconciler(drpolicy *ramenv1alpha1.DRPolicy, mp *multicluste
 			Name: cName2,
 		},
 	}
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(drpolicy, mp, ns1, ns2).Build()
+	mc1 := &clusterv1.ManagedCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: cName1,
+		},
+		Status: clusterv1.ManagedClusterStatus{
+			ClusterClaims: []clusterv1.ManagedClusterClaim{
+				{
+					Name:  "cephfsid.odf.openshift.io",
+					Value: "db47dafb-1459-44ca-8a7a-b55ba2ec2d7c",
+				},
+			},
+		},
+	}
+	mc2 := &clusterv1.ManagedCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: cName2,
+		},
+		Status: clusterv1.ManagedClusterStatus{
+			ClusterClaims: []clusterv1.ManagedClusterClaim{
+				{
+					Name:  "cephfsid.odf.openshift.io",
+					Value: "5b544f43-3ff9-4296-bc9f-051e60dcecdf",
+				},
+			},
+		},
+	}
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(drpolicy, mp, ns1, ns2, mc1, mc2).Build()
 
 	r := DRPolicyReconciler{
 		HubClient: fakeClient,

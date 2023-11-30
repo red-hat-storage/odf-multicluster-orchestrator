@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
@@ -166,15 +165,10 @@ func (r *DRPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer, dp *ramenv1alpha1.DRPolicy, clusterFSIDs map[string]string) error {
 
-	var fsids []string
-	for _, v := range clusterFSIDs {
-		fsids = append(fsids, v)
+	replicationId, err := utils.CreateUniqueReplicationId(clusterFSIDs)
+	if err != nil {
+		return err
 	}
-
-	// To ensure reliability of hash generation
-	sort.Strings(fsids)
-
-	replicationId := utils.CreateUniqueReplicationId(fsids)
 
 	for _, pr := range mp.Spec.Items {
 		manifestWorkName := fmt.Sprintf("vrc-%v", utils.FnvHash(dp.Name)) // Two ManifestWork per DRPolicy
@@ -239,13 +233,14 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 					},
 				},
 			},
-			Spec: workv1.ManifestWorkSpec{
-				Workload: workv1.ManifestsTemplate{Manifests: []workv1.Manifest{
-					manifest,
-				}},
-			},
 		}
 		_, err = controllerutil.CreateOrUpdate(ctx, r.HubClient, &mw, func() error {
+			mw.Spec = workv1.ManifestWorkSpec{
+				Workload: workv1.ManifestsTemplate{
+					Manifests: []workv1.Manifest{
+						manifest,
+					}},
+			}
 			return nil
 		})
 

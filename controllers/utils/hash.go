@@ -4,6 +4,7 @@ import (
 	"crypto/sha512"
 	"fmt"
 	"hash/fnv"
+	"sort"
 	"strings"
 )
 
@@ -34,6 +35,19 @@ func CreateUniqueSecretName(managedCluster, storageClusterNamespace, storageClus
 	return CreateUniqueName(managedCluster, storageClusterNamespace, storageClusterName)[0:39]
 }
 
-func CreateUniqueReplicationId(fsids []string) string {
-	return CreateUniqueName(fsids...)[0:39]
+func CreateUniqueReplicationId(clusterFSIDs map[string]string) (string, error) {
+	var fsids []string
+	for _, v := range clusterFSIDs {
+		if v != "" {
+			fsids = append(fsids, v)
+		}
+	}
+
+	if len(fsids) < 2 {
+		return "", fmt.Errorf("replicationID can not be generated due to missing cluster FSID")
+	}
+
+	// To ensure reliability of hash generation
+	sort.Strings(fsids)
+	return CreateUniqueName(fsids...)[0:39], nil
 }
