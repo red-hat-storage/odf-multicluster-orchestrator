@@ -32,6 +32,9 @@ spec:
         - --leader-elect
         image: controller:latest
         name: manager
+        ports:
+        - containerPort: 8081
+          protocol: TCP
         env:
         - name: TOKEN_EXCHANGE_IMAGE
           value: ${IMG}

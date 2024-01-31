@@ -23,7 +23,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -256,23 +255,23 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 }
 
 func (r *DRPolicyReconciler) fetchClusterFSIDs(ctx context.Context, peer *multiclusterv1alpha1.MirrorPeer, clusterFSIDs map[string]string) error {
-	var mcList clusterv1.ManagedClusterList
-	err := r.HubClient.List(ctx, &mcList)
-	if err != nil {
-		return err
-	}
-
 	for _, pr := range peer.Spec.Items {
-		for _, mc := range mcList.Items {
-			if mc.Name == pr.ClusterName {
-				for _, cc := range mc.Status.ClusterClaims {
-					if cc.Name == "cephfsid.odf.openshift.io" {
-						clusterFSIDs[pr.ClusterName] = cc.Value
-						break
-					}
-				}
+		rookSecretName := utils.GetSecretNameByPeerRef(pr)
+		klog.Info("Fetching rook secret ", "Secret Name:", rookSecretName)
+		hs, err := utils.FetchSecretWithName(ctx, r.HubClient, types.NamespacedName{Name: rookSecretName, Namespace: pr.ClusterName})
+		if err != nil {
+			if errors.IsNotFound(err) {
+				klog.Info("could not find secret %q. will attempt to fetch it again after a delay", rookSecretName)
 			}
+			return err
 		}
+		klog.Info("Unmarshalling rook secret ", "Secret Name:", rookSecretName)
+		rt, err := utils.UnmarshalHubSecret(hs)
+		if err != nil {
+			klog.Error(err, "Failed to unmarshal rook secret", "Secret", rookSecretName)
+			return err
+		}
+		clusterFSIDs[pr.ClusterName] = rt.FSID
 	}
 
 	return nil
