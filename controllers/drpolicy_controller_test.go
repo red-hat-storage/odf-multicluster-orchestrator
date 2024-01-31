@@ -8,10 +8,10 @@ import (
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -103,33 +103,37 @@ func getFakeDRPolicyReconciler(drpolicy *ramenv1alpha1.DRPolicy, mp *multicluste
 			Name: cName2,
 		},
 	}
-	mc1 := &clusterv1.ManagedCluster{
+
+	// Constitutes both blue secret and green secret present on the hub
+	hubSecret1 := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: cName1,
+			Name:      utils.GetSecretNameByPeerRef(mp.Spec.Items[0]),
+			Namespace: cName1,
 		},
-		Status: clusterv1.ManagedClusterStatus{
-			ClusterClaims: []clusterv1.ManagedClusterClaim{
-				{
-					Name:  "cephfsid.odf.openshift.io",
-					Value: "db47dafb-1459-44ca-8a7a-b55ba2ec2d7c",
-				},
-			},
+		Data: map[string][]byte{
+			"namespace":            []byte("openshift-storage"),
+			"secret-data":          []byte(`{"cluster":"b2NzLXN0b3JhZ2VjbHVzdGVyLWNlcGhjbHVzdGVy","token":"ZXlKbWMybGtJam9pWXpSak56SmpNRE10WXpCbFlpMDBZMlppTFRnME16RXRNekExTmpZME16UmxZV1ZqSWl3aVkyeHBaVzUwWDJsa0lqb2ljbUprTFcxcGNuSnZjaTF3WldWeUlpd2lhMlY1SWpvaVFWRkVkbGxyTldrM04xbG9TMEpCUVZZM2NFZHlVVXBrU1VvelJtZGpjVWxGVUZWS0wzYzlQU0lzSW0xdmJsOW9iM04wSWpvaU1UY3lMak13TGpFd01TNHlORGs2TmpjNE9Td3hOekl1TXpBdU1UZ3pMakU1TURvMk56ZzVMREUzTWk0ek1DNHlNak11TWpFd09qWTNPRGtpTENKdVlXMWxjM0JoWTJVaU9pSnZjR1Z1YzJocFpuUXRjM1J2Y21GblpTSjk="}`),
+			"secret-origin":        []byte("rook"),
+			"storage-cluster-name": []byte("ocs-storagecluster"),
 		},
+		Type: "multicluster.odf.openshift.io/secret-type",
 	}
-	mc2 := &clusterv1.ManagedCluster{
+
+	hubSecret2 := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: cName2,
+			Name:      utils.GetSecretNameByPeerRef(mp.Spec.Items[1]),
+			Namespace: cName2,
 		},
-		Status: clusterv1.ManagedClusterStatus{
-			ClusterClaims: []clusterv1.ManagedClusterClaim{
-				{
-					Name:  "cephfsid.odf.openshift.io",
-					Value: "5b544f43-3ff9-4296-bc9f-051e60dcecdf",
-				},
-			},
+		Data: map[string][]byte{
+			"namespace":            []byte("openshift-storage"),
+			"secret-data":          []byte(`{"cluster":"b2NzLXN0b3JhZ2VjbHVzdGVyLWNlcGhjbHVzdGVy","token":"ZXlKbWMybGtJam9pWXpSak56SmpNRE10WXpCbFlpMDBZMlppTFRnME16RXRNekExTmpZME16UmxZV1ZqSWl3aVkyeHBaVzUwWDJsa0lqb2ljbUprTFcxcGNuSnZjaTF3WldWeUlpd2lhMlY1SWpvaVFWRkVkbGxyTldrM04xbG9TMEpCUVZZM2NFZHlVVXBrU1VvelJtZGpjVWxGVUZWS0wzYzlQU0lzSW0xdmJsOW9iM04wSWpvaU1UY3lMak13TGpFd01TNHlORGs2TmpjNE9Td3hOekl1TXpBdU1UZ3pMakU1TURvMk56ZzVMREUzTWk0ek1DNHlNak11TWpFd09qWTNPRGtpTENKdVlXMWxjM0JoWTJVaU9pSnZjR1Z1YzJocFpuUXRjM1J2Y21GblpTSjk="}`),
+			"secret-origin":        []byte("rook"),
+			"storage-cluster-name": []byte("ocs-storagecluster"),
 		},
+		Type: "multicluster.odf.openshift.io/secret-type",
 	}
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(drpolicy, mp, ns1, ns2, mc1, mc2).Build()
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(drpolicy, mp, ns1, ns2, &hubSecret1, &hubSecret2).Build()
 
 	r := DRPolicyReconciler{
 		HubClient: fakeClient,
