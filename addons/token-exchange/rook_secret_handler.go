@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	"os"
 	"strings"
+
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
-	rookclient "github.com/rook/rook/pkg/client/clientset/versioned"
+	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -22,7 +23,6 @@ import (
 type rookSecretHandler struct {
 	spokeClient client.Client
 	hubClient   client.Client
-	rookClient  rookclient.Interface
 }
 
 const (
@@ -80,7 +80,7 @@ func (r rookSecretHandler) syncBlueSecret(name string, namespace string, c *blue
 	klog.Infof("detected secret %s in %s namespace", name, namespace)
 
 	// fetch storage cluster name
-	sc, err := getStorageClusterFromRookSecret(secret, r.rookClient)
+	sc, err := getStorageClusterFromRookSecret(secret, r.spokeClient)
 	if err != nil {
 		return fmt.Errorf("failed to get the storage cluster name from the secret %q in namespace %q in managed cluster. Error %v", name, namespace, err)
 	}
@@ -179,14 +179,15 @@ func (r rookSecretHandler) syncGreenSecret(name string, namespace string, c *gre
 	return nil
 }
 
-func getStorageClusterFromRookSecret(secret *corev1.Secret, rclient rookclient.Interface) (storageCluster string, err error) {
+func getStorageClusterFromRookSecret(secret *corev1.Secret, rclient client.Client) (storageCluster string, err error) {
 	for _, v := range secret.ObjectMeta.OwnerReferences {
 		if v.Kind != "CephCluster" && v.Kind != "StorageCluster" {
 			continue
 		}
 
 		if v.Kind == "CephCluster" {
-			found, err := rclient.CephV1().CephClusters(secret.Namespace).Get(context.TODO(), v.Name, metav1.GetOptions{})
+			var found rookv1.CephCluster
+			err := rclient.Get(context.TODO(), types.NamespacedName{Name: v.Name, Namespace: secret.Namespace}, &found)
 			if err != nil {
 				return "", fmt.Errorf("unable to fetch ceph cluster err: %v", err)
 			}

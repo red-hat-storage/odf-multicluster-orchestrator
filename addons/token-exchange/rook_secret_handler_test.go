@@ -4,17 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	cephv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
-	rookclient "github.com/rook/rook/pkg/client/clientset/versioned/fake"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -63,17 +63,6 @@ func fakeSpokeClientForGreenSecret(t *testing.T) client.Client {
 				},
 			},
 		},
-	}
-	scheme := runtime.NewScheme()
-	err := ocsv1.AddToScheme(scheme)
-	if err != nil {
-		assert.Fail(t, "failed to add ocsv1 scheme")
-	}
-	return cfake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(obj...).Build()
-}
-
-func fakeRookClient(t *testing.T) *rookclient.Clientset {
-	obj := []runtime.Object{
 		&cephv1.CephCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      TestCephClusterName,
@@ -88,8 +77,16 @@ func fakeRookClient(t *testing.T) *rookclient.Clientset {
 			Spec: cephv1.ClusterSpec{},
 		},
 	}
-	rclient := rookclient.NewSimpleClientset(obj...)
-	return rclient
+	scheme := runtime.NewScheme()
+	err := ocsv1.AddToScheme(scheme)
+	if err != nil {
+		assert.Fail(t, "failed to add ocsv1 scheme")
+	}
+	err = cephv1.AddToScheme((scheme))
+	if err != nil {
+		assert.Fail(t, "failed to add cephv1 scheme")
+	}
+	return cfake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(obj...).Build()
 }
 
 func getFakeToken() map[string][]byte {
@@ -222,7 +219,6 @@ func getFakeRookGreenSecretExchangeController(t *testing.T) *greenSecretTokenExc
 func TestRookGreenSecretSnyc(t *testing.T) {
 	rookHandler := rookSecretHandler{
 		spokeClient: fakeSpokeClientForGreenSecret(t),
-		rookClient:  fakeRookClient(t),
 	}
 	cases := []testCase{
 		{
@@ -334,7 +330,6 @@ func getExpectedExternalClusterRookBlueSecret(t *testing.T) *corev1.Secret {
 func TestRookBlueSecretSnyc(t *testing.T) {
 	rookHandler := rookSecretHandler{
 		spokeClient: fakeSpokeClientForGreenSecret(t),
-		rookClient:  fakeRookClient(t),
 	}
 	cases := []testCase{
 		{
