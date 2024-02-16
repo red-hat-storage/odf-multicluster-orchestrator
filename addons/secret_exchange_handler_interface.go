@@ -4,6 +4,6 @@ package addons
 type SecretExchangeHandlerInterface interface {
 	getBlueSecretFilter(interface{}) bool
 	getGreenSecretFilter(interface{}) bool
-	syncBlueSecret(string, string, *blueSecretTokenExchangeAgentController) error
-	syncGreenSecret(string, string, *greenSecretTokenExchangeAgentController) error
+	syncBlueSecret(string, string) error
+	syncGreenSecret(string, string) error
 }

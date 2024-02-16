@@ -1,8 +1,9 @@
-package maintenance
+package addons
 
 import (
 	"context"
 	"fmt"
+
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
@@ -19,7 +20,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 type MaintenanceModeReconciler struct {
@@ -28,15 +31,11 @@ type MaintenanceModeReconciler struct {
 	SpokeClusterName string
 }
 
-const (
-	RBDProvisionerTemplate        = "%s.rbd.csi.ceph.com"
-	MaintenanceModeFinalizer      = "maintenance.multicluster.odf.openshift.io"
-	RBDMirrorDeploymentNamePrefix = "rook-ceph-rbd-mirror"
-)
-
 func (r *MaintenanceModeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&ramenv1alpha1.MaintenanceMode{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Named("maintenancemode_controller").
+		Watches(&source.Kind{Type: &ramenv1alpha1.MaintenanceMode{}}, &handler.EnqueueRequestForObject{},
+			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
 }
 
@@ -47,10 +46,10 @@ func (r *MaintenanceModeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	err := r.SpokeClient.Get(ctx, req.NamespacedName, &mmode)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			klog.Info("could not find MaintenanceMode. ignoring since object must have been deleted")
+			klog.Infof("Could not find MaintenanceMode. Ignoring since object must have been deleted.")
 			return ctrl.Result{}, nil
 		}
-		klog.Error(err, "failed to get MaintenanceMode")
+		klog.Errorf("Failed to get MaintenanceMode.", err)
 		return ctrl.Result{}, err
 	}
 
@@ -60,14 +59,14 @@ func (r *MaintenanceModeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	if cephClusters == nil || len(cephClusters.Items) == 0 {
-		klog.Info("no CephClusters available on the cluster")
+		klog.Infof("No CephClusters available on the cluster.")
 		return ctrl.Result{Requeue: true}, nil
 	}
 
 	actionableCephCluster := filterCephClustersByStorageIdOrReplicationId(cephClusters, mmode.Spec.TargetID, mmode.Spec.StorageProvisioner)
 
 	if actionableCephCluster == nil {
-		klog.Infof("no CephCluster present with required parameters for maintenance. StorageId/ReplicationId=%s , Provisioner=%s ", mmode.Spec.TargetID, mmode.Spec.StorageProvisioner)
+		klog.Infof("No CephCluster present with required parameters for maintenance. StorageId/ReplicationId=%s , Provisioner=%s ", mmode.Spec.TargetID, mmode.Spec.StorageProvisioner)
 		// Requeueing the request as the cephcluster can be potentially found if it is labeled later.
 		return ctrl.Result{Requeue: true}, nil
 	}

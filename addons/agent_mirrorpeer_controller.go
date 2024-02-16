@@ -52,16 +52,6 @@ type MirrorPeerReconciler struct {
 	SpokeClusterName string
 }
 
-const (
-	RookCSIEnableKey          = "CSI_ENABLE_OMAP_GENERATOR"
-	RookConfigMapName         = "rook-ceph-operator-config"
-	RBDProvisionerTemplate    = "%s.rbd.csi.ceph.com"
-	RamenLabelTemplate        = "ramendr.openshift.io/%s"
-	StorageIDKey              = "storageid"
-	CephFSProvisionerTemplate = "%s.cephfs.csi.ceph.com"
-	SpokeMirrorPeerFinalizer  = "spoke.multicluster.odf.openshift.io"
-)
-
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 //

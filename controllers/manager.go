@@ -60,14 +60,16 @@ func (o *ManagerOptions) AddFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 	flags.StringVar(&o.MetricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flags.StringVar(&o.ProbeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.IntVar(&o.MulticlusterConsolePort, "multicluster-console-port", 9001, "The port where the multicluster console server will be serving its payload")
+	flags.IntVar(&o.MulticlusterConsolePort, "multicluster-console-port", 9001, "The port where the multicluster console server will be serving its payload")
 	flags.BoolVar(&o.EnableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	gfs := flag.NewFlagSet("", flag.ExitOnError)
 	o.ZapOpts = zap.Options{
 		Development: true,
 	}
-	o.ZapOpts.BindFlags(flag.CommandLine)
+	o.ZapOpts.BindFlags(gfs)
+	flags.AddGoFlagSet(gfs)
 }
 
 func NewManagerCommand() *cobra.Command {

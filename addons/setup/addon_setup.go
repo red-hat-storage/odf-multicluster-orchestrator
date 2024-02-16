@@ -45,31 +45,15 @@ var tokenExchangeDeploymentFiles = []string{
 	"tokenexchange-manifests/spoke_deployment.yaml",
 }
 
-var maintenanceDeploymentFiles = []string{
-	"maintenance-manifests/spoke_serviceaccount.yaml",
-	"maintenance-manifests/spoke_clusterrole.yaml",
-	"maintenance-manifests/spoke_role.yaml",
-	"maintenance-manifests/spoke_clusterrolebinding.yaml",
-	"maintenance-manifests/spoke_rolebinding.yaml",
-	"maintenance-manifests/spoke_deployment.yaml",
-}
-
 var agentHubPermissionFiles = []string{
 	"hub-manifests/te_hub_role.yaml",
 	"hub-manifests/te_hub_rolebinding.yaml",
 	"hub-manifests/te_hub_clusterrole.yaml",
 	"hub-manifests/te_hub_clusterrolebinding.yaml",
-	"hub-manifests/mm_hub_role.yaml",
-	"hub-manifests/mm_hub_rolebinding.yaml",
-	"hub-manifests/mm_hub_clusterrole.yaml",
-	"hub-manifests/mm_hub_clusterrolebinding.yaml",
 }
 
 //go:embed tokenexchange-manifests
 var exchangeManifestFiles embed.FS
-
-//go:embed maintenance-manifests
-var maintenanceManifestFiles embed.FS
 
 //go:embed hub-manifests
 var hubManifests embed.FS
@@ -122,17 +106,8 @@ func (a *Addons) Manifests(cluster *clusterv1.ManagedCluster, addon *addonapiv1a
 		User:                  user,
 	}
 
-	var deploymentFiles []string
-	var manifestFiles embed.FS
-	if a.AddonName == MaintainAgentName {
-		deploymentFiles = maintenanceDeploymentFiles
-		manifestFiles = maintenanceManifestFiles
-	} else {
-		deploymentFiles = tokenExchangeDeploymentFiles
-		manifestFiles = exchangeManifestFiles
-	}
-	for _, file := range deploymentFiles {
-		template, err := manifestFiles.ReadFile(file)
+	for _, file := range tokenExchangeDeploymentFiles {
+		template, err := exchangeManifestFiles.ReadFile(file)
 		if err != nil {
 			return objects, err
 		}
