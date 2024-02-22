@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	replicationv1alpha1 "github.com/csi-addons/kubernetes-csi-addons/apis/replication.storage/v1alpha1"
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
@@ -18,8 +19,11 @@ import (
 	submarinerv1alpha1 "github.com/submariner-io/submariner-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	runtimewait "k8s.io/apimachinery/pkg/util/wait"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -30,6 +34,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 var (
@@ -50,6 +55,7 @@ func init() {
 	utilruntime.Must(routev1.AddToScheme(mgrScheme))
 	utilruntime.Must(submarinerv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(rookv1.AddToScheme(mgrScheme))
+	utilruntime.Must(extv1.AddToScheme(mgrScheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -213,12 +219,38 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions) {
 		os.Exit(1)
 	}
 
-	if err = (&MaintenanceModeReconciler{
-		Scheme:           mgr.GetScheme(),
-		SpokeClient:      mgr.GetClient(),
-		SpokeClusterName: options.SpokeClusterName,
-	}).SetupWithManager(mgr); err != nil {
-		klog.Error(err, "unable to create controller", "controller", "MaintenanceMode")
+	if err = mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		klog.Infof("Waiting for MaintenanceMode CRD to be created. MaintenanceMode controller is not running yet.")
+		// Wait for 45s as it takes time for MaintenanceMode CRD to be created.
+		return runtimewait.PollUntilWithContext(ctx, 15*time.Second,
+			func(ctx context.Context) (done bool, err error) {
+				var crd extv1.CustomResourceDefinition
+				readErr := mgr.GetAPIReader().Get(ctx, types.NamespacedName{Name: "maintenancemodes.ramendr.openshift.io"}, &crd)
+				if readErr != nil {
+					klog.Errorf("Unable to get MaintenanceMode CRD", readErr)
+					// Do not initialize err as we want to retry.
+					// err!=nil or done==true will end polling.
+					done = false
+					return
+				}
+				if crd.Spec.Group == "ramendr.openshift.io" && crd.Spec.Names.Kind == "MaintenanceMode" {
+					if err = (&MaintenanceModeReconciler{
+						Scheme:           mgr.GetScheme(),
+						SpokeClient:      mgr.GetClient(),
+						SpokeClusterName: options.SpokeClusterName,
+					}).SetupWithManager(mgr); err != nil {
+						klog.Errorf("Unable to create MaintenanceMode controller.", err)
+						return
+					}
+					klog.Infof("MaintenanceMode CRD exists. MaintenanceMode controller is now running.")
+					done = true
+					return
+				}
+				done = false
+				return
+			})
+	})); err != nil {
+		klog.Errorf("unable to poll MaintenanceMode", err)
 		os.Exit(1)
 	}
 
