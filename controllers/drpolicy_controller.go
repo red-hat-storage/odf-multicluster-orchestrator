@@ -6,11 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
-
-	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	replicationv1alpha1 "github.com/csi-addons/kubernetes-csi-addons/apis/replication.storage/v1alpha1"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
@@ -54,41 +50,6 @@ func (r *DRPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ramenv1alpha1.DRPolicy{}, builder.WithPredicates(dpPredicate)).
 		Complete(r)
-}
-
-func (r *DRPolicyReconciler) processManagedClusterAddon(ctx context.Context, drp *ramenv1alpha1.DRPolicy, mirrorPeer *multiclusterv1alpha1.MirrorPeer) error {
-	logger := log.FromContext(ctx)
-	// Create or Update ManagedClusterAddon
-	for i, clusterName := range drp.Spec.DRClusters {
-		var managedClusterAddOn addonapiv1alpha1.ManagedClusterAddOn
-		if err := r.HubClient.Get(ctx, types.NamespacedName{
-			Name:      setup.MaintainAgentName,
-			Namespace: clusterName,
-		}, &managedClusterAddOn); err != nil {
-			if k8serrors.IsNotFound(err) {
-				logger.Info("Cannot find managedClusterAddon, creating")
-				annotations := make(map[string]string)
-				annotations[utils.DRModeAnnotationKey] = string(mirrorPeer.Spec.Type)
-
-				managedClusterAddOn = addonapiv1alpha1.ManagedClusterAddOn{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:        setup.MaintainAgentName,
-						Namespace:   clusterName,
-						Annotations: annotations,
-					},
-				}
-			}
-		}
-		_, err := controllerutil.CreateOrUpdate(ctx, r.HubClient, &managedClusterAddOn, func() error {
-			managedClusterAddOn.Spec.InstallNamespace = mirrorPeer.Spec.Items[i].StorageClusterRef.Namespace
-			return controllerutil.SetOwnerReference(drp, &managedClusterAddOn, r.Scheme)
-		})
-		if err != nil {
-			logger.Error(err, "Failed to reconcile ManagedClusterAddOn.", "ManagedClusterAddOn", klog.KRef(managedClusterAddOn.Namespace, managedClusterAddOn.Name))
-			return err
-		}
-	}
-	return nil
 }
 
 func (r *DRPolicyReconciler) getMirrorPeerForClusterSet(ctx context.Context, clusterSet []string) (*multiclusterv1alpha1.MirrorPeer, error) {
@@ -135,10 +96,6 @@ func (r *DRPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 		}
 		klog.Error("error occurred while trying to fetch MirrorPeer for given DRPolicy")
-		return ctrl.Result{}, err
-	}
-
-	if err = r.processManagedClusterAddon(ctx, &drpolicy, mirrorPeer); err != nil {
 		return ctrl.Result{}, err
 	}
 

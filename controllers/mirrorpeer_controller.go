@@ -18,11 +18,12 @@ package controllers
 
 import (
 	"context"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	"os"
 
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
+
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
-	addons "github.com/red-hat-storage/odf-multicluster-orchestrator/addons/token-exchange"
+	addons "github.com/red-hat-storage/odf-multicluster-orchestrator/addons"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
