@@ -30,6 +30,7 @@ const (
 	MirrorPeerSecret                      = "mirrorpeersecret"
 	RookTokenKey                          = "token"
 	ClusterTypeKey                        = "cluster_type"
+	HubRecoveryLabel                      = "cluster.open-cluster-management.io/backup"
 )
 
 type RookToken struct {
@@ -129,6 +130,10 @@ func ValidateSourceSecret(sourceSecret *corev1.Secret) error {
 // ValidateDestinationSecret validates whether the given secret is a Destination type
 func ValidateDestinationSecret(sourceSecret *corev1.Secret) error {
 	return ValidateInternalSecret(sourceSecret, DestinationLabel)
+}
+
+func HasHubRecoveryLabels(secret *corev1.Secret) bool {
+	return secret.ObjectMeta.Labels[HubRecoveryLabel] == ""
 }
 
 func ValidateS3Secret(data map[string][]byte) bool {
