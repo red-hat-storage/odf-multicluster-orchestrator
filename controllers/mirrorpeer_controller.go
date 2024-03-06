@@ -51,7 +51,6 @@ type MirrorPeerReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-const hubRecoveryLabel = "cluster.open-cluster-management.io/backup"
 const mirrorPeerFinalizer = "hub.multicluster.odf.openshift.io"
 const spokeClusterRoleBindingName = "spoke-clusterrole-bindings"
 
@@ -159,9 +158,9 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		mirrorPeerCopy.Labels = make(map[string]string)
 	}
 
-	if val, ok := mirrorPeerCopy.Labels[hubRecoveryLabel]; !ok || val != "resource" {
+	if val, ok := mirrorPeerCopy.Labels[utils.HubRecoveryLabel]; !ok || val != "resource" {
 		logger.Info("Adding label to mirrorpeer for disaster recovery")
-		mirrorPeerCopy.Labels[hubRecoveryLabel] = "resource"
+		mirrorPeerCopy.Labels[utils.HubRecoveryLabel] = "resource"
 		err = r.Client.Update(ctx, mirrorPeerCopy)
 
 		if err != nil {
