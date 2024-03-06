@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 
@@ -296,6 +297,7 @@ func getExpectedRookBlueSecret(t *testing.T) *corev1.Secret {
 			Namespace: TestManagedClusterName,
 			Labels: map[string]string{
 				utils.SecretLabelTypeKey: string(utils.SourceLabel),
+				utils.HubRecoveryLabel:   "",
 			},
 		},
 		Type: utils.SecretLabelTypeKey,
@@ -322,6 +324,7 @@ func getExpectedExternalClusterRookBlueSecret(t *testing.T) *corev1.Secret {
 			Namespace: TestManagedClusterName,
 			Labels: map[string]string{
 				utils.SecretLabelTypeKey: string(utils.InternalLabel),
+				utils.HubRecoveryLabel:   "",
 			},
 		},
 		Type: utils.SecretLabelTypeKey,

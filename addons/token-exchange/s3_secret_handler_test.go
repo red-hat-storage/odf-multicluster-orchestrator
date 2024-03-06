@@ -200,6 +200,7 @@ func getExpectedS3BlueSecret(t *testing.T) *corev1.Secret {
 			Namespace: TestManagedClusterName,
 			Labels: map[string]string{
 				utils.SecretLabelTypeKey: string(utils.InternalLabel),
+				utils.HubRecoveryLabel:   "",
 			},
 		},
 		Type: utils.SecretLabelTypeKey,
