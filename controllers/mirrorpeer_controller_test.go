@@ -21,6 +21,8 @@ package controllers
 
 import (
 	"context"
+	"testing"
+
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
@@ -31,7 +33,6 @@ import (
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"testing"
 )
 
 func TestMirrorPeerReconcilerReconcile(t *testing.T) {
@@ -80,8 +81,8 @@ func TestMirrorPeerReconcilerReconcile(t *testing.T) {
 		t.Errorf("Failed to get MirrorPeer. Error: %s", err)
 	}
 
-	if val, ok := mp.Labels[hubRecoveryLabel]; !ok || val != "resource" {
-		t.Errorf("MirrorPeer.Labels[%s] is not set correctly. Expected: %s, Actual: %s", hubRecoveryLabel, "resource", val)
+	if val, ok := mp.Labels[utils.HubRecoveryLabel]; !ok || val != "resource" {
+		t.Errorf("MirrorPeer.Labels[%s] is not set correctly. Expected: %s, Actual: %s", utils.HubRecoveryLabel, "resource", val)
 	}
 }
 
