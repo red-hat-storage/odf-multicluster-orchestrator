@@ -32,6 +32,7 @@ func generateBlueSecret(secret corev1.Secret, secretType utils.SecretLabelType, 
 			Namespace: managedCluster,
 			Labels: map[string]string{
 				utils.SecretLabelTypeKey: string(secretType),
+				utils.HubRecoveryLabel:   "",
 			},
 		},
 		Type: utils.SecretLabelTypeKey,
@@ -61,6 +62,7 @@ func generateBlueSecretForExternal(rookCephMon corev1.Secret, labelType utils.Se
 			Namespace: managedClusterName,
 			Labels: map[string]string{
 				utils.SecretLabelTypeKey: string(labelType),
+				utils.HubRecoveryLabel:   "",
 			},
 		},
 		Type: utils.SecretLabelTypeKey,
