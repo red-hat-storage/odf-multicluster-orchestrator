@@ -15,11 +15,11 @@ endef
 
 CONTROLLER_GEN = $(CWD)/bin/controller-gen
 controller-gen: ## Download controller-gen locally if necessary.
-	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.9.2)
+	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.14.0)
 
 KUSTOMIZE = $(CWD)/bin/kustomize
 kustomize: ## Download kustomize locally if necessary.
-	$(call go-get-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v4@v4.5.7)
+	$(call go-get-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5@v5.3.0)
 
 .PHONY: opm
 OPM = ./bin/opm
@@ -30,7 +30,7 @@ ifeq (,$(shell which opm 2>/dev/null))
 	set -e ;\
 	mkdir -p $(dir $(OPM)) ;\
 	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
-	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.28.0/$${OS}-$${ARCH}-opm ;\
+	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.37.0/$${OS}-$${ARCH}-opm ;\
 	chmod +x $(OPM) ;\
 	}
 else
@@ -47,7 +47,7 @@ ifeq (,$(shell which operator-sdk 2>/dev/null))
 	set -e ;\
 	mkdir -p $(dir $(OSDK)) ;\
 	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
-	OSDK_VERSION=v1.30.0 && \
+	OSDK_VERSION=v1.34.1 && \
 	curl -sSLo $(OSDK) https://github.com/operator-framework/operator-sdk/releases/download/$${OSDK_VERSION}/operator-sdk_$${OS}_$${ARCH} ;\
 	chmod +x $(OSDK) ;\
 	}
@@ -57,7 +57,7 @@ endif
 endif
 
 GOLANGCI_URL := https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh
-GOLANGCI_VERSION := 1.53.3
+GOLANGCI_VERSION := 1.57.0
 
 .PHONY: golangci-bin
 GOLANGCI_BIN := $(CWD)/bin/golangci-lint

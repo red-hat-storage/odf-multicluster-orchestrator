@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.9.2
+    controller-gen.kubebuilder.io/version: v0.14.0
   creationTimestamp: null
   name: mirrorpeers.multicluster.odf.openshift.io
 spec:
@@ -20,14 +20,19 @@ spec:
         description: MirrorPeer is the Schema for the mirrorpeers API
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
@@ -40,8 +45,10 @@ spec:
                   description: PeerRef holds a reference to a mirror peer
                   properties:
                     clusterName:
-                      description: ClusterName is the name of ManagedCluster. ManagedCluster
-                        matching this name is considered a peer cluster.
+                      description: |-
+                        ClusterName is the name of ManagedCluster.
+                        ManagedCluster matching this name is considered
+                        a peer cluster.
                       type: string
                     storageClusterRef:
                       description: StorageClusterRef holds a reference to StorageCluster
@@ -67,16 +74,16 @@ spec:
                 type: boolean
               overlappingCIDR:
                 default: false
-                description: OverlappingCIDR should be set to true if the peer clusters
-                  have overlapping Pod or Service CIDR. This will enable storage clusters
-                  to use submariner globalnet. Enabling this will cause storage service
-                  disruption while network is being reconfigured.
+                description: |-
+                  OverlappingCIDR should be set to true if the peer clusters
+                  have overlapping Pod or Service CIDR. This will enable storage
+                  clusters to use submariner globalnet. Enabling this will cause
+                  storage service disruption while network is being reconfigured.
                 type: boolean
               schedulingIntervals:
-                description: 'SchedulingIntervals is a list of intervals at which
-                  mirroring snapshots are taken. DEPRECATED :  Any changes to this
-                  field will not affect the cluster state. Use DRPolicy.Spec.SchedulingInterval
-                  instead.'
+                description: |-
+                  SchedulingIntervals is a list of intervals at which mirroring snapshots are taken.
+                   DEPRECATED :  Any changes to this field will not affect the cluster state. Use DRPolicy.Spec.SchedulingInterval instead.
                 items:
                   type: string
                 type: array
