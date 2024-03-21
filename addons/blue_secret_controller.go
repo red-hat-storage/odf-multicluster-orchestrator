@@ -9,7 +9,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -48,7 +47,7 @@ func (r *BlueSecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("bluesecret_controller").
-		Watches(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForObject{},
+		Watches(&corev1.Secret{}, &handler.EnqueueRequestForObject{},
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{}, blueSecretPredicate)).
 		Complete(r)
 }
@@ -57,14 +56,14 @@ func (r *BlueSecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	var err error
 	var secret corev1.Secret
 
-	klog.Infof("Reconciling blue secret", "secret", req.NamespacedName.String())
+	klog.Info("Reconciling blue secret", "secret", req.NamespacedName.String())
 	err = r.SpokeClient.Get(ctx, req.NamespacedName, &secret)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			klog.Infof("Could not find secret. Ignoring since it must have been deleted")
 			return ctrl.Result{}, nil
 		}
-		klog.Errorf("Failed to get secret.", err)
+		klog.Error("Failed to get secret.", err)
 		return ctrl.Result{}, err
 	}
 

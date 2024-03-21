@@ -55,7 +55,7 @@ func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name strin
 	}
 
 	if storageClusterRef == nil {
-		klog.Error("failed to find storage cluster ref using spoke cluster name %s from mirrorpeers ", r.SpokeClusterName)
+		klog.Errorf("failed to find storage cluster ref using spoke cluster name %s from mirrorpeers ", r.SpokeClusterName)
 		return err
 	}
 

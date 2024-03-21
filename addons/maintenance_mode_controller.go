@@ -22,7 +22,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 type MaintenanceModeReconciler struct {
@@ -34,7 +33,7 @@ type MaintenanceModeReconciler struct {
 func (r *MaintenanceModeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("maintenancemode_controller").
-		Watches(&source.Kind{Type: &ramenv1alpha1.MaintenanceMode{}}, &handler.EnqueueRequestForObject{},
+		Watches(&ramenv1alpha1.MaintenanceMode{}, &handler.EnqueueRequestForObject{},
 			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
 }
@@ -49,7 +48,7 @@ func (r *MaintenanceModeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			klog.Infof("Could not find MaintenanceMode. Ignoring since object must have been deleted.")
 			return ctrl.Result{}, nil
 		}
-		klog.Errorf("Failed to get MaintenanceMode.", err)
+		klog.Error("Failed to get MaintenanceMode.", err)
 		return ctrl.Result{}, err
 	}
 
@@ -80,7 +79,7 @@ func (r *MaintenanceModeReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			klog.Errorf("failed to complete maintenance actions on %s. err=%v", mmode.Name, err)
 			return result, err
 		}
-		if !result.Requeue && err == nil {
+		if !result.Requeue {
 			mmode.Finalizers = utils.RemoveString(mmode.Finalizers, MaintenanceModeFinalizer)
 			err = r.SpokeClient.Update(ctx, &mmode)
 			if err != nil {
@@ -136,7 +135,7 @@ func (r *MaintenanceModeReconciler) startMaintenanceActions(ctx context.Context,
 				SetStatus(mmode, mode, ramenv1alpha1.MModeStateError, err)
 				return result, err
 			}
-			if !result.Requeue && err == nil {
+			if !result.Requeue {
 				SetStatus(mmode, mode, ramenv1alpha1.MModeStateCompleted, nil)
 			}
 			return result, err

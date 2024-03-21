@@ -16,7 +16,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // GreenSecretReconciler reconciles a MirrorPeer object
@@ -54,7 +53,7 @@ func (r *GreenSecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("greensecret_controller").
-		Watches(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForObject{},
+		Watches(&corev1.Secret{}, &handler.EnqueueRequestForObject{},
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}, greenSecretPredicate)).
 		Complete(r)
 }
@@ -63,14 +62,14 @@ func (r *GreenSecretReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	var err error
 	var greenSecret corev1.Secret
 
-	klog.Infof("Reconciling green secret", "secret", req.NamespacedName.String())
+	klog.Info("Reconciling green secret", "secret", req.NamespacedName.String())
 	err = r.HubClient.Get(ctx, req.NamespacedName, &greenSecret)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			klog.Infof("Could not find secret. Ignoring since it must have been deleted")
 			return ctrl.Result{}, nil
 		}
-		klog.Errorf("Failed to get secret.", err)
+		klog.Error("Failed to get secret.", err)
 		return ctrl.Result{}, err
 	}
 
