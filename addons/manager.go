@@ -222,12 +222,12 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions) {
 	if err = mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		klog.Infof("Waiting for MaintenanceMode CRD to be created. MaintenanceMode controller is not running yet.")
 		// Wait for 45s as it takes time for MaintenanceMode CRD to be created.
-		return runtimewait.PollUntilWithContext(ctx, 15*time.Second,
+		return runtimewait.PollUntilContextCancel(ctx, 15*time.Second, true,
 			func(ctx context.Context) (done bool, err error) {
 				var crd extv1.CustomResourceDefinition
 				readErr := mgr.GetAPIReader().Get(ctx, types.NamespacedName{Name: "maintenancemodes.ramendr.openshift.io"}, &crd)
 				if readErr != nil {
-					klog.Errorf("Unable to get MaintenanceMode CRD", readErr)
+					klog.Error("Unable to get MaintenanceMode CRD", readErr)
 					// Do not initialize err as we want to retry.
 					// err!=nil or done==true will end polling.
 					done = false
@@ -239,7 +239,7 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions) {
 						SpokeClient:      mgr.GetClient(),
 						SpokeClusterName: options.SpokeClusterName,
 					}).SetupWithManager(mgr); err != nil {
-						klog.Errorf("Unable to create MaintenanceMode controller.", err)
+						klog.Error("Unable to create MaintenanceMode controller.", err)
 						return
 					}
 					klog.Infof("MaintenanceMode CRD exists. MaintenanceMode controller is now running.")
@@ -250,7 +250,7 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions) {
 				return
 			})
 	})); err != nil {
-		klog.Errorf("unable to poll MaintenanceMode", err)
+		klog.Error("unable to poll MaintenanceMode", err)
 		os.Exit(1)
 	}
 

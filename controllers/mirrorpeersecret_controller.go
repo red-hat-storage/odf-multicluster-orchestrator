@@ -35,7 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 	"sigs.k8s.io/yaml"
 )
 
@@ -136,11 +135,11 @@ func mirrorPeerSecretReconcile(ctx context.Context, rc client.Client, req ctrl.R
 func (r *MirrorPeerSecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Secret{}, builder.WithPredicates(utils.SourceOrDestinationPredicate)).
-		Watches(&source.Kind{Type: &corev1.ConfigMap{}}, handler.EnqueueRequestsFromMapFunc(r.secretConfigMapFunc)).
+		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.secretConfigMapFunc)).
 		Complete(r)
 }
 
-func (r *MirrorPeerSecretReconciler) secretConfigMapFunc(obj client.Object) []reconcile.Request {
+func (r *MirrorPeerSecretReconciler) secretConfigMapFunc(ctx context.Context, obj client.Object) []reconcile.Request {
 	ConfigMapRamenConfigKeyName := "ramen_manager_config.yaml"
 	var cm *corev1.ConfigMap
 	cm, ok := obj.(*corev1.ConfigMap)

@@ -218,7 +218,7 @@ func (r *DRPolicyReconciler) fetchClusterFSIDs(ctx context.Context, peer *multic
 		hs, err := utils.FetchSecretWithName(ctx, r.HubClient, types.NamespacedName{Name: rookSecretName, Namespace: pr.ClusterName})
 		if err != nil {
 			if errors.IsNotFound(err) {
-				klog.Info("could not find secret %q. will attempt to fetch it again after a delay", rookSecretName)
+				klog.Infof("could not find secret %q. will attempt to fetch it again after a delay", rookSecretName)
 			}
 			return err
 		}

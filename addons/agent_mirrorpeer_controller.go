@@ -117,7 +117,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	klog.Infof("creating s3 buckets")
-	err = r.createS3(ctx, req, mirrorPeer, scr.Namespace)
+	err = r.createS3(ctx, mirrorPeer, scr.Namespace)
 	if err != nil {
 		klog.Error(err, "Failed to create ODR S3 resources")
 		return ctrl.Result{}, err
@@ -158,8 +158,8 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 		// Trying this at last to allow bootstrapping to be completed
 		if mirrorPeer.Spec.OverlappingCIDR {
-			klog.Infof("enabling multiclusterservice", "MirrorPeer", mirrorPeer.GetName(), "Peers", mirrorPeer.Spec.Items)
-			err := r.enableMulticlusterService(ctx, scr.Name, scr.Namespace, &mirrorPeer)
+			klog.Info("enabling multiclusterservice", "MirrorPeer", mirrorPeer.GetName(), "Peers", mirrorPeer.Spec.Items)
+			err := r.enableMulticlusterService(ctx, scr.Name, scr.Namespace)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to enable multiclusterservice for storagecluster %q in namespace %q: %v", scr.Name, scr.Namespace, err)
 			}
@@ -258,7 +258,7 @@ func (r *MirrorPeerReconciler) labelRBDStorageClasses(ctx context.Context, stora
 	return errs
 }
 
-func (r *MirrorPeerReconciler) createS3(ctx context.Context, req ctrl.Request, mirrorPeer multiclusterv1alpha1.MirrorPeer, scNamespace string) error {
+func (r *MirrorPeerReconciler) createS3(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, scNamespace string) error {
 	noobaaOBC, err := r.getS3bucket(ctx, mirrorPeer, scNamespace)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -303,7 +303,7 @@ func (r *MirrorPeerReconciler) getS3bucket(ctx context.Context, mirrorPeer multi
 }
 
 // enableMulticlusterService sets the multiclusterservice flag on StorageCluster if submariner globalnet is enabled
-func (r *MirrorPeerReconciler) enableMulticlusterService(ctx context.Context, storageClusterName string, namespace string, mp *multiclusterv1alpha1.MirrorPeer) error {
+func (r *MirrorPeerReconciler) enableMulticlusterService(ctx context.Context, storageClusterName string, namespace string) error {
 	klog.Infof("Enabling MCS for StorageCluster %q in %q namespace.", storageClusterName, namespace)
 	var sc ocsv1.StorageCluster
 	err := r.SpokeClient.Get(ctx, types.NamespacedName{

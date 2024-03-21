@@ -23,27 +23,15 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // log is for logging in this package.
 var mirrorpeerlog = logf.Log.WithName("mirrorpeer-webhook")
 
-const (
-	WebhookCertDir  = "/apiserver.local.config/certificates"
-	WebhookCertName = "apiserver.crt"
-	WebhookKeyName  = "apiserver.key"
-)
-
 func (r *MirrorPeer) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	bldr := ctrl.NewWebhookManagedBy(mgr).
-		For(r)
-
-	srv := mgr.GetWebhookServer()
-	srv.CertDir = WebhookCertDir
-	srv.CertName = WebhookCertName
-	srv.KeyName = WebhookKeyName
-
-	return bldr.Complete()
+	return ctrl.NewWebhookManagedBy(mgr).
+		For(r).Complete()
 }
 
 //+kubebuilder:webhook:path=/mutate-multicluster-odf-openshift-io-v1alpha1-mirrorpeer,mutating=true,failurePolicy=fail,sideEffects=None,groups=multicluster.odf.openshift.io,resources=mirrorpeers,verbs=create;update,versions=v1alpha1,name=mmirrorpeer.kb.io,admissionReviewVersions=v1;v1beta1
@@ -58,26 +46,25 @@ func (r *MirrorPeer) Default() {}
 var _ webhook.Validator = &MirrorPeer{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *MirrorPeer) ValidateCreate() error {
+func (r *MirrorPeer) ValidateCreate() (warnings admission.Warnings, err error) {
 	mirrorpeerlog.Info("validate create", "name", r.ObjectMeta.Name)
-
-	return validateMirrorPeer(r)
+	return []string{}, validateMirrorPeer(r)
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *MirrorPeer) ValidateUpdate(old runtime.Object) error {
+func (r *MirrorPeer) ValidateUpdate(old runtime.Object) (warnings admission.Warnings, err error) {
 	mirrorpeerlog.Info("validate update", "name", r.ObjectMeta.Name)
 	oldMirrorPeer, ok := old.(*MirrorPeer)
 	if !ok {
-		return fmt.Errorf("error casting old object to MirrorPeer")
+		return []string{}, fmt.Errorf("error casting old object to MirrorPeer")
 	}
 
 	if len(r.Spec.Items) != len(oldMirrorPeer.Spec.Items) {
-		return fmt.Errorf("error updating MirrorPeer, new and old spec.items have different lengths")
+		return []string{}, fmt.Errorf("error updating MirrorPeer, new and old spec.items have different lengths")
 	}
 
 	if r.Spec.Type != oldMirrorPeer.Spec.Type {
-		return fmt.Errorf("error updating MirrorPeer, the type cannot be changed from %s to %s", oldMirrorPeer.Spec.Type, r.Spec.Type)
+		return []string{}, fmt.Errorf("error updating MirrorPeer, the type cannot be changed from %s to %s", oldMirrorPeer.Spec.Type, r.Spec.Type)
 	}
 
 	refs := make(map[string]int)
@@ -89,14 +76,14 @@ func (r *MirrorPeer) ValidateUpdate(old runtime.Object) error {
 	for _, pr := range r.Spec.Items {
 		key := fmt.Sprintf("%s-%s-%s", pr.ClusterName, pr.StorageClusterRef.Namespace, pr.StorageClusterRef.Name)
 		if _, ok := refs[key]; !ok {
-			return fmt.Errorf("error validating update: new MirrorPeer %s references a StorageCluster %s/%s that is not in the old MirrorPeer", r.ObjectMeta.Name, pr.StorageClusterRef.Namespace, pr.StorageClusterRef.Name)
+			return []string{}, fmt.Errorf("error validating update: new MirrorPeer %s references a StorageCluster %s/%s that is not in the old MirrorPeer", r.ObjectMeta.Name, pr.StorageClusterRef.Namespace, pr.StorageClusterRef.Name)
 		}
 	}
 
 	if oldMirrorPeer.Spec.OverlappingCIDR && !r.Spec.OverlappingCIDR {
-		return fmt.Errorf("error updating MirrorPeer: OverlappingCIDR value can not be changed from %t to %t. This is to prevent Disaster Recovery from being unusable between clusters that have overlapping IPs", oldMirrorPeer.Spec.OverlappingCIDR, r.Spec.OverlappingCIDR)
+		return []string{}, fmt.Errorf("error updating MirrorPeer: OverlappingCIDR value can not be changed from %t to %t. This is to prevent Disaster Recovery from being unusable between clusters that have overlapping IPs", oldMirrorPeer.Spec.OverlappingCIDR, r.Spec.OverlappingCIDR)
 	}
-	return validateMirrorPeer(r)
+	return []string{}, validateMirrorPeer(r)
 }
 
 // validateMirrorPeer validates the MirrorPeer
@@ -108,7 +95,7 @@ func validateMirrorPeer(instance *MirrorPeer) error {
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *MirrorPeer) ValidateDelete() error {
+func (r *MirrorPeer) ValidateDelete() (warnings admission.Warnings, err error) {
 	mirrorpeerlog.Info("validate delete", "name", r.ObjectMeta.Name)
-	return nil
+	return []string{}, nil
 }

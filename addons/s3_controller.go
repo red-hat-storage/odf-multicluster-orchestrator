@@ -18,7 +18,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // S3SecretReconciler reconciles a MirrorPeer object
@@ -59,7 +58,7 @@ func (r *S3SecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("s3secret_controller").
-		Watches(&source.Kind{Type: &obv1alpha1.ObjectBucketClaim{}}, &handler.EnqueueRequestForObject{},
+		Watches(&obv1alpha1.ObjectBucketClaim{}, &handler.EnqueueRequestForObject{},
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}, s3BucketPredicate)).
 		Complete(r)
 }
@@ -68,14 +67,14 @@ func (r *S3SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	var err error
 	var obc obv1alpha1.ObjectBucketClaim
 
-	klog.Infof("Reconciling OBC", "OBC", req.NamespacedName.String())
+	klog.Info("Reconciling OBC", "OBC", req.NamespacedName.String())
 	err = r.SpokeClient.Get(ctx, req.NamespacedName, &obc)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			klog.Infof("Could not find OBC. Ignoring since object must have been deleted.")
+			klog.Info("Could not find OBC. Ignoring since object must have been deleted.")
 			return ctrl.Result{}, nil
 		}
-		klog.Errorf("Failed to get OBC.", err)
+		klog.Error("Failed to get OBC.", err)
 		return ctrl.Result{}, err
 	}
 
