@@ -18,7 +18,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+<<<<<<< Updated upstream
         go: [ '1.19' ]
+=======
+        go: [ '1.21' ]
+>>>>>>> Stashed changes
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
