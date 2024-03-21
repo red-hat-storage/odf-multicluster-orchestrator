@@ -19,11 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-<<<<<<< Updated upstream
-        go: [ '1.19' ]
-=======
         go: [ '1.21' ]
->>>>>>> Stashed changes
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
     - name: Checkout source
@@ -53,11 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-<<<<<<< Updated upstream
-        go: [ '1.19' ]
-=======
         go: [ '1.21' ]
->>>>>>> Stashed changes
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
     - name: Checkout source
@@ -87,11 +79,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-<<<<<<< Updated upstream
-        go: [ '1.19' ]
-=======
         go: [ '1.21' ]
->>>>>>> Stashed changes
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
     - name: Checkout source
