@@ -778,8 +778,8 @@ github.com/prometheus/procfs v0.9.0/go.mod h1:+pB4zwohETzFnmlpe6yd2lSc+0/46IYZRB
 github.com/prometheus/procfs v0.12.0 h1:jluTpSng7V9hY0O2R9DzzJHYb2xULk9VTR1V1R/k6Bo=
 github.com/prometheus/procfs v0.12.0/go.mod h1:pcuDEFsWDnvcgNzo4EEweacyhjeA9Zk3cnaOZAZEfOo=
 github.com/prometheus/tsdb v0.7.1/go.mod h1:qhTCs0VvXwvX/y3TZrWD7rabWM+ijKTux40TwIPHuXU=
-github.com/ramendr/ramen/api v0.0.0-20240117171503-e11c56eac24d h1:cusjxTd7EUt/VP51YA2hBH/+H7svwCAmiFybbssEKx4=
-github.com/ramendr/ramen/api v0.0.0-20240117171503-e11c56eac24d/go.mod h1:KXZjrQDRobLq1FvIpxHVZCG054qQo+2t9uGjb/wc9k4=
+github.com/ramendr/ramen/api v0.0.0-20240321110022-975f2fbf6dce h1:1KO6EV5JsFOCBMA1rYVo5jP8fNCXAHEMh6rbhXd6TLg=
+github.com/ramendr/ramen/api v0.0.0-20240321110022-975f2fbf6dce/go.mod h1:PCb0ODjdi4eYuxY/nSw+/rQqmzkmBVqGNoDr2JXdlKE=
 github.com/red-hat-storage/ocs-operator v0.4.13 h1:+FdRGqgewn7v22LvhQUV8iSzLm8d6k4T+zyX0Zjo7qw=
 github.com/red-hat-storage/ocs-operator v0.4.13/go.mod h1:92CGJGBXykejC89+h8s0pohpb0JRwfwPE9IwUNF5+sY=
 github.com/rogpeppe/fastuuid v0.0.0-20150106093220-6724a57986af/go.mod h1:XWv6SoW27p1b0cqNHllgS5HIMJraePCO15w5zCzIWYg=
