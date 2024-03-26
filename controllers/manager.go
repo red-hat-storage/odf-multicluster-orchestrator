@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
@@ -103,9 +104,10 @@ func (o *ManagerOptions) runManager() {
 	})
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 mgrScheme,
-		MetricsBindAddress:     o.MetricsAddr,
-		Port:                   9443,
+		Scheme: mgrScheme,
+		Metrics: server.Options{
+			BindAddress: o.MetricsAddr,
+		},
 		HealthProbeBindAddress: o.ProbeAddr,
 		LeaderElection:         o.EnableLeaderElection,
 		LeaderElectionID:       "1d19c724.odf.openshift.io",

@@ -32,9 +32,11 @@ import (
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 var (
@@ -154,12 +156,17 @@ func runHubManager(ctx context.Context, options AddonAgentOptions) {
 	}
 
 	mgr, err := ctrl.NewManager(hubConfig, ctrl.Options{
-		Scheme:                 mgrScheme,
-		Port:                   9443,
-		MetricsBindAddress:     "0", // disable metrics
+		Scheme: mgrScheme,
+		Metrics: server.Options{
+			BindAddress: "0", // disable metrics
+		},
 		HealthProbeBindAddress: "0", // disable health probe
 		ReadinessEndpointName:  "0", // disable readiness probe
-		Namespace:              options.SpokeClusterName,
+		Cache: cache.Options{
+			DefaultNamespaces: map[string]cache.Config{
+				options.SpokeClusterName: {},
+			},
+		},
 	})
 	if err != nil {
 		klog.Error(err, "unable to start manager")
@@ -207,9 +214,10 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions) {
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 mgrScheme,
-		Port:                   9443,
-		MetricsBindAddress:     "0", // disable metrics
+		Scheme: mgrScheme,
+		Metrics: server.Options{
+			BindAddress: "0", // disable metrics
+		},
 		HealthProbeBindAddress: "0", // disable health probe
 		ReadinessEndpointName:  "0", // disable readiness probe
 	})
