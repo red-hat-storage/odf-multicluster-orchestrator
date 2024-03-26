@@ -20,9 +20,10 @@ limitations under the License.
 package integration_test
 
 import (
-	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	"path/filepath"
 	"testing"
+
+	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -37,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -85,9 +87,10 @@ var _ = BeforeSuite(func() {
 	Expect(k8sClient).NotTo(BeNil())
 
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme:                 scheme.Scheme,
-		MetricsBindAddress:     ":8080",
-		Port:                   9443,
+		Scheme: scheme.Scheme,
+		Metrics: server.Options{
+			BindAddress: ":8080", // disable metrics
+		},
 		HealthProbeBindAddress: ":8081",
 		LeaderElection:         false,
 		LeaderElectionID:       "1d19c724.odf.openshift.io",
