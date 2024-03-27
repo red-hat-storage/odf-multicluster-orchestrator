@@ -115,7 +115,7 @@ func TestInitConsole(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&obj).Build()
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			err := InitConsole(context.TODO(), client, c.port, c.namespace)
+			err := InitConsole(context.TODO(), client, scheme, c.port, c.namespace)
 			if c.errExpected {
 				assert.Error(t, err)
 			} else {
