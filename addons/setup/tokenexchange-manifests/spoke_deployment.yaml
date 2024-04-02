@@ -48,3 +48,8 @@ spec:
         volumeMounts:
           - name: hub-config
             mountPath: /var/run/hub
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace

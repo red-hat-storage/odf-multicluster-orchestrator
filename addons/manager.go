@@ -24,10 +24,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	runtimewait "k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
+	"open-cluster-management.io/addon-framework/pkg/lease"
 	addonutils "open-cluster-management.io/addon-framework/pkg/utils"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -227,6 +229,15 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions) {
 		os.Exit(1)
 	}
 
+	spokeKubeConfig := mgr.GetConfig()
+	spokeKubeClient, err := kubernetes.NewForConfig(spokeKubeConfig)
+	if err != nil {
+		klog.Error(err, "unable to get spoke kube client")
+		os.Exit(1)
+	}
+
+	currentNamespace := os.Getenv("POD_NAMESPACE")
+
 	if err = mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		klog.Infof("Waiting for MaintenanceMode CRD to be created. MaintenanceMode controller is not running yet.")
 		// Wait for 45s as it takes time for MaintenanceMode CRD to be created.
@@ -259,6 +270,21 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions) {
 			})
 	})); err != nil {
 		klog.Error("unable to poll MaintenanceMode", err)
+		os.Exit(1)
+	}
+
+	if err = mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		klog.Infof("Starting lease updater.")
+		leaseUpdater := lease.NewLeaseUpdater(
+			spokeKubeClient,
+			setup.TokenExchangeName,
+			currentNamespace,
+		)
+		leaseUpdater.Start(ctx)
+		<-ctx.Done()
+		return nil
+	})); err != nil {
+		klog.Error("unable to start lease updater", err)
 		os.Exit(1)
 	}
 
