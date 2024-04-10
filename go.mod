@@ -9,7 +9,7 @@ require (
 	github.com/onsi/gomega v1.31.1
 	github.com/openshift/api v0.0.0-20240124164020-e2ce40831f2e
 	github.com/openshift/library-go v0.0.0-20240124134907-4dfbf6bc7b11
-	github.com/ramendr/ramen/api v0.0.0-20240321110022-975f2fbf6dce
+	github.com/ramendr/ramen/api v0.0.0-20240409201920-10024cae3bfd
 	github.com/red-hat-storage/ocs-operator v0.4.13
 	github.com/rook/rook/pkg/apis v0.0.0-20231204200402-5287527732f7
 	github.com/spf13/cobra v1.8.0
