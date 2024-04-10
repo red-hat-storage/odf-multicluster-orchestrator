@@ -232,6 +232,38 @@ func isS3ProfileManagedPeerRef(clusterPeerRef multiclusterv1alpha1.PeerRef, mirr
 	return false
 }
 
+func updateS3ProfileFields(expected *rmn.S3StoreProfile, found *rmn.S3StoreProfile) {
+	found.S3ProfileName = expected.S3ProfileName
+	found.S3Bucket = expected.S3Bucket
+	found.S3Region = expected.S3Region
+	found.S3CompatibleEndpoint = expected.S3CompatibleEndpoint
+	found.S3SecretRef.Name = expected.S3SecretRef.Name
+}
+
+func areS3ProfileFieldsEqual(expected rmn.S3StoreProfile, found rmn.S3StoreProfile) bool {
+	if expected.S3ProfileName != found.S3ProfileName {
+		return false
+	}
+
+	if expected.S3Bucket != found.S3Bucket {
+		return false
+	}
+
+	if expected.S3Region != found.S3Region {
+		return false
+	}
+
+	if expected.S3CompatibleEndpoint != found.S3CompatibleEndpoint {
+		return false
+	}
+
+	if expected.S3SecretRef.Name != found.S3SecretRef.Name {
+		return false
+	}
+
+	return true
+}
+
 func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret *corev1.Secret, data map[string][]byte, mirrorPeers []multiclusterv1alpha1.MirrorPeer, ramenHubNamespace string) error {
 	logger := log.FromContext(ctx)
 
@@ -296,12 +328,12 @@ func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret 
 	for i, currentS3Profile := range ramenConfig.S3StoreProfiles {
 		if currentS3Profile.S3ProfileName == expectedS3Profile.S3ProfileName {
 
-			if reflect.DeepEqual(expectedS3Profile, currentS3Profile) {
+			if areS3ProfileFieldsEqual(expectedS3Profile, currentS3Profile) {
 				// no change detected on already exiting s3 profile in RamenConfig
 				return nil
 			}
 			// changes deducted on existing s3 profile
-			ramenConfig.S3StoreProfiles[i] = expectedS3Profile
+			updateS3ProfileFields(&expectedS3Profile, &ramenConfig.S3StoreProfiles[i])
 			isUpdated = true
 			break
 		}
