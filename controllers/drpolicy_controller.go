@@ -73,7 +73,7 @@ func (r *DRPolicyReconciler) getMirrorPeerForClusterSet(ctx context.Context, clu
 	}
 
 	klog.Info("could not find any mirrorpeer for drpolicy")
-	return nil, nil
+	return nil, k8serrors.NewNotFound(schema.GroupResource{Group: multiclusterv1alpha1.GroupVersion.Group, Resource: "MirrorPeer"}, fmt.Sprintf("ClusterSet-%s-%s", clusterSet[0], clusterSet[1]))
 }
 func (r *DRPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	klog.Infof("running DRPolicy reconciler on hub cluster")
