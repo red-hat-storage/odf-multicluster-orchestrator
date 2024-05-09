@@ -550,14 +550,19 @@ func (r *MirrorPeerReconciler) createClusterRoleBindingsForSpoke(ctx context.Con
 		ObjectMeta: metav1.ObjectMeta{
 			Name: spokeClusterRoleBindingName,
 		},
-		Subjects: subjects,
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     "open-cluster-management:token-exchange:agent",
-		},
 	}
 	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, &spokeRoleBinding, func() error {
+		spokeRoleBinding.Subjects = subjects
+
+		if spokeRoleBinding.CreationTimestamp.IsZero() {
+			// RoleRef is immutable. So inject it only while creating new object.
+			spokeRoleBinding.RoleRef = rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "ClusterRole",
+				Name:     "open-cluster-management:token-exchange:agent",
+			}
+		}
+
 		return nil
 	})
 
