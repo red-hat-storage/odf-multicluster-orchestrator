@@ -60,6 +60,11 @@ func TestDRPolicyReconcile(t *testing.T) {
 		Spec: ramenv1alpha1.DRPolicySpec{
 			SchedulingInterval: "1h",
 			DRClusters:         []string{cName1, cName2},
+			ReplicationClassSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					RBDFlattenVolumeReplicationClassLabelKey: RBDFlattenVolumeReplicationClassLabelValue,
+				},
+			},
 		},
 	}
 
@@ -87,6 +92,9 @@ func TestDRPolicyReconcile(t *testing.T) {
 
 		if err != nil {
 			t.Errorf("Failed to get ManifestWork. Error: %s", err)
+		}
+		if len(found.Spec.Workload.Manifests) < 2 {
+			t.Errorf("Expected at least 2 VRC")
 		}
 	}
 }
