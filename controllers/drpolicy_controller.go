@@ -27,16 +27,20 @@ import (
 )
 
 const (
-	DefaultMirroringMode                  = "snapshot"
-	MirroringModeKey                      = "mirroringMode"
-	SchedulingIntervalKey                 = "schedulingInterval"
-	ReplicationSecretNameKey              = "replication.storage.openshift.io/replication-secret-name"
-	ReplicationSecretNamespaceKey         = "replication.storage.openshift.io/replication-secret-namespace"
-	ReplicationIDKey                      = "replicationid"
-	RBDVolumeReplicationClassNameTemplate = "rbd-volumereplicationclass-%v"
-	RBDReplicationSecretName              = "rook-csi-rbd-provisioner"
-	RamenLabelTemplate                    = "ramendr.openshift.io/%s"
-	RBDProvisionerTemplate                = "%s.rbd.csi.ceph.com"
+	DefaultMirroringMode                         = "snapshot"
+	MirroringModeKey                             = "mirroringMode"
+	SchedulingIntervalKey                        = "schedulingInterval"
+	ReplicationSecretNameKey                     = "replication.storage.openshift.io/replication-secret-name"
+	ReplicationSecretNamespaceKey                = "replication.storage.openshift.io/replication-secret-namespace"
+	ReplicationIDKey                             = "replicationid"
+	RBDVolumeReplicationClassNameTemplate        = "rbd-volumereplicationclass-%v"
+	RBDReplicationSecretName                     = "rook-csi-rbd-provisioner"
+	RamenLabelTemplate                           = "ramendr.openshift.io/%s"
+	RBDProvisionerTemplate                       = "%s.rbd.csi.ceph.com"
+	RBDFlattenVolumeReplicationClassNameTemplate = "rbd-flatten-volumereplicationclass-%v"
+	RBDFlattenVolumeReplicationClassLabelKey     = "replication.storage.openshift.io/flatten-mode"
+	RBDFlattenVolumeReplicationClassLabelValue   = "force"
+	RBDVolumeReplicationClassDefaultAnnotation   = "replication.storage.openshift.io/is-default-class"
 )
 
 type DRPolicyReconciler struct {
@@ -126,8 +130,9 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 		return err
 	}
 
+	manifestWorkName := fmt.Sprintf("vrc-%v", utils.FnvHash(dp.Name)) // Two ManifestWork per DRPolicy
+
 	for _, pr := range mp.Spec.Items {
-		manifestWorkName := fmt.Sprintf("vrc-%v", utils.FnvHash(dp.Name)) // Two ManifestWork per DRPolicy
 		found := &workv1.ManifestWork{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      manifestWorkName,
@@ -144,6 +149,7 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 			klog.Error(err, "failed to get ManifestWork: %s", manifestWorkName)
 			return err
 		}
+
 		interval := dp.Spec.SchedulingInterval
 		params := make(map[string]string)
 		params[MirroringModeKey] = DefaultMirroringMode
@@ -161,6 +167,9 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   vrcName,
 				Labels: labels,
+				Annotations: map[string]string{
+					RBDVolumeReplicationClassDefaultAnnotation: "true",
+				},
 			},
 			Spec: replicationv1alpha1.VolumeReplicationClassSpec{
 				Parameters:  params,
@@ -173,8 +182,30 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 			return fmt.Errorf("failed to marshal %v to JSON, error %w", vrc, err)
 		}
 
-		manifest := workv1.Manifest{}
-		manifest.RawExtension = runtime.RawExtension{Raw: objJson}
+		manifestList := []workv1.Manifest{
+			{
+				RawExtension: runtime.RawExtension{
+					Raw: objJson,
+				},
+			},
+		}
+
+		if dp.Spec.ReplicationClassSelector.MatchLabels[RBDFlattenVolumeReplicationClassLabelKey] == RBDFlattenVolumeReplicationClassLabelValue {
+			vrcFlatten := vrc.DeepCopy()
+			vrcFlatten.Name = fmt.Sprintf(RBDFlattenVolumeReplicationClassNameTemplate, utils.FnvHash(interval))
+			vrcFlatten.Labels[RBDFlattenVolumeReplicationClassLabelKey] = RBDFlattenVolumeReplicationClassLabelValue
+			vrcFlatten.Annotations = map[string]string{}
+			vrcFlatten.Spec.Parameters["flattenMode"] = "force"
+			vrcFlattenJson, err := json.Marshal(vrcFlatten)
+			if err != nil {
+				return fmt.Errorf("failed to marshal %v to JSON, error %w", vrcFlatten, err)
+			}
+			manifestList = append(manifestList, workv1.Manifest{
+				RawExtension: runtime.RawExtension{
+					Raw: vrcFlattenJson,
+				},
+			})
+		}
 
 		mw := workv1.ManifestWork{
 			ObjectMeta: metav1.ObjectMeta{
@@ -193,9 +224,8 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 		_, err = controllerutil.CreateOrUpdate(ctx, r.HubClient, &mw, func() error {
 			mw.Spec = workv1.ManifestWorkSpec{
 				Workload: workv1.ManifestsTemplate{
-					Manifests: []workv1.Manifest{
-						manifest,
-					}},
+					Manifests: manifestList,
+				},
 			}
 			return nil
 		})
