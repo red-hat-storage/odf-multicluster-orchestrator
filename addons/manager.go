@@ -16,7 +16,6 @@ import (
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	"github.com/spf13/cobra"
-	submarinerv1alpha1 "github.com/submariner-io/submariner-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -57,7 +56,6 @@ func init() {
 	utilruntime.Must(ocsv1.AddToScheme(mgrScheme))
 	utilruntime.Must(obv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(routev1.AddToScheme(mgrScheme))
-	utilruntime.Must(submarinerv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(rookv1.AddToScheme(mgrScheme))
 	utilruntime.Must(extv1.AddToScheme(mgrScheme))
 	//+kubebuilder:scaffold:scheme
