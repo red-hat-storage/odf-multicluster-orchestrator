@@ -80,9 +80,6 @@ func (r *MirrorPeer) ValidateUpdate(old runtime.Object) (warnings admission.Warn
 		}
 	}
 
-	if oldMirrorPeer.Spec.OverlappingCIDR && !r.Spec.OverlappingCIDR {
-		return []string{}, fmt.Errorf("error updating MirrorPeer: OverlappingCIDR value can not be changed from %t to %t. This is to prevent Disaster Recovery from being unusable between clusters that have overlapping IPs", oldMirrorPeer.Spec.OverlappingCIDR, r.Spec.OverlappingCIDR)
-	}
 	return []string{}, validateMirrorPeer(r)
 }
 

@@ -29,7 +29,6 @@ import (
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
-	submarinerv1alpha1 "github.com/submariner-io/submariner-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -154,15 +153,6 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		errs := r.labelRBDStorageClasses(ctx, scr.Namespace, clusterFSIDs)
 		if len(errs) > 0 {
 			return ctrl.Result{}, fmt.Errorf("few failures occured while labeling RBD StorageClasses: %v", errs)
-		}
-
-		// Trying this at last to allow bootstrapping to be completed
-		if mirrorPeer.Spec.OverlappingCIDR {
-			klog.Info("enabling multiclusterservice", "MirrorPeer", mirrorPeer.GetName(), "Peers", mirrorPeer.Spec.Items)
-			err := r.enableMulticlusterService(ctx, scr.Name, scr.Namespace)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to enable multiclusterservice for storagecluster %q in namespace %q: %v", scr.Name, scr.Namespace, err)
-			}
 		}
 	}
 	return ctrl.Result{}, nil
@@ -300,49 +290,6 @@ func (r *MirrorPeerReconciler) getS3bucket(ctx context.Context, mirrorPeer multi
 	}
 	err := r.SpokeClient.Get(ctx, types.NamespacedName{Name: bucket, Namespace: namespace}, noobaaOBC)
 	return noobaaOBC, err
-}
-
-// enableMulticlusterService sets the multiclusterservice flag on StorageCluster if submariner globalnet is enabled
-func (r *MirrorPeerReconciler) enableMulticlusterService(ctx context.Context, storageClusterName string, namespace string) error {
-	klog.Infof("Enabling MCS for StorageCluster %q in %q namespace.", storageClusterName, namespace)
-	var sc ocsv1.StorageCluster
-	err := r.SpokeClient.Get(ctx, types.NamespacedName{
-		Name:      storageClusterName,
-		Namespace: namespace,
-	}, &sc)
-	if err != nil {
-		klog.Errorf("Error fetching StorageCluster while enabling MCS. Error: %v", err)
-		return err
-	}
-
-	var submariner submarinerv1alpha1.Submariner
-	err = r.SpokeClient.Get(ctx, types.NamespacedName{
-		Name:      "submariner",
-		Namespace: "submariner-operator"},
-		&submariner)
-	if err != nil {
-		klog.Errorf("Error fetching Submariner config while enabling MCS. Error: %v", err)
-		return err
-	}
-
-	if sc.Spec.Network == nil {
-		sc.Spec.Network = &rookv1.NetworkSpec{}
-		klog.Infof("StorageCluster %q in %q namespace has no network config defined. Initializing it now. New NetworkSpec: %v", storageClusterName, namespace, sc.Spec.Network)
-	}
-
-	if !sc.Spec.Network.MultiClusterService.Enabled || sc.Spec.Network.MultiClusterService.ClusterID == "" {
-		sc.Spec.Network.MultiClusterService.Enabled = true
-		sc.Spec.Network.MultiClusterService.ClusterID = submariner.Spec.ClusterID
-		klog.Infof("StorageCluster %q in %q namespace has MCS disabled. Enabling it now. New MCS spec: %v", storageClusterName, namespace, sc.Spec.Network.MultiClusterService)
-		err := r.SpokeClient.Update(ctx, &sc)
-		if err != nil {
-			klog.Errorf("Error updating MCS config for StorageCluster %q in %q namespace. Error: %v", storageClusterName, namespace, err)
-		}
-		return err
-	}
-
-	klog.Infof("StorageCluster %q in %q namespace has MCS enabled already. Current MCS spec: %v", storageClusterName, namespace, sc.Spec.Network.MultiClusterService)
-	return nil
 }
 
 // enableMirroring is a wrapper function around toggleMirroring to enable mirroring in a storage cluster
