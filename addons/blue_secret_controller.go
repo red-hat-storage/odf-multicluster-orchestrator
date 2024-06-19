@@ -2,6 +2,7 @@ package addons
 
 import (
 	"context"
+	"log/slog"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -13,7 +14,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/klog/v2"
 )
 
 // BlueSecretReconciler reconciles a MirrorPeer object
@@ -22,6 +22,7 @@ type BlueSecretReconciler struct {
 	HubClient        client.Client
 	SpokeClient      client.Client
 	SpokeClusterName string
+	Logger           *slog.Logger
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -45,6 +46,8 @@ func (r *BlueSecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		},
 	}
 
+	r.Logger.Info("Setting up controller with manager")
+
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("bluesecret_controller").
 		Watches(&corev1.Secret{}, &handler.EnqueueRequestForObject{},
@@ -55,22 +58,26 @@ func (r *BlueSecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *BlueSecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var err error
 	var secret corev1.Secret
+	logger := r.Logger.With("secret", req.NamespacedName.String())
 
-	klog.Info("Reconciling blue secret", "secret", req.NamespacedName.String())
+	logger.Info("Starting reconciliation for BlueSecret")
 	err = r.SpokeClient.Get(ctx, req.NamespacedName, &secret)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			klog.Infof("Could not find secret. Ignoring since it must have been deleted")
+			logger.Info("BlueSecret not found, possibly deleted")
 			return ctrl.Result{}, nil
 		}
-		klog.Error("Failed to get secret.", err)
+		logger.Error("Failed to retrieve BlueSecret", "error", err)
 		return ctrl.Result{}, err
 	}
 
+	logger.Info("Successfully retrieved BlueSecret")
 	err = r.syncBlueSecretForRook(ctx, secret)
 	if err != nil {
+		logger.Error("Failed to synchronize BlueSecret", "error", err)
 		return ctrl.Result{}, err
 	}
 
+	logger.Info("Reconciliation complete for BlueSecret")
 	return ctrl.Result{}, nil
 }

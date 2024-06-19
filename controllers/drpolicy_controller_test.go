@@ -9,7 +9,6 @@ import (
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	workv1 "open-cluster-management.io/api/work/v1"
@@ -101,12 +100,12 @@ func TestDRPolicyReconcile(t *testing.T) {
 
 func getFakeDRPolicyReconciler(drpolicy *ramenv1alpha1.DRPolicy, mp *multiclusterv1alpha1.MirrorPeer) DRPolicyReconciler {
 	scheme := mgrScheme
-	ns1 := &v1.Namespace{
+	ns1 := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: cName1,
 		},
 	}
-	ns2 := &v1.Namespace{
+	ns2 := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: cName2,
 		},
@@ -146,6 +145,7 @@ func getFakeDRPolicyReconciler(drpolicy *ramenv1alpha1.DRPolicy, mp *multicluste
 	r := DRPolicyReconciler{
 		HubClient: fakeClient,
 		Scheme:    scheme,
+		Logger:    utils.GetLogger(utils.GetZapLogger(true)),
 	}
 
 	return r

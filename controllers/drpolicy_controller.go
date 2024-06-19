@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -12,13 +13,11 @@ import (
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
-	"k8s.io/apimachinery/pkg/api/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/klog/v2"
 	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -46,87 +45,104 @@ const (
 type DRPolicyReconciler struct {
 	HubClient client.Client
 	Scheme    *runtime.Scheme
+	Logger    *slog.Logger
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *DRPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.Logger.Info("Setting up DRPolicyReconciler with manager")
+
 	dpPredicate := utils.ComposePredicates(predicate.GenerationChangedPredicate{})
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ramenv1alpha1.DRPolicy{}, builder.WithPredicates(dpPredicate)).
 		Complete(r)
 }
 
 func (r *DRPolicyReconciler) getMirrorPeerForClusterSet(ctx context.Context, clusterSet []string) (*multiclusterv1alpha1.MirrorPeer, error) {
+	logger := r.Logger
+
 	var mpList multiclusterv1alpha1.MirrorPeerList
 	err := r.HubClient.List(ctx, &mpList)
 	if err != nil {
-		klog.Error("could not list mirrorpeers on hub")
+		logger.Error("Could not list MirrorPeers on hub", "error", err)
 		return nil, err
 	}
 
 	if len(mpList.Items) == 0 {
-		klog.Info("no mirrorpeers found on hub yet")
+		logger.Info("No MirrorPeers found on hub yet")
 		return nil, k8serrors.NewNotFound(schema.GroupResource{Group: multiclusterv1alpha1.GroupVersion.Group, Resource: "MirrorPeer"}, "MirrorPeerList")
 	}
+
 	for _, mp := range mpList.Items {
 		if (mp.Spec.Items[0].ClusterName == clusterSet[0] && mp.Spec.Items[1].ClusterName == clusterSet[1]) ||
 			(mp.Spec.Items[1].ClusterName == clusterSet[0] && mp.Spec.Items[0].ClusterName == clusterSet[1]) {
-			klog.Infof("found mirrorpeer %q for drpolicy", mp.Name)
+			logger.Info("Found MirrorPeer for DRPolicy", "MirrorPeerName", mp.Name)
 			return &mp, nil
 		}
 	}
 
-	klog.Info("could not find any mirrorpeer for drpolicy")
+	logger.Info("Could not find any MirrorPeer for DRPolicy")
 	return nil, k8serrors.NewNotFound(schema.GroupResource{Group: multiclusterv1alpha1.GroupVersion.Group, Resource: "MirrorPeer"}, fmt.Sprintf("ClusterSet-%s-%s", clusterSet[0], clusterSet[1]))
 }
+
 func (r *DRPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	klog.Infof("running DRPolicy reconciler on hub cluster")
-	// Fetch DRPolicy for given Request
+	logger := r.Logger.With("Request", req.NamespacedName.String())
+	logger.Info("Running DRPolicy reconciler on hub cluster")
+
+	// Fetch DRPolicy for the given request
 	var drpolicy ramenv1alpha1.DRPolicy
 	err := r.HubClient.Get(ctx, req.NamespacedName, &drpolicy)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			klog.Info("Could not find DRPolicy. Ignoring since object must have been deleted")
+		if k8serrors.IsNotFound(err) {
+			logger.Info("DRPolicy not found. Ignoring since the object must have been deleted")
 			return ctrl.Result{}, nil
 		}
-		klog.Error(err, "Failed to get DRPolicy")
+		logger.Error("Failed to get DRPolicy", "error", err)
 		return ctrl.Result{}, err
 	}
 
-	// find mirrorpeer for clusterset for the storagecluster namespaces
+	// Find MirrorPeer for clusterset for the storagecluster namespaces
 	mirrorPeer, err := r.getMirrorPeerForClusterSet(ctx, drpolicy.Spec.DRClusters)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
+			logger.Info("MirrorPeer not found. Requeuing", "DRClusters", drpolicy.Spec.DRClusters)
 			return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 		}
-		klog.Error("error occurred while trying to fetch MirrorPeer for given DRPolicy")
+		logger.Error("Error occurred while trying to fetch MirrorPeer for given DRPolicy", "error", err)
 		return ctrl.Result{}, err
 	}
 
 	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
 		clusterFSIDs := make(map[string]string)
-		klog.Infof("Fetching clusterFSIDs")
+		logger.Info("Fetching cluster FSIDs")
 		err = r.fetchClusterFSIDs(ctx, mirrorPeer, clusterFSIDs)
 		if err != nil {
-			if errors.IsNotFound(err) {
+			if k8serrors.IsNotFound(err) {
+				logger.Info("Cluster FSIDs not found, requeuing")
 				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 			}
-			return ctrl.Result{}, fmt.Errorf("an unknown error occured while fetching the cluster fsids, retrying again: %v", err)
+			logger.Error("An unknown error occurred while fetching the cluster FSIDs, retrying", "error", err)
+			return ctrl.Result{}, fmt.Errorf("an unknown error occurred while fetching the cluster FSIDs, retrying: %v", err)
 		}
 
 		err = r.createOrUpdateManifestWorkForVRC(ctx, mirrorPeer, &drpolicy, clusterFSIDs)
 		if err != nil {
+			logger.Error("Failed to create VolumeReplicationClass via ManifestWork", "error", err)
 			return ctrl.Result{}, fmt.Errorf("failed to create VolumeReplicationClass via ManifestWork: %v", err)
 		}
 	}
 
+	logger.Info("Successfully reconciled DRPolicy")
 	return ctrl.Result{}, nil
 }
 
 func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer, dp *ramenv1alpha1.DRPolicy, clusterFSIDs map[string]string) error {
+	logger := r.Logger.With("DRPolicy", dp.Name, "MirrorPeer", mp.Name)
 
 	replicationId, err := utils.CreateUniqueReplicationId(clusterFSIDs)
 	if err != nil {
+		logger.Error("Failed to create unique replication ID", "error", err)
 		return err
 	}
 
@@ -144,9 +160,9 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 
 		switch {
 		case err == nil:
-			klog.Infof("%s already exists. updating...", manifestWorkName)
-		case !errors.IsNotFound(err):
-			klog.Error(err, "failed to get ManifestWork: %s", manifestWorkName)
+			logger.Info("ManifestWork already exists, updating", "ManifestWorkName", manifestWorkName)
+		case !k8serrors.IsNotFound(err):
+			logger.Error("Failed to get ManifestWork", "ManifestWorkName", manifestWorkName, "error", err)
 			return err
 		}
 
@@ -162,7 +178,8 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 		labels[fmt.Sprintf(RamenLabelTemplate, "maintenancemodes")] = "Failover"
 		vrc := replicationv1alpha1.VolumeReplicationClass{
 			TypeMeta: metav1.TypeMeta{
-				Kind: "VolumeReplicationClass", APIVersion: "replication.storage.openshift.io/v1alpha1",
+				Kind:       "VolumeReplicationClass",
+				APIVersion: "replication.storage.openshift.io/v1alpha1",
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   vrcName,
@@ -179,6 +196,7 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 
 		objJson, err := json.Marshal(vrc)
 		if err != nil {
+			logger.Error("Failed to marshal VolumeReplicationClass to JSON", "VolumeReplicationClass", vrcName, "error", err)
 			return fmt.Errorf("failed to marshal %v to JSON, error %w", vrc, err)
 		}
 
@@ -210,7 +228,7 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 		mw := workv1.ManifestWork{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      manifestWorkName,
-				Namespace: pr.ClusterName, //target cluster
+				Namespace: pr.ClusterName,
 				OwnerReferences: []metav1.OwnerReference{
 					{
 						Kind:       dp.Kind,
@@ -221,6 +239,7 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 				},
 			},
 		}
+
 		_, err = controllerutil.CreateOrUpdate(ctx, r.HubClient, &mw, func() error {
 			mw.Spec = workv1.ManifestWorkSpec{
 				Workload: workv1.ManifestsTemplate{
@@ -231,11 +250,11 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 		})
 
 		if err != nil {
-			klog.Error(err, "failed to create/update ManifestWork: %s", manifestWorkName)
+			logger.Error("Failed to create/update ManifestWork", "ManifestWorkName", manifestWorkName, "error", err)
 			return err
 		}
 
-		klog.Infof("ManifestWork created for %s", vrcName)
+		logger.Info("ManifestWork created/updated successfully", "ManifestWorkName", manifestWorkName, "VolumeReplicationClassName", vrcName)
 	}
 
 	return nil
@@ -243,23 +262,31 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 
 func (r *DRPolicyReconciler) fetchClusterFSIDs(ctx context.Context, peer *multiclusterv1alpha1.MirrorPeer, clusterFSIDs map[string]string) error {
 	for _, pr := range peer.Spec.Items {
+		logger := r.Logger.With("MirrorPeer", peer.Name, "ClusterName", pr.ClusterName)
 		rookSecretName := utils.GetSecretNameByPeerRef(pr)
-		klog.Info("Fetching rook secret ", "Secret Name:", rookSecretName)
+		logger.Info("Fetching rook secret", "SecretName", rookSecretName)
+
 		hs, err := utils.FetchSecretWithName(ctx, r.HubClient, types.NamespacedName{Name: rookSecretName, Namespace: pr.ClusterName})
 		if err != nil {
-			if errors.IsNotFound(err) {
-				klog.Infof("could not find secret %q. will attempt to fetch it again after a delay", rookSecretName)
+			if k8serrors.IsNotFound(err) {
+				logger.Info("Secret not found, will attempt to fetch again after a delay", "SecretName", rookSecretName)
+				return err
 			}
+			logger.Error("Failed to fetch rook secret", "SecretName", rookSecretName, "error", err)
 			return err
 		}
-		klog.Info("Unmarshalling rook secret ", "Secret Name:", rookSecretName)
+
+		logger.Info("Unmarshalling rook secret", "SecretName", rookSecretName)
 		rt, err := utils.UnmarshalHubSecret(hs)
 		if err != nil {
-			klog.Error(err, "Failed to unmarshal rook secret", "Secret", rookSecretName)
+			logger.Error("Failed to unmarshal rook secret", "SecretName", rookSecretName, "error", err)
 			return err
 		}
+
 		clusterFSIDs[pr.ClusterName] = rt.FSID
+		logger.Info("Successfully fetched FSID for cluster", "FSID", rt.FSID)
 	}
 
+	r.Logger.Info("Successfully fetched all cluster FSIDs", "MirrorPeer", peer.Name)
 	return nil
 }

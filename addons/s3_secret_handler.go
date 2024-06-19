@@ -9,9 +9,9 @@ import (
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -26,23 +26,23 @@ const (
 )
 
 func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name string, namespace string) error {
-	// cofig map and secret name and bucket claim name is same in nooba
 	// fetch obc secret
 	var secret corev1.Secret
 	err := r.SpokeClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &secret)
 	if err != nil {
-		return fmt.Errorf("failed to get the secret %q in namespace %q in managed cluster. Error %v", name, namespace, err)
+		return fmt.Errorf("failed to retrieve the secret %q in namespace %q in managed cluster: %v", name, namespace, err)
 	}
 
 	// fetch obc config map
 	var configMap corev1.ConfigMap
 	err = r.SpokeClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &configMap)
 	if err != nil {
-		return fmt.Errorf("failed to get the config map %q in namespace %q in managed cluster. Error %v", name, namespace, err)
+		return fmt.Errorf("failed to retrieve the config map %q in namespace %q in managed cluster: %v", name, namespace, err)
 	}
 
 	mirrorPeers, err := utils.FetchAllMirrorPeers(context.TODO(), r.HubClient)
 	if err != nil {
+		r.Logger.Error("Failed to fetch all mirror peers")
 		return err
 	}
 
@@ -55,21 +55,21 @@ func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name strin
 	}
 
 	if storageClusterRef == nil {
-		klog.Errorf("failed to find storage cluster ref using spoke cluster name %s from mirrorpeers ", r.SpokeClusterName)
-		return err
+		return fmt.Errorf("failed to find storage cluster ref using spoke cluster name %s from mirrorpeers: %v", r.SpokeClusterName, err)
 	}
 
 	// fetch s3 endpoint
 	route := &routev1.Route{}
 	err = r.SpokeClient.Get(ctx, types.NamespacedName{Name: S3RouteName, Namespace: storageClusterRef.Namespace}, route)
 	if err != nil {
-		return fmt.Errorf("failed to get the s3 endpoint in namespace %q in managed cluster. Error %v", namespace, err)
+		return fmt.Errorf("failed to retrieve the S3 endpoint in namespace %q in managed cluster: %v", storageClusterRef.Namespace, err)
 	}
 
 	s3Region := configMap.Data[S3BucketRegion]
 	if s3Region == "" {
 		s3Region = DefaultS3Region
 	}
+
 	// s3 secret
 	s3Secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -93,15 +93,19 @@ func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name strin
 
 	newSecret, err := generateBlueSecret(s3Secret, utils.InternalLabel, utils.CreateUniqueSecretName(r.SpokeClusterName, storageClusterRef.Namespace, storageClusterRef.Name, utils.S3ProfilePrefix), storageClusterRef.Name, r.SpokeClusterName, customData)
 	if err != nil {
-		return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: %v", secret.Name, secret.Namespace, r.SpokeClusterName, err)
+		return fmt.Errorf("failed to create secret from the managed cluster secret %q in namespace %q for the hub cluster in namespace %q: %v", secret.Name, secret.Namespace, r.SpokeClusterName, err)
 	}
 
 	err = r.HubClient.Create(ctx, newSecret, &client.CreateOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to sync managed cluster secret %q from namespace %v to the hub cluster in namespace %q err: %v", name, namespace, r.SpokeClusterName, err)
+		if errors.IsAlreadyExists(err) {
+			// Log that the secret already exists and is not created again
+			r.Logger.Info("Secret already exists on hub cluster, not creating again", "secret", newSecret.Name, "namespace", newSecret.Namespace)
+			return nil
+		}
+		return fmt.Errorf("failed to sync managed cluster secret %q from namespace %v to the hub cluster in namespace %q: %v", name, namespace, r.SpokeClusterName, err)
 	}
 
-	klog.Infof("successfully synced managed cluster s3 bucket secret %q from namespace %v to the hub cluster in namespace %q", name, namespace, r.SpokeClusterName)
-
+	r.Logger.Info("Successfully synced managed cluster s3 bucket secret to the hub cluster", "secret", name, "namespace", namespace, "hubNamespace", r.SpokeClusterName)
 	return nil
 }

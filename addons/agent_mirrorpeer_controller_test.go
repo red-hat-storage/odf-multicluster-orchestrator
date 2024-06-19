@@ -148,6 +148,7 @@ func TestMirrorPeerReconcile(t *testing.T) {
 			SpokeClient:      fakeSpokeClient,
 			Scheme:           scheme,
 			SpokeClusterName: pr.ClusterName,
+			Logger:           utils.GetLogger(utils.GetZapLogger(true)),
 		}
 
 		req := ctrl.Request{
@@ -209,6 +210,7 @@ func TestDisableMirroring(t *testing.T) {
 			SpokeClient:      fakeSpokeClient,
 			Scheme:           scheme,
 			SpokeClusterName: pr.ClusterName,
+			Logger:           utils.GetLogger(utils.GetZapLogger(true)),
 		}
 		if err := r.disableMirroring(ctx, pr.StorageClusterRef.Name, pr.StorageClusterRef.Namespace, &mirrorpeer1); err != nil {
 			t.Error("failed to disable mirroring", err)
@@ -258,6 +260,7 @@ func TestDeleteGreenSecret(t *testing.T) {
 			SpokeClient:      fakeSpokeClient,
 			Scheme:           scheme,
 			SpokeClusterName: pr.ClusterName,
+			Logger:           utils.GetLogger(utils.GetZapLogger(true)),
 		}
 
 		if err := r.deleteGreenSecret(ctx, pr.ClusterName, pr.StorageClusterRef.Namespace, &mirrorpeer1); err != nil {
@@ -297,6 +300,7 @@ func TestDeleteS3(t *testing.T) {
 			SpokeClient:      fakeSpokeClient,
 			Scheme:           scheme,
 			SpokeClusterName: pr.ClusterName,
+			Logger:           utils.GetLogger(utils.GetZapLogger(true)),
 		}
 		if err := r.deleteS3(ctx, mirrorpeer1, pr.StorageClusterRef.Namespace); err != nil {
 			t.Errorf("failed to delete s3 bucket")

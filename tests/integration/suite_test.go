@@ -29,6 +29,7 @@ import (
 	. "github.com/onsi/gomega"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
@@ -98,15 +99,18 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(mgr).NotTo(BeNil())
 
+	fakeLogger := utils.GetLogger(utils.GetZapLogger(true))
 	err = (&controllers.MirrorPeerReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Logger: fakeLogger,
 	}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = (&controllers.MirrorPeerSecretReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Logger: fakeLogger,
 	}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 

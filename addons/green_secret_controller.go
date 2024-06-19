@@ -3,13 +3,13 @@ package addons
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -24,6 +24,7 @@ type GreenSecretReconciler struct {
 	HubClient        client.Client
 	SpokeClient      client.Client
 	SpokeClusterName string
+	Logger           *slog.Logger
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -51,6 +52,8 @@ func (r *GreenSecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		},
 	}
 
+	r.Logger.Info("Setting up controller with manager")
+
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("greensecret_controller").
 		Watches(&corev1.Secret{}, &handler.EnqueueRequestForObject{},
@@ -61,26 +64,30 @@ func (r *GreenSecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *GreenSecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var err error
 	var greenSecret corev1.Secret
+	logger := r.Logger.With("secret", req.NamespacedName.String())
 
-	klog.Info("Reconciling green secret", "secret", req.NamespacedName.String())
+	logger.Info("Reconciling green secret")
 	err = r.HubClient.Get(ctx, req.NamespacedName, &greenSecret)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			klog.Infof("Could not find secret. Ignoring since it must have been deleted")
+			logger.Info("Green secret not found, likely deleted")
 			return ctrl.Result{}, nil
 		}
-		klog.Error("Failed to get secret.", err)
+		logger.Error("Failed to retrieve green secret", "error", err)
 		return ctrl.Result{}, err
 	}
 
 	if err = validateGreenSecret(greenSecret); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to validate secret %q", greenSecret.Name)
+		logger.Error("Validation failed for green secret", "error", err)
+		return ctrl.Result{}, fmt.Errorf("failed to validate green secret %q: %v", greenSecret.Name, err)
 	}
 
 	err = r.syncGreenSecretForRook(ctx, greenSecret)
 	if err != nil {
+		logger.Error("Failed to sync green secret for Rook", "error", err)
 		return ctrl.Result{}, err
 	}
 
+	logger.Info("Successfully reconciled and synced green secret")
 	return ctrl.Result{}, nil
 }

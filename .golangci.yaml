@@ -5,6 +5,11 @@ run:
   timeout: 5m
   modules-download-mode: readonly
 
+
+linters:
+  enable:
+    - sloglint
+
 linters-settings:
   errcheck:
     # report about not checking of errors in type assertions: `a := b.(MyStruct)`;

@@ -2,6 +2,7 @@ package addons
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -11,7 +12,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,6 +26,7 @@ type S3SecretReconciler struct {
 	HubClient        client.Client
 	SpokeClient      client.Client
 	SpokeClusterName string
+	Logger           *slog.Logger
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -56,6 +57,8 @@ func (r *S3SecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		},
 	}
 
+	r.Logger.Info("Setting up controller with manager")
+
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("s3secret_controller").
 		Watches(&obv1alpha1.ObjectBucketClaim{}, &handler.EnqueueRequestForObject{},
@@ -66,26 +69,29 @@ func (r *S3SecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *S3SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var err error
 	var obc obv1alpha1.ObjectBucketClaim
-
-	klog.Info("Reconciling OBC", "OBC", req.NamespacedName.String())
+	logger := r.Logger.With("OBC", req.NamespacedName.String())
+	logger.Info("Reconciling OBC")
 	err = r.SpokeClient.Get(ctx, req.NamespacedName, &obc)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			klog.Info("Could not find OBC. Ignoring since object must have been deleted.")
+			logger.Info("OBC not found, likely deleted")
 			return ctrl.Result{}, nil
 		}
-		klog.Error("Failed to get OBC.", err)
+		logger.Error("Failed to retrieve OBC", "error", err)
 		return ctrl.Result{}, err
 	}
 
 	if obc.Status.Phase != obv1alpha1.ObjectBucketClaimStatusPhaseBound {
+		logger.Info("OBC is not in 'Bound' status, requeuing", "st,atus", obc.Status.Phase)
 		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 	}
 
 	err = r.syncBlueSecretForS3(ctx, obc.Name, obc.Namespace)
 	if err != nil {
+		logger.Error("Failed to sync Blue Secret for S3", "OBC", "error", err)
 		return ctrl.Result{}, err
 	}
 
+	logger.Info("Successfully reconciled OBC and synced Blue Secret")
 	return ctrl.Result{}, nil
 }

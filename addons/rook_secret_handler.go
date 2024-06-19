@@ -13,9 +13,9 @@ import (
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -53,6 +53,7 @@ func getBlueSecretFilterForRook(obj interface{}) bool {
 }
 
 func (r *BlueSecretReconciler) syncBlueSecretForRook(ctx context.Context, secret corev1.Secret) error {
+	logger := r.Logger.With("secret", secret.Name, "namespace", secret.Namespace)
 	// fetch storage cluster name
 	storageClusterName, err := getStorageClusterFromRookSecret(ctx, r.SpokeClient, secret)
 	if err != nil {
@@ -64,12 +65,11 @@ func (r *BlueSecretReconciler) syncBlueSecretForRook(ctx context.Context, secret
 		return fmt.Errorf("failed to get the cluster type (converged, external) for the spoke cluster. Error %v", err)
 	}
 
-	klog.Infof("detected cluster type: %s", string(clusterType))
+	logger.Info("Detected cluster type", "clusterType", string(clusterType))
 	var customData map[string][]byte
 	var labelType utils.SecretLabelType
 	var blueSecret *corev1.Secret
 
-	// Accept secret with converged mode and secret name should not be rook-ceph-mon
 	if clusterType == utils.CONVERGED && secret.Name != DefaultExternalSecretName {
 		customData = map[string][]byte{
 			utils.SecretOriginKey: []byte(utils.OriginMap["RookOrigin"]),
@@ -81,35 +81,35 @@ func (r *BlueSecretReconciler) syncBlueSecretForRook(ctx context.Context, secret
 		if err != nil {
 			return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: %v", secret.Name, secret.Namespace, r.SpokeClusterName, err)
 		}
-		// Accept secret if the cluster is external and secret name is rook-ceph-mon
 	} else if clusterType == utils.EXTERNAL && secret.Name == DefaultExternalSecretName {
 		customData = map[string][]byte{
 			utils.SecretOriginKey: []byte(utils.OriginMap["RookOrigin"]),
 			utils.ClusterTypeKey:  []byte(utils.EXTERNAL),
 		}
 		labelType = utils.InternalLabel
+
 		blueSecret, err = generateBlueSecretForExternal(secret, labelType, utils.CreateUniqueSecretName(r.SpokeClusterName, secret.Namespace, storageClusterName), storageClusterName, r.SpokeClusterName, customData)
 		if err != nil {
 			return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: %v", secret.Name, secret.Namespace, r.SpokeClusterName, err)
 		}
-		// If both the parameters above don't match, then it is unknown secret which is either in external or converged mode.
 	} else if clusterType == utils.CONVERGED && secret.Name == DefaultExternalSecretName {
-		klog.Info("**Skip external secret in converged mode**")
-		// detects rook-ceph-mon in converged mode cluster. Likely scenario but we do not need to process this secret.
+		logger.Info("Skip external secret in converged mode")
 		return nil
 	} else {
-		// any other case than the above
 		return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: ClusterType is unknown, should be converged or external", secret.Name, secret.Namespace, r.SpokeClusterName)
 	}
 
-	// Create secrete on hub cluster
+	// Create secret on hub cluster
 	err = r.HubClient.Create(ctx, blueSecret, &client.CreateOptions{})
 	if err != nil {
+		if errors.IsAlreadyExists(err) {
+			logger.Info("Secret already exists on hub cluster, not creating again")
+			return nil
+		}
 		return fmt.Errorf("failed to sync managed cluster secret %q from namespace %v to the hub cluster in namespace %q err: %v", secret.Name, secret.Namespace, r.SpokeClusterName, err)
 	}
 
-	klog.Infof("successfully synced managed cluster secret %q from namespace %v to the hub cluster in namespace %q", secret.Name, secret.Namespace, r.SpokeClusterName)
-
+	logger.Info("Successfully synced managed cluster secret to hub cluster", "hubNamespace", r.SpokeClusterName)
 	return nil
 }
 
@@ -119,7 +119,7 @@ func (r *GreenSecretReconciler) syncGreenSecretForRook(ctx context.Context, secr
 	data := make(map[string][]byte)
 	err = json.Unmarshal(secret.Data[utils.SecretDataKey], &data)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal secret data for the secret %q in namespace %q. %v", secret.Name, secret.Namespace, err)
+		return fmt.Errorf("failed to unmarshal secret data for the secret %q in namespace %q: %v", secret.Name, secret.Namespace, err)
 	}
 
 	toNamespace := string(secret.Data["namespace"])
@@ -135,17 +135,20 @@ func (r *GreenSecretReconciler) syncGreenSecretForRook(ctx context.Context, secr
 	// Create secret on spoke cluster
 	err = r.SpokeClient.Create(ctx, newSecret, &client.CreateOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to sync hub secret %q in managed cluster in namespace %q. %v", newSecret.Name, toNamespace, err)
+		if errors.IsAlreadyExists(err) {
+			r.Logger.Info("Secret already exists on spoke cluster, not creating again", "secret", newSecret.Name, "namespace", newSecret.Namespace)
+			return nil
+		}
+		return fmt.Errorf("failed to sync hub secret %q to managed cluster in namespace %q: %v", newSecret.Name, toNamespace, err)
 	}
 
 	storageClusterName := string(secret.Data[utils.StorageClusterNameKey])
 	err = updateStorageCluster(newSecret.Name, storageClusterName, toNamespace, r.SpokeClient)
 	if err != nil {
-		return fmt.Errorf("failed to update secret name %q in the storageCluster %q in namespace %q. %v", newSecret.Name, storageClusterName, toNamespace, err)
+		return fmt.Errorf("failed to update secret %q in the storageCluster %q in namespace %q: %v", newSecret.Name, storageClusterName, toNamespace, err)
 	}
 
-	klog.Infof("Synced hub secret %q to managed cluster in namespace %q", newSecret.Name, toNamespace)
-
+	r.Logger.Info("Successfully synced hub secret to managed cluster", "secret", newSecret.Name, "namespace", toNamespace)
 	return nil
 }
 
@@ -159,7 +162,7 @@ func getStorageClusterFromRookSecret(ctx context.Context, client client.Client, 
 			var cephCluster rookv1.CephCluster
 			err := client.Get(ctx, types.NamespacedName{Namespace: secret.Namespace, Name: v.Name}, &cephCluster)
 			if err != nil {
-				return "", fmt.Errorf("unable to fetch ceph cluster err: %v", err)
+				return "", fmt.Errorf("failed to fetch CephCluster '%s' referenced by secret '%s' in namespace '%s': %v", v.Name, secret.Name, secret.Namespace, err)
 			}
 
 			for _, owner := range cephCluster.ObjectMeta.OwnerReferences {
@@ -179,7 +182,7 @@ func getStorageClusterFromRookSecret(ctx context.Context, client client.Client, 
 	}
 
 	if storageCluster == "" {
-		return storageCluster, fmt.Errorf("could not get storageCluster name")
+		return "", fmt.Errorf("could not determine storageCluster name from secret '%s' in namespace '%s'", secret.Name, secret.Namespace)
 	}
 
 	return storageCluster, nil

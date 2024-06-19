@@ -21,6 +21,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"time"
 
@@ -35,7 +36,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -49,6 +49,7 @@ type MirrorPeerReconciler struct {
 	Scheme           *runtime.Scheme
 	SpokeClient      client.Client
 	SpokeClusterName string
+	Logger           *slog.Logger
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -57,37 +58,37 @@ type MirrorPeerReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	klog.Infof("Running MirrorPeer reconciler on spoke cluster")
-	// Fetch MirrorPeer for given Request
+	logger := r.Logger.With("MirrorPeer", req.NamespacedName.String())
+	logger.Info("Running MirrorPeer reconciler on spoke cluster")
+
 	var mirrorPeer multiclusterv1alpha1.MirrorPeer
 	err := r.HubClient.Get(ctx, req.NamespacedName, &mirrorPeer)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			klog.Info("Could not find MirrorPeer. Ignoring since object must have been deleted")
+			logger.Info("MirrorPeer not found, ignoring since object must have been deleted")
 			return ctrl.Result{}, nil
 		}
-		klog.Error(err, "Failed to get MirrorPeer")
+		logger.Error("Failed to retrieve MirrorPeer", "error", err)
 		return ctrl.Result{}, err
 	}
 
 	scr, err := utils.GetCurrentStorageClusterRef(&mirrorPeer, r.SpokeClusterName)
 	if err != nil {
-		klog.Error(err, "Failed to get current storage cluster ref")
+		logger.Error("Failed to get current storage cluster ref", "error", err)
 		return ctrl.Result{}, err
 	}
 
 	agentFinalizer := r.SpokeClusterName + "." + SpokeMirrorPeerFinalizer
-
 	if len(agentFinalizer) > 63 {
 		agentFinalizer = fmt.Sprintf("%s.%s", r.SpokeClusterName[0:10], SpokeMirrorPeerFinalizer)
 	}
 
 	if mirrorPeer.GetDeletionTimestamp().IsZero() {
 		if !utils.ContainsString(mirrorPeer.GetFinalizers(), agentFinalizer) {
-			klog.Infof("Finalizer not found on MirrorPeer. Adding Finalizer %q", agentFinalizer)
+			logger.Info("Adding finalizer to MirrorPeer", "finalizer", agentFinalizer)
 			mirrorPeer.Finalizers = append(mirrorPeer.Finalizers, agentFinalizer)
 			if err := r.HubClient.Update(ctx, &mirrorPeer); err != nil {
-				klog.Errorf("Failed to add finalizer to MirrorPeer %q", mirrorPeer.Name)
+				logger.Error("Failed to add finalizer to MirrorPeer", "error", err)
 				return ctrl.Result{}, err
 			}
 		}
@@ -99,44 +100,44 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		err = r.HubClient.Get(ctx, req.NamespacedName, &mirrorPeer)
 		if err != nil {
 			if errors.IsNotFound(err) {
-				klog.Info("Could not find MirrorPeer. Ignoring since object must have been deleted")
+				logger.Info("MirrorPeer deleted during reconciling, skipping")
 				return ctrl.Result{}, nil
 			}
-			klog.Error(err, "Failed to get MirrorPeer")
+			logger.Error("Failed to retrieve MirrorPeer after deletion", "error", err)
 			return ctrl.Result{}, err
 		}
 		mirrorPeer.Finalizers = utils.RemoveString(mirrorPeer.Finalizers, agentFinalizer)
 
 		if err := r.HubClient.Update(ctx, &mirrorPeer); err != nil {
-			klog.Error("failed to remove finalizer from MirrorPeer ", err)
+			logger.Error("Failed to remove finalizer from MirrorPeer", "error", err)
 			return ctrl.Result{}, err
 		}
-		klog.Info("MirrorPeer deleted, skipping reconcilation")
+		logger.Info("MirrorPeer deletion complete")
 		return ctrl.Result{}, nil
 	}
 
-	klog.Infof("creating s3 buckets")
+	logger.Info("Creating S3 buckets")
 	err = r.createS3(ctx, mirrorPeer, scr.Namespace)
 	if err != nil {
-		klog.Error(err, "Failed to create ODR S3 resources")
+		logger.Error("Failed to create ODR S3 resources", "error", err)
 		return ctrl.Result{}, err
 	}
 
 	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
 		clusterFSIDs := make(map[string]string)
-		klog.Infof("Fetching clusterFSIDs")
+		logger.Info("Fetching clusterFSIDs")
 		err = r.fetchClusterFSIDs(ctx, &mirrorPeer, clusterFSIDs)
 		if err != nil {
 			if errors.IsNotFound(err) {
 				return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
 			}
-			return ctrl.Result{}, fmt.Errorf("an unknown error occured while fetching the cluster fsids, retrying again: %v", err)
+			return ctrl.Result{}, fmt.Errorf("an unknown error occurred while fetching the cluster fsids, retrying again: %v", err)
 		}
 
-		klog.Infof("enabling async mode dependencies")
+		logger.Info("Enabling async mode dependencies")
 		err = r.labelCephClusters(ctx, scr, clusterFSIDs)
 		if err != nil {
-			klog.Errorf("failed to label cephcluster. err=%v", err)
+			logger.Error("Failed to label cephcluster", "error", err)
 			return ctrl.Result{}, err
 		}
 		err = r.enableCSIAddons(ctx, scr.Namespace)
@@ -146,13 +147,13 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 		err = r.enableMirroring(ctx, scr.Name, scr.Namespace, &mirrorPeer)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to enable mirroring the storagecluster %q in namespace %q in managed cluster. Error %v", scr.Name, scr.Namespace, err)
+			return ctrl.Result{}, fmt.Errorf("failed to enable mirroring the storagecluster %q in namespace %q in managed cluster: %v", scr.Name, scr.Namespace, err)
 		}
 
-		klog.Infof("labeling rbd storageclasses")
+		logger.Info("Labeling RBD storageclasses")
 		errs := r.labelRBDStorageClasses(ctx, scr.Namespace, clusterFSIDs)
 		if len(errs) > 0 {
-			return ctrl.Result{}, fmt.Errorf("few failures occured while labeling RBD StorageClasses: %v", errs)
+			return ctrl.Result{}, fmt.Errorf("few failures occurred while labeling RBD StorageClasses: %v", errs)
 		}
 	}
 	return ctrl.Result{}, nil
@@ -162,22 +163,26 @@ func (r *MirrorPeerReconciler) fetchClusterFSIDs(ctx context.Context, mp *multic
 	for _, pr := range mp.Spec.Items {
 		clusterType, err := utils.GetClusterType(pr.StorageClusterRef.Name, pr.StorageClusterRef.Namespace, r.SpokeClient)
 		if err != nil {
+			r.Logger.Error("Failed to get cluster type", "clusterName", pr.StorageClusterRef.Name, "namespace", pr.StorageClusterRef.Namespace, "error", err)
 			return err
 		}
 		secretName := r.getSecretNameByType(clusterType, pr)
 
-		klog.Info("Checking secret: ", secretName, " Mode:", clusterType)
+		r.Logger.Info("Checking secret", "secretName", secretName, "mode", clusterType, "clusterName", pr.StorageClusterRef.Name, "namespace", pr.StorageClusterRef.Namespace)
 		secret, err := utils.FetchSecretWithName(ctx, r.SpokeClient, types.NamespacedName{Name: secretName, Namespace: pr.StorageClusterRef.Namespace})
 		if err != nil {
+			r.Logger.Error("Failed to fetch secret", "secretName", secretName, "namespace", pr.StorageClusterRef.Namespace, "error", err)
 			return err
 		}
 
 		fsid, err := r.getFsidFromSecretByType(clusterType, secret)
 		if err != nil {
+			r.Logger.Error("Failed to extract FSID from secret", "secretName", secretName, "namespace", pr.StorageClusterRef.Namespace, "error", err)
 			return err
 		}
 
 		clusterFSIDs[pr.ClusterName] = fsid
+		r.Logger.Info("FSID fetched for cluster", "clusterName", pr.ClusterName, "FSID", fsid)
 	}
 	return nil
 }
@@ -187,17 +192,19 @@ func (r *MirrorPeerReconciler) getFsidFromSecretByType(clusterType utils.Cluster
 	if clusterType == utils.CONVERGED {
 		token, err := utils.UnmarshalRookSecret(secret)
 		if err != nil {
-			klog.Error(err, "Error while unmarshalling converged mode peer secret; ", "peerSecret ", secret.Name)
+			r.Logger.Error("Failed to unmarshal converged mode peer secret", "peerSecret", secret.Name, "error", err)
 			return "", err
 		}
 		fsid = token.FSID
+		r.Logger.Info("FSID retrieved for converged mode", "FSID", fsid, "secret", secret.Name)
 	} else if clusterType == utils.EXTERNAL {
 		token, err := utils.UnmarshalRookSecretExternal(secret)
 		if err != nil {
-			klog.Error(err, "Error while unmarshalling external mode peer secret; ", "peerSecret ", secret.Name)
+			r.Logger.Error("Failed to unmarshal external mode peer secret", "peerSecret", secret.Name, "error", err)
 			return "", err
 		}
 		fsid = token.FSID
+		r.Logger.Info("FSID retrieved for external mode", "FSID", fsid, "secret", secret.Name)
 	}
 	return fsid, nil
 }
@@ -217,30 +224,36 @@ func (r *MirrorPeerReconciler) getSecretNameByType(clusterType utils.ClusterType
 }
 
 func (r *MirrorPeerReconciler) labelRBDStorageClasses(ctx context.Context, storageClusterNamespace string, clusterFSIDs map[string]string) []error {
-	klog.Info(clusterFSIDs)
+	r.Logger.Info("Fetching cluster FSIDs", "clusterFSIDs", clusterFSIDs)
 	// Get all StorageClasses in storageClusterNamespace
 	scs := &storagev1.StorageClassList{}
 	err := r.SpokeClient.List(ctx, scs)
 	var errs []error
 	if err != nil {
 		errs = append(errs, err)
+		r.Logger.Error("Failed to list StorageClasses", "namespace", storageClusterNamespace, "error", err)
 		return errs
 	}
-	klog.Infof("Found %d StorageClasses", len(scs.Items))
+	r.Logger.Info("Found StorageClasses", "count", len(scs.Items), "namespace", storageClusterNamespace)
+
 	key := r.SpokeClusterName
 	for _, sc := range scs.Items {
-		if _, ok := clusterFSIDs[key]; !ok {
-			errs = append(errs, fmt.Errorf("no value found for key: %s, unable to update StorageClass for %s", key, key))
+		if fsid, ok := clusterFSIDs[key]; !ok {
+			errMsg := fmt.Errorf("no FSID found for key: %s, unable to update StorageClass", key)
+			errs = append(errs, errMsg)
+			r.Logger.Error("Missing FSID for StorageClass update", "key", key, "StorageClass", sc.Name)
 			continue
-		}
-		if sc.Provisioner == fmt.Sprintf(RBDProvisionerTemplate, storageClusterNamespace) || sc.Provisioner == fmt.Sprintf(CephFSProvisionerTemplate, storageClusterNamespace) {
-			klog.Infof("Updating StorageClass %q with label storageid %q", sc.Name, clusterFSIDs[key])
-			sc.Labels = make(map[string]string)
-			sc.Labels[fmt.Sprintf(RamenLabelTemplate, StorageIDKey)] = clusterFSIDs[key]
-			err = r.SpokeClient.Update(ctx, &sc)
-			if err != nil {
-				klog.Error(err, "Failed to update StorageClass: %s", sc.Name)
-				errs = append(errs, err)
+		} else {
+			if sc.Provisioner == fmt.Sprintf(RBDProvisionerTemplate, storageClusterNamespace) || sc.Provisioner == fmt.Sprintf(CephFSProvisionerTemplate, storageClusterNamespace) {
+				r.Logger.Info("Updating StorageClass with FSID", "StorageClass", sc.Name, "FSID", fsid)
+				if sc.Labels == nil {
+					sc.Labels = make(map[string]string)
+				}
+				sc.Labels[fmt.Sprintf(RamenLabelTemplate, StorageIDKey)] = fsid
+				if err = r.SpokeClient.Update(ctx, &sc); err != nil {
+					errs = append(errs, err)
+					r.Logger.Error("Failed to update StorageClass with FSID", "StorageClass", sc.Name, "FSID", fsid, "error", err)
+				}
 			}
 		}
 	}
@@ -252,18 +265,20 @@ func (r *MirrorPeerReconciler) createS3(ctx context.Context, mirrorPeer multiclu
 	noobaaOBC, err := r.getS3bucket(ctx, mirrorPeer, scNamespace)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			klog.Info("Could not find ODR ObjectBucketClaim, creating")
+			r.Logger.Info("ODR ObjectBucketClaim not found, creating new one", "MirrorPeer", mirrorPeer.Name, "namespace", scNamespace)
 			err = r.SpokeClient.Create(ctx, noobaaOBC)
 			if err != nil {
-				klog.Error(err, "Failed to create ODR ObjectBucketClaim")
+				r.Logger.Error("Failed to create ODR ObjectBucketClaim", "error", err, "MirrorPeer", mirrorPeer.Name, "namespace", scNamespace)
 				return err
 			}
 		} else {
-			klog.Error(err, "Failed to get ODR ObjectBucketClaim")
+			r.Logger.Error("Failed to retrieve ODR ObjectBucketClaim", "error", err, "MirrorPeer", mirrorPeer.Name, "namespace", scNamespace)
 			return err
 		}
+	} else {
+		r.Logger.Info("ODR ObjectBucketClaim already exists, no action needed", "MirrorPeer", mirrorPeer.Name, "namespace", scNamespace)
 	}
-	return err
+	return nil
 }
 
 func (r *MirrorPeerReconciler) getS3bucket(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, scNamespace string) (*obv1alpha1.ObjectBucketClaim, error) {
@@ -288,12 +303,23 @@ func (r *MirrorPeerReconciler) getS3bucket(ctx context.Context, mirrorPeer multi
 			StorageClassName: namespace + ".noobaa.io",
 		},
 	}
+
 	err := r.SpokeClient.Get(ctx, types.NamespacedName{Name: bucket, Namespace: namespace}, noobaaOBC)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.Logger.Info("ObjectBucketClaim not found, will be created", "bucket", bucket, "namespace", namespace)
+		} else {
+			r.Logger.Error("Failed to get ObjectBucketClaim", "error", err, "bucket", bucket, "namespace", namespace)
+		}
+	} else {
+		r.Logger.Info("ObjectBucketClaim retrieved successfully", "bucket", bucket, "namespace", namespace)
+	}
 	return noobaaOBC, err
 }
 
 // enableMirroring is a wrapper function around toggleMirroring to enable mirroring in a storage cluster
 func (r *MirrorPeerReconciler) enableMirroring(ctx context.Context, storageClusterName string, namespace string, mp *multiclusterv1alpha1.MirrorPeer) error {
+	r.Logger.Info("Enabling mirroring on StorageCluster", "storageClusterName", storageClusterName, "namespace", namespace)
 	return r.toggleMirroring(ctx, storageClusterName, namespace, true, mp)
 }
 
@@ -307,23 +333,33 @@ func (r *MirrorPeerReconciler) toggleMirroring(ctx context.Context, storageClust
 
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return fmt.Errorf("could not find storagecluster %q in namespace %v: %v", storageClusterName, namespace, err)
+			return fmt.Errorf("could not find StorageCluster %q in namespace %v: %v", storageClusterName, namespace, err)
 		}
+		r.Logger.Error("Failed to retrieve StorageCluster", "storageClusterName", storageClusterName, "namespace", namespace, "error", err)
 		return err
 	}
+
+	// Determine if mirroring should be enabled or disabled
 	if enabled {
 		oppPeers := getOppositePeerRefs(mp, r.SpokeClusterName)
 		if hasRequiredSecret(sc.Spec.Mirroring.PeerSecretNames, oppPeers) {
 			sc.Spec.Mirroring.Enabled = true
-			klog.Info("Enabled mirroring on StorageCluster ", storageClusterName)
+			r.Logger.Info("Mirroring enabled on StorageCluster", "storageClusterName", storageClusterName)
 		} else {
-			klog.Error(err, "StorageCluster does not have required PeerSecrets")
-			return err
+			return fmt.Errorf("StorageCluster %q does not have required PeerSecrets", storageClusterName)
 		}
 	} else {
 		sc.Spec.Mirroring.Enabled = false
+		r.Logger.Info("Mirroring disabled on StorageCluster", "storageClusterName", storageClusterName)
 	}
-	return r.SpokeClient.Update(ctx, &sc)
+
+	err = r.SpokeClient.Update(ctx, &sc)
+	if err != nil {
+		r.Logger.Error("Failed to update StorageCluster mirroring settings", "storageClusterName", storageClusterName, "enabled", sc.Spec.Mirroring.Enabled, "error", err)
+		return err
+	}
+
+	return nil
 }
 
 func getOppositePeerRefs(mp *multiclusterv1alpha1.MirrorPeer, spokeClusterName string) []multiclusterv1alpha1.PeerRef {
@@ -347,11 +383,10 @@ func hasRequiredSecret(peerSecrets []string, oppositePeerRef []multiclusterv1alp
 func (r *MirrorPeerReconciler) enableCSIAddons(ctx context.Context, namespace string) error {
 	err := r.toggleCSIAddons(ctx, namespace, true)
 	if err != nil {
-		klog.Error(err, "failed to enable CSI addons")
+		r.Logger.Error("Failed to enable CSI addons", "namespace", namespace, "error", err)
 		return err
-	} else {
-		klog.Info("CSI addons enabled successfully ")
 	}
+	r.Logger.Info("CSI addons enabled successfully", "namespace", namespace)
 	return nil
 }
 
@@ -364,17 +399,24 @@ func (r *MirrorPeerReconciler) toggleCSIAddons(ctx context.Context, namespace st
 
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return fmt.Errorf("could not find rook-ceph-config-map: %v", err)
+			return fmt.Errorf("could not find rook-ceph-config-map in namespace %q: %v", namespace, err)
 		}
+		r.Logger.Error("Failed to retrieve rook-ceph-config-map", "namespace", namespace, "error", err)
 		return err
 	}
 
 	if rcm.Data == nil {
-		rcm.Data = make(map[string]string, 0)
+		rcm.Data = make(map[string]string)
 	}
 	rcm.Data[RookCSIEnableKey] = strconv.FormatBool(enabled)
+	err = r.SpokeClient.Update(ctx, &rcm)
+	if err != nil {
+		r.Logger.Error("Failed to update rook-ceph-config-map with CSI addon settings", "namespace", namespace, "enabled", enabled, "error", err)
+		return err
+	}
 
-	return r.SpokeClient.Update(ctx, &rcm)
+	r.Logger.Info("Rook-Ceph ConfigMap updated with new CSI addons setting", "namespace", namespace, "CSIEnabled", enabled)
+	return nil
 }
 
 func (r *MirrorPeerReconciler) hasSpokeCluster(obj client.Object) bool {
@@ -407,6 +449,7 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		},
 	}
 
+	r.Logger.Info("Setting up controller with manager")
 	mpPredicate := utils.ComposePredicates(predicate.GenerationChangedPredicate{}, mirrorPeerSpokeClusterPredicate)
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(mpPredicate)).
@@ -414,17 +457,17 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *MirrorPeerReconciler) disableMirroring(ctx context.Context, storageClusterName string, namespace string, mp *multiclusterv1alpha1.MirrorPeer) error {
+	r.Logger.Info("Disabling mirroring on StorageCluster", "storageClusterName", storageClusterName, "namespace", namespace)
 	return r.toggleMirroring(ctx, storageClusterName, namespace, false, mp)
 }
 
 func (r *MirrorPeerReconciler) disableCSIAddons(ctx context.Context, namespace string) error {
 	err := r.toggleCSIAddons(ctx, namespace, false)
 	if err != nil {
-		klog.Error(err, "Failed to disable CSI addons")
+		r.Logger.Error("Failed to disable CSI addons", "namespace", namespace, "error", err)
 		return err
-	} else {
-		klog.Info("CSI addons disabled successfully ")
 	}
+	r.Logger.Info("CSI addons disabled successfully", "namespace", namespace)
 	return nil
 }
 
@@ -439,16 +482,16 @@ func (r *MirrorPeerReconciler) deleteGreenSecret(ctx context.Context, spokeClust
 					Namespace: scrNamespace,
 				},
 			}
-			if err := r.SpokeClient.Delete(ctx, &secret); err != nil {
+			err := r.SpokeClient.Delete(ctx, &secret)
+			if err != nil {
 				if errors.IsNotFound(err) {
-					klog.Info("failed to find green secret ", secretName)
+					r.Logger.Info("Green secret not found, no action needed", "secretName", secretName, "namespace", scrNamespace)
 					return nil
-				} else {
-					klog.Error(err, "failed to delete green secret ", secretName)
-					return err
 				}
+				r.Logger.Error("Failed to delete green secret", "secretName", secretName, "namespace", scrNamespace, "error", err)
+				return err
 			}
-			klog.Info("Succesfully deleted ", secretName, " in namespace ", scrNamespace)
+			r.Logger.Info("Successfully deleted green secret", "secretName", secretName, "namespace", scrNamespace)
 		}
 	}
 	return nil
@@ -460,94 +503,113 @@ func (r *MirrorPeerReconciler) deleteS3(ctx context.Context, mirrorPeer multiclu
 	noobaaOBC, err := r.getS3bucket(ctx, mirrorPeer, scNamespace)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			klog.Info("Could not find ODR ObjectBucketClaim, skipping deletion")
+			r.Logger.Info("ODR ObjectBucketClaim not found, skipping deletion", "namespace", scNamespace, "MirrorPeer", mirrorPeer.Name)
 			return nil
 		} else {
-			klog.Error(err, "Failed to get ODR ObjectBucketClaim")
+			r.Logger.Error("Failed to retrieve ODR ObjectBucketClaim", "namespace", scNamespace, "MirrorPeer", mirrorPeer.Name, "error", err)
 			return err
 		}
 	}
 	err = r.SpokeClient.Delete(ctx, noobaaOBC)
 	if err != nil {
-		klog.Error(err, "Failed to delete ODR ObjectBucketClaim")
+		r.Logger.Error("Failed to delete ODR ObjectBucketClaim", "ObjectBucketClaim", noobaaOBC.Name, "namespace", scNamespace, "error", err)
 		return err
 	}
-	return err
+	r.Logger.Info("Successfully deleted ODR ObjectBucketClaim", "ObjectBucketClaim", noobaaOBC.Name, "namespace", scNamespace)
+	return nil
 }
 
 func (r *MirrorPeerReconciler) deleteMirrorPeer(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, scr *multiclusterv1alpha1.StorageClusterRef) (ctrl.Result, error) {
-	klog.Infof("Mirrorpeer is being deleted %q", mirrorPeer.Name)
+	r.Logger.Info("MirrorPeer is being deleted", "MirrorPeer", mirrorPeer.Name)
+
 	peerRef, err := utils.GetPeerRefForSpokeCluster(&mirrorPeer, r.SpokeClusterName)
 	if err != nil {
-		klog.Errorf("Failed to get current PeerRef %q %v", mirrorPeer.Name, err)
+		r.Logger.Error("Failed to get current PeerRef", "MirrorPeer", mirrorPeer.Name, "error", err)
 		return ctrl.Result{}, err
 	}
 
 	peerRefUsed, err := utils.DoesAnotherMirrorPeerPointToPeerRef(ctx, r.HubClient, peerRef)
 	if err != nil {
-		klog.Errorf("failed to check if another peer uses peer ref %v", err)
+		r.Logger.Error("Failed to check if another MirrorPeer uses PeerRef", "error", err)
+		return ctrl.Result{}, err
 	}
+
 	if !peerRefUsed {
 		if err := r.disableMirroring(ctx, scr.Name, scr.Namespace, &mirrorPeer); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to disable mirroring for the storagecluster %q in namespace %q. Error %v", scr.Name, scr.Namespace, err)
+			r.Logger.Error("Failed to disable mirroring for the StorageCluster", "StorageCluster", scr.Name, "namespace", scr.Namespace, "error", err)
+			return ctrl.Result{}, fmt.Errorf("failed to disable mirroring for the StorageCluster %q in namespace %q. Error %v", scr.Name, scr.Namespace, err)
 		}
 		if err := r.disableCSIAddons(ctx, scr.Namespace); err != nil {
+			r.Logger.Error("Failed to disable CSI Addons for Rook", "namespace", scr.Namespace, "error", err)
 			return ctrl.Result{}, fmt.Errorf("failed to disable CSI Addons for rook: %v", err)
 		}
 	}
 
 	if err := r.deleteGreenSecret(ctx, r.SpokeClusterName, scr.Namespace, &mirrorPeer); err != nil {
+		r.Logger.Error("Failed to delete green secrets", "namespace", scr.Namespace, "error", err)
 		return ctrl.Result{}, fmt.Errorf("failed to delete green secrets: %v", err)
 	}
 
 	if err := r.deleteS3(ctx, mirrorPeer, scr.Namespace); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to delete s3 buckets")
+		r.Logger.Error("Failed to delete S3 buckets", "namespace", scr.Namespace, "error", err)
+		return ctrl.Result{}, fmt.Errorf("failed to delete S3 buckets")
 	}
+
+	r.Logger.Info("Successfully completed the deletion of MirrorPeer resources", "MirrorPeer", mirrorPeer.Name)
 	return ctrl.Result{}, nil
 }
 
 func (r *MirrorPeerReconciler) labelCephClusters(ctx context.Context, scr *multiclusterv1alpha1.StorageClusterRef, clusterFSIDs map[string]string) error {
-	klog.Info("Labelling cephclusters with replication id")
+	r.Logger.Info("Labelling CephClusters with replication ID")
 	cephClusters, err := utils.FetchAllCephClusters(ctx, r.SpokeClient)
 	if err != nil {
-		klog.Errorf("failed to fetch all cephclusters. err=%v", err)
+		r.Logger.Error("Failed to fetch all CephClusters", "error", err)
 		return err
 	}
 	if cephClusters == nil || len(cephClusters.Items) == 0 {
-		klog.Info("failed to find any cephclusters to label")
+		r.Logger.Info("No CephClusters found to label")
 		return nil
 	}
+
 	var found rookv1.CephCluster
+	foundFlag := false
 	for _, cc := range cephClusters.Items {
 		for _, ref := range cc.OwnerReferences {
-			if ref.Kind != "StorageCluster" {
-				continue
-			}
-
-			if ref.Name == scr.Name {
+			if ref.Kind == "StorageCluster" && ref.Name == scr.Name {
 				found = cc
+				foundFlag = true
 				break
 			}
 		}
+		if foundFlag {
+			break
+		}
 	}
+	if !foundFlag {
+		r.Logger.Info("No CephCluster matched the StorageCluster reference", "StorageClusterRef", scr.Name)
+		return nil
+	}
+
 	if found.Labels == nil {
 		found.Labels = make(map[string]string)
 	}
 
 	replicationId, err := utils.CreateUniqueReplicationId(clusterFSIDs)
 	if err != nil {
+		r.Logger.Error("Failed to create a unique replication ID", "error", err)
 		return err
 	}
 
 	if found.Labels[utils.CephClusterReplicationIdLabel] != replicationId {
-		klog.Infof("adding label %s/%s to cephcluster %s", utils.CephClusterReplicationIdLabel, replicationId, found.Name)
+		r.Logger.Info("Adding label to CephCluster", "label", utils.CephClusterReplicationIdLabel, "replicationId", replicationId, "CephCluster", found.Name)
 		found.Labels[utils.CephClusterReplicationIdLabel] = replicationId
 		err = r.SpokeClient.Update(ctx, &found)
 		if err != nil {
+			r.Logger.Error("Failed to update CephCluster with new label", "CephCluster", found.Name, "label", utils.CephClusterReplicationIdLabel, "error", err)
 			return err
 		}
 	} else {
-		klog.Infof("cephcluster %s is already labeled with replicationId=%q", found.Name, replicationId)
+		r.Logger.Info("CephCluster already labeled with replication ID", "CephCluster", found.Name, "replicationId", replicationId)
 	}
 
 	return nil
