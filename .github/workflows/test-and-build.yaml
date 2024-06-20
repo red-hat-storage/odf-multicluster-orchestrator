@@ -84,7 +84,7 @@ jobs:
         go-version: ${{ matrix.go }}
 
     - name: Build
-      run: make docker-build
+      run: make operator-build
 
   validate-bundle:
     name: Validate Operator Bundle
