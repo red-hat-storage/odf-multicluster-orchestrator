@@ -74,11 +74,11 @@ build: generate fmt vet golangci-lint kube-linter ## Build manager binary.
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
-docker-build: generate fmt vet golangci-lint kube-linter ## Build docker image with the manager.
-	docker build -t ${IMG} .
+operator-build: generate fmt vet golangci-lint kube-linter ## Build docker image with the manager.
+	${BUILD_TOOL} build -t ${IMG} .
 
-docker-push: ## Push docker image with the manager.
-	docker push ${IMG}
+operator-push: ## Push docker image with the manager.
+	${BUILD_TOOL} push ${IMG}
 
 ##@ Deployment
 
@@ -117,19 +117,19 @@ endif
 
 .PHONY: bundle-build
 bundle-build: bundle ## Build the bundle image.
-	docker build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
+	${BUILD_TOOL} build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
 
 .PHONY: bundle-push
 bundle-push: ## Push the bundle image.
-	$(MAKE) docker-push IMG=$(BUNDLE_IMG)
+	$(MAKE) operator-push IMG=$(BUNDLE_IMG)
 
 .PHONY: catalog-build
 catalog-build: opm ## Build a catalog image.
-	$(OPM) index add --container-tool docker --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
+	$(OPM) index add --container-tool ${BUILD_TOOL} --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
 
 .PHONY: catalog-push
 catalog-push: ## Push a catalog image.
-	$(MAKE) docker-push IMG=$(CATALOG_IMG)
+	$(MAKE) operator-push IMG=$(CATALOG_IMG)
 
 ##@ Actions
 

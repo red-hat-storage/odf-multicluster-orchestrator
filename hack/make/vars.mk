@@ -22,6 +22,7 @@ MULTICLUSTER_CONSOLE_IMG_TAG ?= latest
 IMG ?=  $(IMAGE_REGISTRY)/$(REGISTRY_NAMESPACE)/$(IMAGE_NAME):$(IMAGE_TAG)
 MULTICLUSTER_CONSOLE_IMG ?= ${IMAGE_REGISTRY}/$(REGISTRY_NAMESPACE)/$(MULTICLUSTER_CONSOLE_IMG_NAME):$(MULTICLUSTER_CONSOLE_IMG_TAG)
 
+BUILD_TOOL ?= docker
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
 # To re-generate a bundle for other specific channels without changing the standard setup, you can:
