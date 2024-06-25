@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"reflect"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
@@ -12,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -103,33 +103,37 @@ func (nPR *NamedPeerRefWithSecretData) GetAssociatedSecret(ctx context.Context, 
 }
 
 // CreateOrUpdateDestinationSecret creates/updates the destination secret from NamedPeerRefWithSecretData object
-func (nPR *NamedPeerRefWithSecretData) CreateOrUpdateDestinationSecret(ctx context.Context, rc client.Client) error {
+func (nPR *NamedPeerRefWithSecretData) CreateOrUpdateDestinationSecret(ctx context.Context, rc client.Client, logger *slog.Logger) error {
 	err := nPR.ErrorOnNilReceiver()
 	if err != nil {
+		logger.Error("Receiver is nil", "error", err)
 		return err
 	}
 
-	logger := log.FromContext(ctx)
 	expectedDest := nPR.GenerateSecret(utils.DestinationLabel)
 	var currentDest corev1.Secret
 	err = nPR.GetAssociatedSecret(ctx, rc, &currentDest)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			logger.Info("Creating destination secret", "secret", expectedDest.Name, "namespace", expectedDest.Namespace)
+			logger.Info("Creating destination secret", "SecretName", expectedDest.Name, "Namespace", expectedDest.Namespace)
 			return rc.Create(ctx, expectedDest)
 		}
-		logger.Error(err, "Unable to get the destination secret", "destination-ref", nPR.PeerRef)
+		logger.Error("Unable to get the destination secret", "DestinationRef", nPR.PeerRef, "error", err)
 		return err
 	}
 
-	// recieved a destination secret, now compare
 	if !reflect.DeepEqual(expectedDest.Data, currentDest.Data) {
-		logger.Info("Updating the destination secret", "secret", currentDest.Name, "namespace", currentDest.Namespace)
+		logger.Info("Updating the destination secret", "SecretName", currentDest.Name, "Namespace", currentDest.Namespace)
 		_, err := controllerutil.CreateOrUpdate(ctx, rc, &currentDest, func() error {
 			currentDest.Data = expectedDest.Data
 			return nil
 		})
+		if err != nil {
+			logger.Error("Failed to update destination secret", "SecretName", currentDest.Name, "Namespace", currentDest.Namespace, "error", err)
+		}
 		return err
 	}
+
+	logger.Info("Destination secret is up-to-date", "SecretName", currentDest.Name, "Namespace", currentDest.Namespace)
 	return nil
 }

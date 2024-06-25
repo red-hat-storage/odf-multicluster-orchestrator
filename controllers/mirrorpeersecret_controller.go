@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 
@@ -27,13 +28,11 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/selection"
-	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
 )
@@ -43,6 +42,7 @@ import (
 type MirrorPeerSecretReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	Logger *slog.Logger
 }
 
 //+kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers,verbs=get;list;watch;create;update;patch;delete
@@ -57,12 +57,22 @@ type MirrorPeerSecretReconciler struct {
 
 // Reconcile standard reconcile function for MirrorPeerSecret controller
 func (r *MirrorPeerSecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// reconcile for 'Secrets' (source or destination)
-	return mirrorPeerSecretReconcile(ctx, r.Client, req)
+	logger := r.Logger.With("Request", req.String())
+	logger.Info("Starting reconciliation for Secret")
+
+	result, err := r.mirrorPeerSecretReconcile(ctx, r.Client, req)
+
+	if err != nil {
+		logger.Error("Reconciliation error for Secret", "error", err)
+	} else {
+		logger.Info("Reconciliation completed for Secret")
+	}
+
+	return result, err
 }
 
-func updateSecretWithHubRecoveryLabel(ctx context.Context, rc client.Client, peerSecret corev1.Secret) error {
-	logger := log.FromContext(ctx, "controller", "MirrorPeerSecret")
+func updateSecretWithHubRecoveryLabel(ctx context.Context, rc client.Client, logger *slog.Logger, peerSecret corev1.Secret) error {
+	logger = logger.With("SecretName", peerSecret.Name, "Namespace", peerSecret.Namespace)
 	logger.Info("Adding backup labels to the secret")
 
 	if peerSecret.ObjectMeta.Labels == nil {
@@ -74,72 +84,75 @@ func updateSecretWithHubRecoveryLabel(ctx context.Context, rc client.Client, pee
 		return nil
 	})
 
+	if err != nil {
+		logger.Error("Failed to add or update hub recovery label", "error", err)
+	}
+
 	return err
 }
 
-func mirrorPeerSecretReconcile(ctx context.Context, rc client.Client, req ctrl.Request) (ctrl.Result, error) {
-	var err error
-	logger := log.FromContext(ctx, "controller", "MirrorPeerSecret")
+func (r *MirrorPeerSecretReconciler) mirrorPeerSecretReconcile(ctx context.Context, rc client.Client, req ctrl.Request) (ctrl.Result, error) {
+	logger := r.Logger.With("Request", req.NamespacedName)
+	logger.Info("Reconciling secret")
+
 	var peerSecret corev1.Secret
-	err = rc.Get(ctx, req.NamespacedName, &peerSecret)
+	err := rc.Get(ctx, req.NamespacedName, &peerSecret)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			logger.Info("Secret not found", "req", req)
-			return ctrl.Result{}, processDeletedSecrets(ctx, rc, req.NamespacedName)
+			logger.Info("Secret not found, processing deletion", "Request", req.NamespacedName)
+			return ctrl.Result{}, processDeletedSecrets(ctx, rc, req.NamespacedName, logger)
 		}
-		logger.Error(err, "Error in getting secret", "request", req)
+		logger.Error("Error retrieving secret", "error", err, "Request", req.NamespacedName)
 		return ctrl.Result{}, err
 	}
+
 	if utils.IsSecretSource(&peerSecret) {
 		if err := utils.ValidateSourceSecret(&peerSecret); err != nil {
-			logger.Error(err, "Provided source secret is not valid", "secret", peerSecret.Name, "namespace", peerSecret.Namespace)
+			logger.Error("Source secret validation failed", "error", err, "Secret", peerSecret.Name)
 			return ctrl.Result{}, err
 		}
 		if !utils.HasHubRecoveryLabels(&peerSecret) {
-			err = updateSecretWithHubRecoveryLabel(ctx, rc, peerSecret)
+			err = updateSecretWithHubRecoveryLabel(ctx, rc, logger, peerSecret)
 			if err != nil {
-				logger.Error(err, "Error occured while adding backup labels to secret. Requeing the request")
+				logger.Error("Failed to add hub recovery labels", "error", err, "Secret", peerSecret.Name)
 				return ctrl.Result{}, err
 			}
 		}
-		err = createOrUpdateDestinationSecretsFromSource(ctx, rc, &peerSecret)
+		err = createOrUpdateDestinationSecretsFromSource(ctx, rc, &peerSecret, logger)
 		if err != nil {
-			logger.Error(err, "Updating the destination secret failed", "secret", peerSecret.Name, "namespace", peerSecret.Namespace)
+			logger.Error("Failed to update destination secret", "error", err, "Secret", peerSecret.Name)
 			return ctrl.Result{}, err
 		}
 	} else if utils.IsSecretDestination(&peerSecret) {
-		// a destination secret updation happened
-		err = processDestinationSecretUpdation(ctx, rc, &peerSecret)
+		err = processDestinationSecretUpdation(ctx, rc, &peerSecret, logger)
 		if err != nil {
-			logger.Error(err, "Restoring destination secret failed", "secret", peerSecret.Name, "namespace", peerSecret.Namespace)
+			logger.Error("Failed to restore destination secret", "error", err, "Secret", peerSecret.Name)
 			return ctrl.Result{}, err
 		}
 	} else if utils.IsSecretInternal(&peerSecret) {
-		err = createOrUpdateSecretsFromInternalSecret(ctx, rc, &peerSecret, nil)
-		if !utils.HasHubRecoveryLabels(&peerSecret) {
-			err = updateSecretWithHubRecoveryLabel(ctx, rc, peerSecret)
-			if err != nil {
-				logger.Error(err, "Error occured while adding backup labels to secret. Requeing the request")
-				return ctrl.Result{}, err
-			}
-		}
+		err = createOrUpdateSecretsFromInternalSecret(ctx, rc, &peerSecret, nil, logger)
 		if err != nil {
-			logger.Error(err, "Updating the secret from internal secret is failed", "secret", peerSecret.Name, "namespace", peerSecret.Namespace)
+			logger.Error("Failed to update from internal secret", "error", err, "Secret", peerSecret.Name)
 			return ctrl.Result{}, err
 		}
 	}
+
 	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MirrorPeerSecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	logger := r.Logger
+	logger.Info("Setting up controller with manager")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Secret{}, builder.WithPredicates(utils.SourceOrDestinationPredicate)).
 		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.secretConfigMapFunc)).
 		Complete(r)
+
 }
 
 func (r *MirrorPeerSecretReconciler) secretConfigMapFunc(ctx context.Context, obj client.Object) []reconcile.Request {
+	logger := r.Logger
 	ConfigMapRamenConfigKeyName := "ramen_manager_config.yaml"
 	var cm *corev1.ConfigMap
 	cm, ok := obj.(*corev1.ConfigMap)
@@ -154,13 +167,13 @@ func (r *MirrorPeerSecretReconciler) secretConfigMapFunc(ctx context.Context, ob
 	ramenConfig := &ramendrv1alpha1.RamenConfig{}
 	err := yaml.Unmarshal([]byte(cm.Data[ConfigMapRamenConfigKeyName]), ramenConfig)
 	if err != nil {
+		logger.Error("Failed to unmarshal RamenConfig from ConfigMap", "error", err, "ConfigMapName", cm.Name)
 		return []reconcile.Request{}
 	}
 
-	secrets := &corev1.SecretList{}
 	internalSecretLabel, err := labels.NewRequirement(utils.SecretLabelTypeKey, selection.Equals, []string{string(utils.InternalLabel)})
 	if err != nil {
-		klog.Error(err, "cannot parse new requirement")
+		logger.Error("Failed to create label requirement for internal secrets", "error", err)
 		return []reconcile.Request{}
 	}
 
@@ -170,7 +183,9 @@ func (r *MirrorPeerSecretReconciler) secretConfigMapFunc(ctx context.Context, ob
 		LabelSelector: internalSecretSelector,
 	}
 
-	if err := r.Client.List(context.TODO(), secrets, listOpts); err != nil {
+	secrets := &corev1.SecretList{}
+	if err := r.Client.List(ctx, secrets, listOpts); err != nil {
+		logger.Error("Failed to list secrets based on label selector", "error", err, "Selector", internalSecretSelector)
 		return []reconcile.Request{}
 	}
 
@@ -180,5 +195,6 @@ func (r *MirrorPeerSecretReconciler) secretConfigMapFunc(ctx context.Context, ob
 		requests[i].Namespace = secret.GetNamespace()
 	}
 
+	logger.Info("Generated reconcile requests from internal secrets", "NumberOfRequests", len(requests))
 	return requests
 }

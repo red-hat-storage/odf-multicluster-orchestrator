@@ -111,6 +111,7 @@ func getFakeMirrorPeerReconciler(mirrorpeer multiclusterv1alpha1.MirrorPeer) Mir
 	r := MirrorPeerReconciler{
 		Client: fakeClient,
 		Scheme: scheme,
+		Logger: utils.GetLogger(utils.GetZapLogger(true)),
 	}
 	return r
 }

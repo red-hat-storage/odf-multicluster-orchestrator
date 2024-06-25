@@ -21,6 +21,7 @@ package integration_test
 
 import (
 	"context"
+
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 
 	. "github.com/onsi/ginkgo"
@@ -338,6 +339,7 @@ var _ = Describe("MirrorPeerReconciler Reconcile", func() {
 				r := controllers.MirrorPeerReconciler{
 					Client: k8sClient,
 					Scheme: k8sClient.Scheme(),
+					Logger: utils.GetLogger(utils.GetZapLogger(true)),
 				}
 
 				req := ctrl.Request{

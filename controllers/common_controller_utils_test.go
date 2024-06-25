@@ -262,12 +262,13 @@ func TestMirrorPeerSecretReconcile(t *testing.T) {
 	}
 
 	fakeClient := getFakeClient(t, mgrScheme)
+	fakeLogger := utils.GetLogger(utils.GetZapLogger(true))
 	for _, c := range cases {
 		os.Setenv("POD_NAMESPACE", c.ramenNamespace)
 		ctx := context.TODO()
-		err := createOrUpdateSecretsFromInternalSecret(ctx, fakeClient, fakeS3InternalSecret(t, TestSourceManagedClusterEast), fakeMirrorPeers(c.manageS3))
+		err := createOrUpdateSecretsFromInternalSecret(ctx, fakeClient, fakeS3InternalSecret(t, TestSourceManagedClusterEast), fakeMirrorPeers(c.manageS3), fakeLogger)
 		assert.NoError(t, err)
-		err = createOrUpdateSecretsFromInternalSecret(ctx, fakeClient, fakeS3InternalSecret(t, TestDestinationManagedClusterWest), fakeMirrorPeers(c.manageS3))
+		err = createOrUpdateSecretsFromInternalSecret(ctx, fakeClient, fakeS3InternalSecret(t, TestDestinationManagedClusterWest), fakeMirrorPeers(c.manageS3), fakeLogger)
 		assert.NoError(t, err)
 
 		if c.ignoreS3Profile {
