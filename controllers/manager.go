@@ -172,7 +172,6 @@ func (o *ManagerOptions) runManager() {
 		logger.Info("Failed to get owner reference (falling back to namespace)", "error", err)
 	}
 	teEventRecorder := events.NewKubeRecorder(kubeClient.CoreV1().Events(namespace), setup.TokenExchangeName, controllerRef)
-	mEventRecorder := events.NewKubeRecorder(kubeClient.CoreV1().Events(namespace), setup.MaintainAgentName, controllerRef)
 
 	agentImage := os.Getenv("TOKEN_EXCHANGE_IMAGE")
 
@@ -187,19 +186,6 @@ func (o *ManagerOptions) runManager() {
 			Recorder:   teEventRecorder,
 			AgentImage: agentImage,
 			AddonName:  setup.TokenExchangeName},
-	}
-
-	maintainenceModeAddon := setup.MaintainenceAddon{
-		Addons: struct {
-			KubeClient kubernetes.Interface
-			Recorder   events.Recorder
-			AgentImage string
-			AddonName  string
-		}{
-			KubeClient: kubeClient,
-			Recorder:   mEventRecorder,
-			AgentImage: agentImage,
-			AddonName:  setup.MaintainAgentName},
 	}
 
 	err = (&multiclusterv1alpha1.MirrorPeer{}).SetupWebhookWithManager(mgr)
@@ -217,11 +203,6 @@ func (o *ManagerOptions) runManager() {
 	err = addonMgr.AddAgent(&tokenExchangeAddon)
 	if err != nil {
 		logger.Error("Failed to add token exchange addon to addon manager", "error", err)
-	}
-
-	err = addonMgr.AddAgent(&maintainenceModeAddon)
-	if err != nil {
-		logger.Error("Failed to add maintainence addon to addon manager", "error", err)
 	}
 
 	if err = (&DRPolicyReconciler{
