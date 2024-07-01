@@ -65,7 +65,7 @@ require (
 	github.com/hashicorp/go-secure-stdlib/strutil v0.1.2 // indirect
 	github.com/hashicorp/go-sockaddr v1.0.6 // indirect
 	github.com/hashicorp/hcl v1.0.1-vault-5 // indirect
-	github.com/hashicorp/vault/api v1.10.0 // indirect
+	github.com/hashicorp/vault/api v1.12.0 // indirect
 	github.com/hashicorp/vault/api/auth/approle v0.5.0 // indirect
 	github.com/hashicorp/vault/api/auth/kubernetes v0.5.0 // indirect
 	github.com/imdario/mergo v0.3.16 // indirect
