@@ -141,7 +141,7 @@ func (o *ManagerOptions) runManager() {
 	}
 
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-		err = console.InitConsole(ctx, mgr.GetClient(), o.MulticlusterConsolePort, namespace)
+		err = console.InitConsole(ctx, mgr.GetClient(), mgr.GetScheme(), o.MulticlusterConsolePort, namespace)
 		if err != nil {
 			logger.Error("Failed to initialize multicluster console to manager", "error", err)
 			return err
