@@ -10,7 +10,6 @@ import (
 )
 
 const (
-	MaintainAgentName = "maintenance"
 	TokenExchangeName = "tokenexchange"
 )
 

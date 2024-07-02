@@ -68,10 +68,6 @@ type TokenExchangeAddon struct {
 	Addons
 }
 
-type MaintainenceAddon struct {
-	Addons
-}
-
 // Manifests generates manifestworks to deploy the token exchange addon agent on the managed cluster
 func (a *Addons) Manifests(cluster *clusterv1.ManagedCluster, addon *addonapiv1alpha1.ManagedClusterAddOn) ([]runtime.Object, error) {
 	objects := []runtime.Object{}
