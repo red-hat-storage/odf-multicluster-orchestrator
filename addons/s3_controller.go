@@ -2,6 +2,7 @@ package addons
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"os"
 	"strings"
@@ -10,19 +11,25 @@ import (
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // S3SecretReconciler reconciles a MirrorPeer object
 type S3SecretReconciler struct {
 	Scheme           *runtime.Scheme
+	HubCluster       cluster.Cluster
 	HubClient        client.Client
 	SpokeClient      client.Client
 	SpokeClusterName string
@@ -57,12 +64,50 @@ func (r *S3SecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		},
 	}
 
+	s3SecretHubPredicate := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			return false
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return true
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return true
+		},
+		GenericFunc: func(_ event.GenericEvent) bool {
+			return false
+		},
+	}
+
+	mapSecretToOBC := func(ctx context.Context, obj client.Object) []reconcile.Request {
+		if s, ok := obj.(*corev1.Secret); ok {
+			if s.Labels[utils.SecretLabelTypeKey] == string(utils.InternalLabel) {
+				data := make(map[string][]byte)
+				if err := json.Unmarshal(s.Data[utils.SecretDataKey], &data); err != nil {
+					r.Logger.Error("Failed to map S3 secret on hub to OBC in spoke cluster. Not requeueing request", "secret", s.Name, "error", err)
+					return []reconcile.Request{}
+				}
+				return []reconcile.Request{
+					{
+						NamespacedName: types.NamespacedName{
+							Namespace: string(s.Data[utils.NamespaceKey]),
+							Name:      string(data[utils.S3BucketName]),
+						},
+					},
+				}
+			}
+		}
+		return []reconcile.Request{}
+	}
+
 	r.Logger.Info("Setting up controller with manager")
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("s3secret_controller").
 		Watches(&obv1alpha1.ObjectBucketClaim{}, &handler.EnqueueRequestForObject{},
-			builder.WithPredicates(predicate.GenerationChangedPredicate{}, s3BucketPredicate)).
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{}, s3BucketPredicate)).
+		WatchesRawSource(source.Kind(r.HubCluster.GetCache(), &corev1.Secret{}), handler.EnqueueRequestsFromMapFunc(mapSecretToOBC),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{}, s3SecretHubPredicate)).
 		Complete(r)
 }
 

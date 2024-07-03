@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -17,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -55,12 +58,45 @@ func (r *GreenSecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		},
 	}
 
+	greebSecretSpokePredicate := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			return false
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return true
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return true
+		},
+		GenericFunc: func(_ event.GenericEvent) bool {
+			return false
+		},
+	}
+
+	mapSecretToGreenSecret := func(ctx context.Context, obj client.Object) []reconcile.Request {
+		if s, ok := obj.(*corev1.Secret); ok {
+			if s.Labels[utils.CreatedByLabelKey] == setup.TokenExchangeName {
+				return []reconcile.Request{
+					{
+						NamespacedName: types.NamespacedName{
+							Namespace: r.SpokeClusterName,
+							Name:      s.Name,
+						},
+					},
+				}
+			}
+		}
+		return []reconcile.Request{}
+	}
+
 	r.Logger.Info("Setting up controller with manager")
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("greensecret_controller").
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(mapSecretToGreenSecret),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{}, greebSecretSpokePredicate)).
 		WatchesRawSource(source.Kind(r.HubCluster.GetCache(), &corev1.Secret{}), &handler.EnqueueRequestForObject{},
-			builder.WithPredicates(predicate.GenerationChangedPredicate{}, greenSecretPredicate)).
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{}, greenSecretPredicate)).
 		Complete(r)
 }
 

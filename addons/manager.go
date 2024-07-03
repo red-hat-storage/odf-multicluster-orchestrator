@@ -216,6 +216,7 @@ func (o *AddonAgentOptions) RunAgent(ctx context.Context) {
 
 	if err = (&BlueSecretReconciler{
 		Scheme:           mgr.GetScheme(),
+		HubCluster:       hubCluster,
 		HubClient:        hubCluster.GetClient(),
 		SpokeClient:      mgr.GetClient(),
 		SpokeClusterName: o.SpokeClusterName,
@@ -227,6 +228,7 @@ func (o *AddonAgentOptions) RunAgent(ctx context.Context) {
 
 	if err = (&S3SecretReconciler{
 		Scheme:           mgr.GetScheme(),
+		HubCluster:       hubCluster,
 		HubClient:        hubCluster.GetClient(),
 		SpokeClient:      mgr.GetClient(),
 		SpokeClusterName: o.SpokeClusterName,
