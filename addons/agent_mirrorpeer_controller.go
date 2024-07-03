@@ -39,12 +39,16 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // MirrorPeerReconciler reconciles a MirrorPeer object
 type MirrorPeerReconciler struct {
+	HubCluster       cluster.Cluster
 	HubClient        client.Client
 	Scheme           *runtime.Scheme
 	SpokeClient      client.Client
@@ -452,7 +456,9 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Logger.Info("Setting up controller with manager")
 	mpPredicate := utils.ComposePredicates(predicate.GenerationChangedPredicate{}, mirrorPeerSpokeClusterPredicate)
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(mpPredicate)).
+		Named("agent_mirrorpeer_controller").
+		WatchesRawSource(source.Kind(r.HubCluster.GetCache(), &multiclusterv1alpha1.MirrorPeer{}), &handler.EnqueueRequestForObject{},
+			builder.WithPredicates(mpPredicate)).
 		Complete(r)
 }
 

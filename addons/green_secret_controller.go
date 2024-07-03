@@ -13,14 +13,17 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // GreenSecretReconciler reconciles a MirrorPeer object
 type GreenSecretReconciler struct {
 	Scheme           *runtime.Scheme
+	HubCluster       cluster.Cluster
 	HubClient        client.Client
 	SpokeClient      client.Client
 	SpokeClusterName string
@@ -56,7 +59,7 @@ func (r *GreenSecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("greensecret_controller").
-		Watches(&corev1.Secret{}, &handler.EnqueueRequestForObject{},
+		WatchesRawSource(source.Kind(r.HubCluster.GetCache(), &corev1.Secret{}), &handler.EnqueueRequestForObject{},
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}, greenSecretPredicate)).
 		Complete(r)
 }
