@@ -14,6 +14,7 @@ require (
 	github.com/red-hat-storage/ocs-operator/api/v4 v4.0.0-20240717095253-b12449490cc8
 	github.com/rook/rook/pkg/apis v0.0.0-20240701212738-8e25300ad55a
 	github.com/spf13/cobra v1.8.0
+	github.com/stolostron/multicloud-operators-foundation v0.0.0-20220824091202-e9cd9710d009
 	github.com/stretchr/testify v1.9.0
 	go.uber.org/zap v1.27.0
 	go.uber.org/zap/exp v0.2.0

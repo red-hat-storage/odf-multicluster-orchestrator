@@ -162,6 +162,16 @@ rules:
   verbs:
   - '*'
 - apiGroups:
+  - view.open-cluster-management.io
+  resources:
+  - managedclusterviews
+  verbs:
+  - create
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
   - work.open-cluster-management.io
   resources:
   - manifestworks

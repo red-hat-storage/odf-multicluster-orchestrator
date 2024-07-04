@@ -13,6 +13,7 @@ import (
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/console"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"github.com/spf13/cobra"
+	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -43,6 +44,7 @@ func init() {
 
 	utilruntime.Must(ramenv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(workv1.AddToScheme(mgrScheme))
+	utilruntime.Must(viewv1beta1.AddToScheme(mgrScheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -137,6 +139,14 @@ func (o *ManagerOptions) runManager() {
 		Logger: logger.With("controller", "MirrorPeerSecretReconciler"),
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create MirrorPeer controller", "error", err)
+		os.Exit(1)
+	}
+
+	if err = (&ManagedClusterReconciler{
+		Client: mgr.GetClient(),
+		Logger: logger.With("controller", "ManagedClusterReconciler"),
+	}).SetupWithManager(mgr); err != nil {
+		logger.Error("Failed to create ManagedCluster controller", "error", err)
 		os.Exit(1)
 	}
 

@@ -71,6 +71,7 @@ const spokeClusterRoleBindingName = "spoke-clusterrole-bindings"
 //+kubebuilder:rbac:groups=addon.open-cluster-management.io,resources=managedclusteraddons/status,verbs=*
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;create;update;watch
 //+kubebuilder:rbac:groups=console.openshift.io,resources=consoleplugins,verbs=get;list;create;update;watch
+//+kubebuilder:rbac:groups=view.open-cluster-management.io,resources=managedclusterviews,verbs=get;list;watch;create;update
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;create;update;watch
 //+kubebuilder:rbac:groups=ramendr.openshift.io,resources=drclusters;drpolicies,verbs=get;list;create;update;watch
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;create;update;delete;watch,resourceNames=spoke-clusterrole-bindings
