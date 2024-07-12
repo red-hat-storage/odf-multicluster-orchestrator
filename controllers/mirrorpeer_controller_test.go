@@ -63,20 +63,33 @@ func TestMirrorPeerReconcilerReconcile(t *testing.T) {
 
 	r := getFakeMirrorPeerReconciler(mirrorpeer)
 
-	ctx := context.TODO()
-	req := ctrl.Request{
-		NamespacedName: types.NamespacedName{
-			Name: "mirrorpeer",
-		},
-	}
+	requeue := false
+	var ctx context.Context
+	var req ctrl.Request
+	i := 0
+	for {
+		ctx = context.TODO()
+		req = ctrl.Request{
+			NamespacedName: types.NamespacedName{
+				Name: "mirrorpeer",
+			},
+		}
+		result, err := r.Reconcile(ctx, req)
+		if err != nil {
+			t.Errorf("MirrorPeerReconciler Reconcile() failed. Error: %s", err)
+		}
 
-	_, err := r.Reconcile(ctx, req)
-	if err != nil {
-		t.Errorf("MirrorPeerReconciler Reconcile() failed. Error: %s", err)
+		requeue = result.Requeue
+		// The loop is required as updates fail due to conflict and request is requeued.
+		// 50 tries is the arbitrary number i've set to break from the loop and fail the test. To avoid running forever!
+		if !requeue || i == 50 {
+			break
+		}
+		i++
 	}
 
 	var mp multiclusterv1alpha1.MirrorPeer
-	err = r.Get(ctx, req.NamespacedName, &mp)
+	err := r.Get(ctx, req.NamespacedName, &mp)
 	if err != nil {
 		t.Errorf("Failed to get MirrorPeer. Error: %s", err)
 	}
@@ -144,7 +157,7 @@ func TestProcessManagedClusterAddons(t *testing.T) {
 	// Create fake k8s client
 	r := getFakeMirrorPeerReconciler(mirrorpeer)
 	// Create fake secrets somehow
-	if err := r.processManagedClusterAddon(ctx, mirrorpeer); err != nil {
+	if _, err := r.processManagedClusterAddon(ctx, mirrorpeer); err != nil {
 		t.Error("Failed to create managed cluster addon")
 	}
 
