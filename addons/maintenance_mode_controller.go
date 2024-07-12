@@ -6,7 +6,7 @@ import (
 	"log/slog"
 
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
-	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v1"
+	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	appsv1 "k8s.io/api/apps/v1"
