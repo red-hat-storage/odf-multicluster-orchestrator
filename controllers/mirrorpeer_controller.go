@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -43,7 +44,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // MirrorPeerReconciler reconciles a MirrorPeer object
@@ -52,6 +52,8 @@ type MirrorPeerReconciler struct {
 	Scheme *runtime.Scheme
 	Logger *slog.Logger
 }
+
+type MirrorPeerReconcileTask func(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error)
 
 const mirrorPeerFinalizer = "hub.multicluster.odf.openshift.io"
 const spokeClusterRoleBindingName = "spoke-clusterrole-bindings"
@@ -80,6 +82,129 @@ const spokeClusterRoleBindingName = "spoke-clusterrole-bindings"
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
+
+func (r *MirrorPeerReconciler) processMirrorPeerDeletion(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
+	logger := r.Logger.With("MirrorPeer", mirrorPeer.Name)
+	if mirrorPeer.GetDeletionTimestamp().IsZero() {
+		if !utils.ContainsString(mirrorPeer.GetFinalizers(), mirrorPeerFinalizer) {
+			logger.Info("Finalizer not found on MirrorPeer. Adding Finalizer")
+			mirrorPeer.Finalizers = append(mirrorPeer.Finalizers, mirrorPeerFinalizer)
+			if err := r.Client.Update(ctx, &mirrorPeer); err != nil {
+				if k8serrors.IsConflict(err) {
+					logger.Info("Failed to update MirrorPeer as object is being updated. Requeing to reconcile again")
+					return ctrl.Result{Requeue: true}, nil
+				}
+				logger.Error("Failed to add finalizer to MirrorPeer", "error", err)
+				return ctrl.Result{}, err
+			}
+		}
+	} else {
+		logger.Info("Deleting MirrorPeer")
+		mirrorPeer.Status.Phase = multiclusterv1alpha1.Deleting
+		statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
+		if statusErr != nil {
+			logger.Error("Error occurred while updating the status of mirrorpeer", "Error", statusErr)
+			return ctrl.Result{}, statusErr
+		}
+		if utils.ContainsString(mirrorPeer.GetFinalizers(), mirrorPeerFinalizer) {
+			if utils.ContainsSuffix(mirrorPeer.GetFinalizers(), addons.SpokeMirrorPeerFinalizer) {
+				logger.Info("Waiting for agent to delete resources")
+				return ctrl.Result{}, nil
+			}
+			if err := r.deleteSecrets(ctx, mirrorPeer); err != nil {
+				logger.Error("Failed to delete resources", "error", err)
+				return ctrl.Result{}, err
+			}
+			mirrorPeer.Finalizers = utils.RemoveString(mirrorPeer.Finalizers, mirrorPeerFinalizer)
+			if err := r.Client.Update(ctx, &mirrorPeer); err != nil {
+				logger.Error("Failed to remove finalizer from MirrorPeer", "error", err)
+				return ctrl.Result{}, err
+			}
+		}
+		logger.Info("MirrorPeer deleted, skipping reconciliation")
+		return ctrl.Result{}, nil
+	}
+	return ctrl.Result{}, nil
+}
+
+func (r *MirrorPeerReconciler) ValidateMirrorPeer(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
+	logger := r.Logger.With("MirrorPeer", mirrorPeer.Name)
+
+	logger.Info("Validating MirrorPeer")
+
+	// MirrorPeer.Spec must be defined
+	if err := undefinedMirrorPeerSpec(mirrorPeer.Spec); err != nil {
+		return ctrl.Result{}, fmt.Errorf("MirrorPeer spec is undefined: %w", err)
+	}
+
+	// MirrorPeer.Spec.Items must be unique
+	if err := uniqueSpecItems(mirrorPeer.Spec); err != nil {
+		return ctrl.Result{}, fmt.Errorf("MirrorPeer spec items are not unique: %w", err)
+	}
+
+	for i := range mirrorPeer.Spec.Items {
+		// MirrorPeer.Spec.Items must not have empty fields
+		if err := emptySpecItems(mirrorPeer.Spec.Items[i]); err != nil {
+
+			return ctrl.Result{}, fmt.Errorf("MirrorPeer spec items have empty fields: %w", err)
+		}
+
+		// MirrorPeer.Spec.Items[*].ClusterName must be a valid ManagedCluster
+		if err := isManagedCluster(ctx, r.Client, mirrorPeer.Spec.Items[i].ClusterName); err != nil {
+			return ctrl.Result{}, fmt.Errorf("invalid ManagedCluster: %w", err)
+		}
+	}
+
+	logger.Info("All validations for MirrorPeer passed")
+	return ctrl.Result{}, nil
+}
+
+func (r *MirrorPeerReconciler) UpdateMirrorPeerPhase(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
+	logger := r.Logger.With("MirrorPeer", mirrorPeer.Name)
+
+	if mirrorPeer.Status.Phase == "" {
+		if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
+			mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangingSecret
+		} else {
+			mirrorPeer.Status.Phase = multiclusterv1alpha1.S3ProfileSyncing
+		}
+		statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
+		if statusErr != nil {
+			logger.Error("Error occurred while updating the status of mirrorpeer. Requeuing request...", "Error", statusErr)
+			// Requeue, but don't throw
+			return ctrl.Result{Requeue: true}, nil
+		}
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *MirrorPeerReconciler) AddLabels(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
+	logger := r.Logger.With("MirrorPeer", mirrorPeer.Name)
+
+	if mirrorPeer.Labels == nil {
+		mirrorPeer.Labels = make(map[string]string)
+	}
+
+	if val, ok := mirrorPeer.Labels[utils.HubRecoveryLabel]; !ok || val != "resource" {
+		logger.Info("Adding label to mirrorpeer for disaster recovery")
+		mirrorPeer.Labels[utils.HubRecoveryLabel] = "resource"
+		err := r.Client.Update(ctx, &mirrorPeer)
+		if err != nil {
+			if k8serrors.IsConflict(err) {
+				logger.Info("Failed to update MirrorPeer as object is being updated. Requeing to reconcile again")
+				return ctrl.Result{Requeue: true}, nil
+			}
+			logger.Error("Failed to update MirrorPeer with disaster recovery label", "error", err)
+			return ctrl.Result{}, err
+		}
+		logger.Info("Successfully added label to mirrorpeer for disaster recovery. Requeuing request...")
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	return ctrl.Result{}, nil
+}
+
 func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := r.Logger.With("MirrorPeer", req.NamespacedName.String())
 	logger.Info("Reconciling request")
@@ -99,153 +224,35 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("Validating MirrorPeer")
-	// Validate MirrorPeer
-	// MirrorPeer.Spec must be defined
-	if err := undefinedMirrorPeerSpec(mirrorPeer.Spec); err != nil {
-		logger.Error("MirrorPeer spec is undefined", "error", err)
-		return ctrl.Result{Requeue: false}, err
-	}
-	// MirrorPeer.Spec.Items must be unique
-	if err := uniqueSpecItems(mirrorPeer.Spec); err != nil {
-		logger.Error("MirrorPeer spec items are not unique", "error", err)
-		return ctrl.Result{Requeue: false}, err
-	}
-	for i := range mirrorPeer.Spec.Items {
-		// MirrorPeer.Spec.Items must not have empty fields
-		if err := emptySpecItems(mirrorPeer.Spec.Items[i]); err != nil {
-			logger.Error("MirrorPeer spec items have empty fields", "error", err)
-			return reconcile.Result{Requeue: false}, err
-		}
-		// MirrorPeer.Spec.Items[*].ClusterName must be a valid ManagedCluster
-		if err := isManagedCluster(ctx, r.Client, mirrorPeer.Spec.Items[i].ClusterName); err != nil {
-			logger.Error("Invalid ManagedCluster", "ClusterName", mirrorPeer.Spec.Items[i].ClusterName, "error", err)
-			return ctrl.Result{}, err
-		}
-	}
-	logger.Info("All validations for MirrorPeer passed")
-
-	if mirrorPeer.GetDeletionTimestamp().IsZero() {
-		if !utils.ContainsString(mirrorPeer.GetFinalizers(), mirrorPeerFinalizer) {
-			logger.Info("Finalizer not found on MirrorPeer. Adding Finalizer")
-			mirrorPeer.Finalizers = append(mirrorPeer.Finalizers, mirrorPeerFinalizer)
-		}
-	} else {
-		logger.Info("Deleting MirrorPeer")
-		mirrorPeer.Status.Phase = multiclusterv1alpha1.Deleting
-		statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
-		if statusErr != nil {
-			logger.Error("Error occurred while updating the status of mirrorpeer", "Error", statusErr)
-			return ctrl.Result{Requeue: true}, nil
-		}
-		if utils.ContainsString(mirrorPeer.GetFinalizers(), mirrorPeerFinalizer) {
-			if utils.ContainsSuffix(mirrorPeer.GetFinalizers(), addons.SpokeMirrorPeerFinalizer) {
-				logger.Info("Waiting for agent to delete resources")
-				return reconcile.Result{Requeue: true}, err
-			}
-			if err := r.deleteSecrets(ctx, mirrorPeer); err != nil {
-				logger.Error("Failed to delete resources", "error", err)
-				return reconcile.Result{Requeue: true}, err
-			}
-			mirrorPeer.Finalizers = utils.RemoveString(mirrorPeer.Finalizers, mirrorPeerFinalizer)
-			if err := r.Client.Update(ctx, &mirrorPeer); err != nil {
-				logger.Error("Failed to remove finalizer from MirrorPeer", "error", err)
-				return reconcile.Result{}, err
-			}
-		}
-		logger.Info("MirrorPeer deleted, skipping reconcilation")
-		return reconcile.Result{}, nil
+	tasks := []MirrorPeerReconcileTask{
+		r.ValidateMirrorPeer,
+		r.processMirrorPeerDeletion,
+		r.AddLabels,
+		r.UpdateMirrorPeerPhase,
+		r.processManagedClusterAddon,
+		r.createClusterRoleBindingsForSpoke,
+		r.processMirrorPeerSecretChanges,
+		r.createDRClusters,
+		r.updateMirrorPeerStatus,
 	}
 
 	mirrorPeerCopy := mirrorPeer.DeepCopy()
-	if mirrorPeerCopy.Labels == nil {
-		mirrorPeerCopy.Labels = make(map[string]string)
-	}
-
-	if val, ok := mirrorPeerCopy.Labels[utils.HubRecoveryLabel]; !ok || val != "resource" {
-		logger.Info("Adding label to mirrorpeer for disaster recovery")
-		mirrorPeerCopy.Labels[utils.HubRecoveryLabel] = "resource"
-		err = r.Client.Update(ctx, mirrorPeerCopy)
-
+	for _, task := range tasks {
+		result, err := task(ctx, *mirrorPeerCopy)
 		if err != nil {
-			logger.Error("Failed to update mirrorpeer with disaster recovery label", "error", err)
-			return checkK8sUpdateErrors(err, mirrorPeerCopy, logger)
+			return result, err
 		}
-		logger.Info("Successfully added label to mirrorpeer for disaster recovery. Requeing request...")
-		return ctrl.Result{Requeue: true}, nil
-	}
-
-	if mirrorPeer.Status.Phase == "" {
-		if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
-			mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangingSecret
-		} else {
-			mirrorPeer.Status.Phase = multiclusterv1alpha1.S3ProfileSyncing
-		}
-		statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
-		if statusErr != nil {
-			logger.Error("Error occurred while updating the status of mirrorpeer. Requeing request...", "Error ", statusErr)
-			// Requeue, but don't throw
-			return ctrl.Result{Requeue: true}, nil
+		if result.Requeue || result.RequeueAfter > 0 {
+			return result, nil
 		}
 	}
 
-	if err := r.processManagedClusterAddon(ctx, mirrorPeer); err != nil {
-		logger.Error("Failed to process managedclusteraddon", "error", err)
-		return ctrl.Result{}, err
-	}
-
-	err = r.createClusterRoleBindingsForSpoke(ctx, mirrorPeer)
-	if err != nil {
-		logger.Error("Failed to create cluster role bindings for spoke", "error", err)
-		return ctrl.Result{}, err
-	}
-
-	// update s3 profile when MirrorPeer changes
-	if mirrorPeer.Spec.ManageS3 {
-		for _, peerRef := range mirrorPeer.Spec.Items {
-			var s3Secret corev1.Secret
-			namespacedName := types.NamespacedName{
-				Name:      utils.GetSecretNameByPeerRef(peerRef, utils.S3ProfilePrefix),
-				Namespace: peerRef.ClusterName,
-			}
-			err = r.Client.Get(ctx, namespacedName, &s3Secret)
-			if err != nil {
-				if k8serrors.IsNotFound(err) {
-					logger.Info("S3 secret is not yet synchronised. retrying till it is available. Requeing request...", "Cluster", peerRef.ClusterName)
-					return ctrl.Result{Requeue: true}, nil
-				}
-				logger.Error("Error in fetching s3 internal secret", "Cluster", peerRef.ClusterName, "error", err)
-				return ctrl.Result{}, err
-			}
-			err = createOrUpdateSecretsFromInternalSecret(ctx, r.Client, &s3Secret, []multiclusterv1alpha1.MirrorPeer{mirrorPeer}, logger)
-			if err != nil {
-				logger.Error("Error in updating S3 profile", "Cluster", peerRef.ClusterName, "error", err)
-				return ctrl.Result{}, err
-			}
-		}
-	}
-
-	if err = r.processMirrorPeerSecretChanges(ctx, r.Client, mirrorPeer); err != nil {
-		logger.Error("Error processing MirrorPeer secret changes", "error", err)
-		return ctrl.Result{}, err
-	}
-
-	err = r.createDRClusters(ctx, &mirrorPeer)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			logger.Info("Secret not synchronised yet, retrying to create DRCluster", "MirrorPeer", mirrorPeer.Name)
-			return ctrl.Result{Requeue: true}, nil
-		}
-		logger.Error("Failed to create DRClusters for MirrorPeer", "error", err)
-		return ctrl.Result{}, err
-	}
-
-	return r.updateMirrorPeerStatus(ctx, mirrorPeer)
+	return ctrl.Result{}, nil
 }
 
 // processManagedClusterAddon creates an addon for the cluster management in all the peer refs,
 // the resources gets an owner ref of the mirrorpeer to let the garbage collector handle it if the mirrorpeer gets deleted
-func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer) error {
+func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
 	logger := r.Logger.With("MirrorPeer", mirrorPeer.Name)
 	logger.Info("Processing ManagedClusterAddons for MirrorPeer")
 
@@ -286,14 +293,14 @@ func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, m
 
 		if err != nil {
 			logger.Error("Failed to reconcile ManagedClusterAddOn", "ManagedClusterAddOn", klog.KRef(managedClusterAddOn.Namespace, managedClusterAddOn.Name), "error", err)
-			return err
+			return ctrl.Result{}, err
 		}
 
 		logger.Info("Successfully reconciled ManagedClusterAddOn", "ClusterName", item.ClusterName)
 	}
 
 	logger.Info("Successfully processed all ManagedClusterAddons for MirrorPeer")
-	return nil
+	return ctrl.Result{}, nil
 }
 
 // deleteSecrets checks if another mirrorpeer is using a peer ref in the mirrorpeer being deleted, if not then it
@@ -350,11 +357,12 @@ func (r *MirrorPeerReconciler) deleteSecrets(ctx context.Context, mirrorPeer mul
 	return nil
 }
 
-func (r *MirrorPeerReconciler) processMirrorPeerSecretChanges(ctx context.Context, rc client.Client, mirrorPeerObj multiclusterv1alpha1.MirrorPeer) error {
-	logger := r.Logger
-	logger.Info("Processing mirror peer secret changes", "MirrorPeer", mirrorPeerObj.Name)
+func (r *MirrorPeerReconciler) processMirrorPeerSecretChanges(ctx context.Context, mirrorPeerObj multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
+	logger := r.Logger.With("MirrorPeer", mirrorPeerObj.Name)
+	logger.Info("Processing mirror peer secret changes")
 
 	var anyErr error
+	rc := r.Client
 
 	for _, eachPeerRef := range mirrorPeerObj.Spec.Items {
 		logger.Info("Fetching all source secrets", "ClusterName", eachPeerRef.ClusterName)
@@ -388,11 +396,11 @@ func (r *MirrorPeerReconciler) processMirrorPeerSecretChanges(ctx context.Contex
 		logger.Info("Errors encountered in updating secrets; skipping cleanup")
 	}
 
-	return anyErr
+	return ctrl.Result{}, anyErr
 }
 
 func (r *MirrorPeerReconciler) checkTokenExchangeStatus(ctx context.Context, mp multiclusterv1alpha1.MirrorPeer) (bool, error) {
-	logger := r.Logger
+	logger := r.Logger.With("MirrorPeer", mp.Name)
 
 	logger.Info("Checking token exchange status for MirrorPeer", "MirrorPeer", mp.Name)
 
@@ -501,24 +509,8 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 }
 
-// CheckK8sUpdateErrors checks what type of error occurs when trying to update a k8s object
-// and logs according to the object
-func checkK8sUpdateErrors(err error, obj client.Object, logger *slog.Logger) (ctrl.Result, error) {
-	if k8serrors.IsConflict(err) {
-		logger.Info("Object is being updated by another process. Retrying", "Kind", obj.GetObjectKind().GroupVersionKind().Kind, "Name", obj.GetName())
-		return ctrl.Result{Requeue: true}, nil
-	} else if k8serrors.IsNotFound(err) {
-		logger.Info("Object no longer exists. Ignoring since object must have been deleted", "Kind", obj.GetObjectKind().GroupVersionKind().Kind, "Name", obj.GetName())
-		return ctrl.Result{}, nil
-	} else if err != nil {
-		logger.Error("Failed to update object", "error", err, "Name", obj.GetName())
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
-}
-
-func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer) error {
-	logger := r.Logger
+func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
+	logger := r.Logger.With("MirrorPeerzName", mp.Name)
 	currentNamespace := os.Getenv("POD_NAMESPACE")
 
 	for _, pr := range mp.Spec.Items {
@@ -536,27 +528,35 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multicl
 			logger.Info("Fetching rook secret ", "Secret", rookSecretName)
 			hs, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: rookSecretName, Namespace: currentNamespace})
 			if err != nil {
+				if k8serrors.IsNotFound(err) {
+					logger.Info("Secret not synchronised yet, retrying to create DRCluster", "MirrorPeer", mp.Name)
+					return ctrl.Result{Requeue: true}, nil
+				}
 				logger.Error("Failed to fetch Rook secret", "error", err, "SecretName", rookSecretName, "Namespace", currentNamespace)
-				return err
+				return ctrl.Result{}, err
 			}
 			logger.Info("Unmarshalling rook secret ", "Secret Name:", rookSecretName)
 			rt, err := utils.UnmarshalRookSecretExternal(hs)
 			if err != nil {
 				logger.Error("Failed to unmarshal Rook secret", "error", err, "SecretName", rookSecretName)
-				return err
+				return ctrl.Result{}, err
 			}
 			fsid = rt.FSID
 		} else {
 			logger.Info("Fetching rook secret ", "Secret Name:", rookSecretName)
 			hs, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: rookSecretName, Namespace: clusterName})
 			if err != nil {
-				return err
+				if k8serrors.IsNotFound(err) {
+					logger.Info("Secret not synchronised yet, retrying to create DRCluster", "MirrorPeer", mp.Name)
+					return ctrl.Result{Requeue: true}, nil
+				}
+				return ctrl.Result{}, err
 			}
 			logger.Info("Unmarshalling rook secret ", "Secret Name:", rookSecretName)
 			rt, err := utils.UnmarshalHubSecret(hs)
 			if err != nil {
 				logger.Error("Failed to unmarshal Hub secret", "error", err, "SecretName", rookSecretName)
-				return err
+				return ctrl.Result{}, err
 			}
 			fsid = rt.FSID
 		}
@@ -566,14 +566,14 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multicl
 		ss, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: s3SecretName, Namespace: clusterName})
 		if err != nil {
 			logger.Error("Failed to fetch S3 secret", "error", err, "SecretName", s3SecretName, "Namespace", clusterName)
-			return err
+			return ctrl.Result{}, err
 		}
 
 		logger.Info("Unmarshalling S3 secret", "SecretName", s3SecretName)
 		st, err := utils.UnmarshalS3Secret(ss)
 		if err != nil {
 			logger.Error("Failed to unmarshal S3 secret", "error", err, "SecretName", s3SecretName)
-			return err
+			return ctrl.Result{}, err
 		}
 
 		logger.Info("Creating and updating DR clusters", "ClusterName", clusterName)
@@ -583,22 +583,22 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multicl
 		})
 		if err != nil {
 			logger.Error("Failed to create/update DR cluster", "error", err, "ClusterName", clusterName)
-			return err
+			return ctrl.Result{}, err
 		}
 	}
-	return nil
+	return ctrl.Result{}, nil
 }
 
-func (r *MirrorPeerReconciler) createClusterRoleBindingsForSpoke(ctx context.Context, peer multiclusterv1alpha1.MirrorPeer) error {
-	logger := r.Logger
-	logger.Info("Starting to create or update ClusterRoleBindings for the spoke", "MirrorPeerName", peer.Name)
+func (r *MirrorPeerReconciler) createClusterRoleBindingsForSpoke(ctx context.Context, peer multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
+	logger := r.Logger.With("MirrorPeerName", peer.Name)
+	logger.Info("Starting to create or update ClusterRoleBindings for the spoke")
 
 	crb := rbacv1.ClusterRoleBinding{}
 	err := r.Client.Get(ctx, types.NamespacedName{Name: spokeClusterRoleBindingName}, &crb)
 	if err != nil {
 		if !k8serrors.IsNotFound(err) {
 			logger.Error("Failed to get ClusterRoleBinding", "error", err, "ClusterRoleBindingName", spokeClusterRoleBindingName)
-			return err
+			return ctrl.Result{}, err
 		}
 		logger.Info("ClusterRoleBinding not found, will be created", "ClusterRoleBindingName", spokeClusterRoleBindingName)
 	}
@@ -646,28 +646,34 @@ func (r *MirrorPeerReconciler) createClusterRoleBindingsForSpoke(ctx context.Con
 
 	if err != nil {
 		logger.Error("Failed to create or update ClusterRoleBinding", "error", err, "ClusterRoleBindingName", spokeClusterRoleBindingName)
-		return err
+		return ctrl.Result{}, err
 	}
 
 	logger.Info("Successfully created or updated ClusterRoleBinding", "ClusterRoleBindingName", spokeClusterRoleBindingName)
-	return nil
+	return ctrl.Result{}, nil
 }
 
 func (r *MirrorPeerReconciler) updateMirrorPeerStatus(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
-	logger := r.Logger
+	logger := r.Logger.With("MirrorPeer", mirrorPeer.Name)
 
 	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
 		tokensExchanged, err := r.checkTokenExchangeStatus(ctx, mirrorPeer)
 		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				logger.Info("Secrets not found; Attempting to reconcile again", "MirrorPeer", mirrorPeer.Name)
+			if k8serrors.IsConflict(err) {
+				logger.Info("Object is being updated by another process. Retrying")
 				return ctrl.Result{Requeue: true}, nil
 			}
-			logger.Error("Error while exchanging tokens", "error", err, "MirrorPeer", mirrorPeer.Name)
+
+			if k8serrors.IsNotFound(err) {
+				logger.Info("Secrets not found; Attempting to reconcile again")
+				return ctrl.Result{Requeue: true}, nil
+			}
+
+			logger.Error("Error while exchanging tokens", "error", err)
 			mirrorPeer.Status.Message = err.Error()
 			statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
 			if statusErr != nil {
-				logger.Error("Error occurred while updating the status of mirrorpeer", "error", statusErr, "MirrorPeer", mirrorPeer.Name)
+				logger.Error("Error occurred while updating the status of mirrorpeer", "error", statusErr)
 			}
 			return ctrl.Result{}, err
 		}
@@ -678,7 +684,7 @@ func (r *MirrorPeerReconciler) updateMirrorPeerStatus(ctx context.Context, mirro
 			mirrorPeer.Status.Message = ""
 			statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
 			if statusErr != nil {
-				logger.Error("Error occurred while updating the status of mirrorpeer", "error", statusErr, "MirrorPeer", mirrorPeer.Name)
+				logger.Error("Error occurred while updating the status of mirrorpeer", "error", statusErr)
 				return ctrl.Result{Requeue: true}, nil
 			}
 			return ctrl.Result{}, nil
