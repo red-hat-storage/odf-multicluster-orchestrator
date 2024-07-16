@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -156,6 +157,53 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{}, fmt.Errorf("few failures occurred while labeling RBD StorageClasses: %v", errs)
 		}
 	}
+
+	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
+		if mirrorPeer.Status.Phase == multiclusterv1alpha1.ExchangedSecret {
+			logger.Info("Cleaning up stale onboarding token", "Token", string(mirrorPeer.GetUID()))
+			err = deleteStorageClusterPeerTokenSecret(ctx, r.HubClient, r.SpokeClusterName, string(mirrorPeer.GetUID()))
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+		if mirrorPeer.Status.Phase == multiclusterv1alpha1.ExchangingSecret {
+			var token corev1.Secret
+			err = r.HubClient.Get(ctx, types.NamespacedName{Namespace: r.SpokeClusterName, Name: string(mirrorPeer.GetUID())}, &token)
+			if err != nil && !errors.IsNotFound(err) {
+				return ctrl.Result{}, err
+			}
+			if err == nil {
+				// TODO: Replace it with exported type from ocs-operator
+				type OnboardingTicket struct {
+					ID                string `json:"id"`
+					ExpirationDate    int64  `json:"expirationDate,string"`
+					StorageQuotaInGiB uint   `json:"storageQuotaInGiB,omitempty"`
+				}
+				var ticketData OnboardingTicket
+				err = json.Unmarshal(token.Data["storagecluster-peer-token"], &ticketData)
+				if err != nil {
+					return ctrl.Result{}, fmt.Errorf("failed to unmarshal onboarding ticket message. %w", err)
+				}
+				if ticketData.ExpirationDate > time.Now().Unix() {
+					logger.Info("Onboarding token has not expired yet. Not renewing it.", "Token", token.Name, "ExpirationDate", ticketData.ExpirationDate)
+					return ctrl.Result{}, nil
+				}
+				logger.Info("Onboarding token has expired. Deleting it", "Token", token.Name)
+				err = deleteStorageClusterPeerTokenSecret(ctx, r.HubClient, r.SpokeClusterName, string(mirrorPeer.GetUID()))
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			logger.Info("Creating a new onboarding token", "Token", token.Name)
+			err = createStorageClusterPeerTokenSecret(ctx, r.HubClient, r.Scheme, r.SpokeClusterName, "openshift-storage", mirrorPeer, scr) //TODO: get odfOperatorNamespace from addon flags
+			if err != nil {
+				logger.Error("Failed to create StorageCluster peer token on the hub.", "error", err)
+				return ctrl.Result{}, err
+			}
+		}
+	}
+
 	return ctrl.Result{}, nil
 }
 
