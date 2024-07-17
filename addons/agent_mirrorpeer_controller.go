@@ -125,7 +125,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
+	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async && !utils.IsStorageClientType(mirrorPeer.Spec.Items) {
 		clusterFSIDs := make(map[string]string)
 		logger.Info("Fetching clusterFSIDs")
 		err = r.fetchClusterFSIDs(ctx, &mirrorPeer, clusterFSIDs)

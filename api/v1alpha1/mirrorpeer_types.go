@@ -35,7 +35,9 @@ const (
 
 // StorageClusterRef holds a reference to a StorageCluster
 type StorageClusterRef struct {
-	Name      string `json:"name"`
+	Name string `json:"name"`
+
+	// +kubebuilder:validation:Optional
 	Namespace string `json:"namespace"`
 }
 
