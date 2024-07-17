@@ -8,6 +8,7 @@ import (
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -28,7 +29,6 @@ const (
 	OdfInfoClusterClaimNamespacedName = "odfinfo.odf.openshift.io"
 )
 
-// +kubebuilder:rbac:groups=view.open-cluster-management.io,resources=managedclusterviews,verbs=get;list;watch;create;update
 func (r *ManagedClusterReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	logger := r.Logger.With("ManagedCluster", req.NamespacedName)
 	logger.Info("Reconciling ManagedCluster")
@@ -46,7 +46,7 @@ func (r *ManagedClusterReconciler) Reconcile(ctx context.Context, req reconcile.
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("Successfully reconciled ManagedCluster", "name", managedCluster.Name)
+	logger.Info("Successfully reconciled ManagedCluster")
 
 	return ctrl.Result{}, nil
 }
@@ -78,18 +78,12 @@ func (r *ManagedClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}
 			return hasRequiredODFKey(obj)
 		},
-
-		DeleteFunc: func(e event.DeleteEvent) bool {
-			return false
-		},
-		GenericFunc: func(e event.GenericEvent) bool {
-			return false
-		},
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&clusterv1.ManagedCluster{}, builder.WithPredicates(managedClusterPredicate, predicate.ResourceVersionChangedPredicate{})).
 		Owns(&viewv1beta1.ManagedClusterView{}).
+		Owns(&corev1.ConfigMap{}).
 		Complete(r)
 }
 

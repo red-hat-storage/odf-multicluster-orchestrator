@@ -36,7 +36,7 @@ metadata:
       ]
     capabilities: Basic Install
     console.openshift.io/plugins: '["odf-multicluster-console"]'
-    createdAt: "2024-07-12T13:14:27Z"
+    createdAt: "2024-07-16T05:37:17Z"
     olm.skipRange: ""
     operators.openshift.io/infrastructure-features: '["disconnected"]'
     operators.operatorframework.io/builder: operator-sdk-v1.34.1

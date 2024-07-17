@@ -150,6 +150,14 @@ func (o *ManagerOptions) runManager() {
 		os.Exit(1)
 	}
 
+	if err = (&ManagedClusterViewReconciler{
+		Client: mgr.GetClient(),
+		Logger: logger.With("controller", "ManagedClusterViewReconciler"),
+	}).SetupWithManager(mgr); err != nil {
+		logger.Error("Failed to create ManagedClusterView controller", "error", err)
+		os.Exit(1)
+	}
+
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		err = console.InitConsole(ctx, mgr.GetClient(), o.MulticlusterConsolePort, namespace)
 		if err != nil {

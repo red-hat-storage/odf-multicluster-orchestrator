@@ -5,6 +5,7 @@ go 1.22.0
 require (
 	github.com/csi-addons/kubernetes-csi-addons v0.8.0
 	github.com/go-logr/zapr v1.3.0
+	github.com/google/uuid v1.6.0
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.32.0
@@ -54,7 +55,6 @@ require (
 	github.com/google/gnostic-models v0.6.8 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
