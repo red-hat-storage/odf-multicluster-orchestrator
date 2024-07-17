@@ -33,3 +33,7 @@ func GetPeerRefForSpokeCluster(mp *multiclusterv1alpha1.MirrorPeer, spokeCluster
 	}
 	return nil, fmt.Errorf("PeerRef for cluster %s under mirrorpeer %s not found", spokeClusterName, mp.Name)
 }
+
+func IsStorageClientType(peerRefs []multiclusterv1alpha1.PeerRef) bool {
+	return peerRefs[0].StorageClusterRef.Namespace == "" && peerRefs[1].StorageClusterRef.Namespace == ""
+}
