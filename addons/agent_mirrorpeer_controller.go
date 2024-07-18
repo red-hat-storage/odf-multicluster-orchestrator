@@ -18,15 +18,12 @@ package addons
 
 import (
 	"context"
-	"crypto/sha1"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strconv"
 	"time"
 
-	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
@@ -310,59 +307,27 @@ func (r *MirrorPeerReconciler) labelRBDStorageClasses(ctx context.Context, stora
 }
 
 func (r *MirrorPeerReconciler) createS3(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, scNamespace string) error {
-	noobaaOBC, err := r.getS3bucket(ctx, mirrorPeer, scNamespace)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.Logger.Info("ODR ObjectBucketClaim not found, creating new one", "MirrorPeer", mirrorPeer.Name, "namespace", scNamespace)
-			err = r.SpokeClient.Create(ctx, noobaaOBC)
-			if err != nil {
-				r.Logger.Error("Failed to create ODR ObjectBucketClaim", "error", err, "MirrorPeer", mirrorPeer.Name, "namespace", scNamespace)
-				return err
-			}
+	logger := r.Logger.With("MirrorPeer", mirrorPeer.Name)
+	bucketCount := 1
+	if utils.IsStorageClientType(mirrorPeer.Spec.Items) {
+		bucketCount = 2
+	}
+	for index := 0; index < bucketCount; index++ {
+		bucketNamespace := utils.GetEnv("ODR_NAMESPACE", scNamespace)
+		var bucketName string
+		if utils.IsStorageClientType(mirrorPeer.Spec.Items) {
+			bucketName = utils.GenerateBucketName(mirrorPeer, mirrorPeer.Spec.Items[index].StorageClusterRef.Name)
 		} else {
-			r.Logger.Error("Failed to retrieve ODR ObjectBucketClaim", "error", err, "MirrorPeer", mirrorPeer.Name, "namespace", scNamespace)
+			bucketName = utils.GenerateBucketName(mirrorPeer)
+		}
+		operationResult, err := utils.CreateOrUpdateObjectBucketClaim(ctx, r.SpokeClient, bucketName, bucketNamespace)
+		if err != nil {
 			return err
 		}
-	} else {
-		r.Logger.Info("ODR ObjectBucketClaim already exists, no action needed", "MirrorPeer", mirrorPeer.Name, "namespace", scNamespace)
+		logger.Info(fmt.Sprintf("ObjectBucketClaim %s was %s in namespace %s", bucketName, operationResult, bucketNamespace))
 	}
+
 	return nil
-}
-
-func (r *MirrorPeerReconciler) getS3bucket(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, scNamespace string) (*obv1alpha1.ObjectBucketClaim, error) {
-	var peerAccumulator string
-	for _, peer := range mirrorPeer.Spec.Items {
-		peerAccumulator += peer.ClusterName
-	}
-	checksum := sha1.Sum([]byte(peerAccumulator))
-
-	bucketGenerateName := utils.BucketGenerateName
-	// truncate to bucketGenerateName + "-" + first 12 (out of 20) byte representations of sha1 checksum
-	bucket := fmt.Sprintf("%s-%s", bucketGenerateName, hex.EncodeToString(checksum[:]))[0 : len(bucketGenerateName)+1+12]
-	namespace := utils.GetEnv("ODR_NAMESPACE", scNamespace)
-
-	noobaaOBC := &obv1alpha1.ObjectBucketClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      bucket,
-			Namespace: namespace,
-		},
-		Spec: obv1alpha1.ObjectBucketClaimSpec{
-			BucketName:       bucket,
-			StorageClassName: namespace + ".noobaa.io",
-		},
-	}
-
-	err := r.SpokeClient.Get(ctx, types.NamespacedName{Name: bucket, Namespace: namespace}, noobaaOBC)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.Logger.Info("ObjectBucketClaim not found, will be created", "bucket", bucket, "namespace", namespace)
-		} else {
-			r.Logger.Error("Failed to get ObjectBucketClaim", "error", err, "bucket", bucket, "namespace", namespace)
-		}
-	} else {
-		r.Logger.Info("ObjectBucketClaim retrieved successfully", "bucket", bucket, "namespace", namespace)
-	}
-	return noobaaOBC, err
 }
 
 // enableMirroring is a wrapper function around toggleMirroring to enable mirroring in a storage cluster
@@ -548,7 +513,9 @@ func (r *MirrorPeerReconciler) deleteGreenSecret(ctx context.Context, spokeClust
 // deleteS3 deletes the S3 bucket in the storage cluster namespace, each new mirrorpeer generates
 // a new bucket, so we do not need to check if the bucket is being used by another mirrorpeer
 func (r *MirrorPeerReconciler) deleteS3(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, scNamespace string) error {
-	noobaaOBC, err := r.getS3bucket(ctx, mirrorPeer, scNamespace)
+	bucketName := utils.GenerateBucketName(mirrorPeer)
+	bucketNamespace := utils.GetEnv("ODR_NAMESPACE", scNamespace)
+	noobaaOBC, err := utils.GetObjectBucketClaim(ctx, r.SpokeClient, bucketName, bucketNamespace)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.Logger.Info("ODR ObjectBucketClaim not found, skipping deletion", "namespace", scNamespace, "MirrorPeer", mirrorPeer.Name)
