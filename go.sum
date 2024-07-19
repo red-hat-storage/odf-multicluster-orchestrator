@@ -785,6 +785,8 @@ github.com/spf13/pflag v1.0.5/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An
 github.com/spf13/viper v1.3.2/go.mod h1:ZiWeW+zYFKm7srdB9IoDzzZXaJaI5eL9QjNiN/DMA2s=
 github.com/spf13/viper v1.7.0/go.mod h1:8WkrPz2fc9jxqZNCJI/76HCieCp4Q8HaLFoCha5qpdg=
 github.com/stoewer/go-strcase v1.2.0/go.mod h1:IBiWB2sKIp3wVVQ3Y035++gc+knqhUQag1KpM8ahLw8=
+github.com/stolostron/multicloud-operators-foundation v0.0.0-20220824091202-e9cd9710d009 h1:/KHe+raMpLL01sYy5adCs95esrfGcHs+IxsI4sd06K0=
+github.com/stolostron/multicloud-operators-foundation v0.0.0-20220824091202-e9cd9710d009/go.mod h1:DhSK9KG5nkRnCHLb0QKqRIfnd1Tw+rLgwpCi8n7lIGY=
 github.com/stolostron/multicloud-operators-placementrule v1.2.4-1-20220311-8eedb3f.0.20230828200208-cd3c119a7fa0 h1:qL6eeBtdjLq7ktBBg8tB44b6jTKQjFy6bdl8EM+Kq6o=
 github.com/stolostron/multicloud-operators-placementrule v1.2.4-1-20220311-8eedb3f.0.20230828200208-cd3c119a7fa0/go.mod h1:uMTaz9cMLe5N+yJ/PpHPtSOdlBFB00WdxAW+K5TfkVw=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=

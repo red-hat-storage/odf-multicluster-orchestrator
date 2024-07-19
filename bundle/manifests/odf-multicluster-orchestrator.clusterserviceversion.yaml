@@ -36,7 +36,7 @@ metadata:
       ]
     capabilities: Basic Install
     console.openshift.io/plugins: '["odf-multicluster-console"]'
-    createdAt: "2024-04-03T11:58:23Z"
+    createdAt: "2024-07-16T05:37:17Z"
     olm.skipRange: ""
     operators.openshift.io/infrastructure-features: '["disconnected"]'
     operators.operatorframework.io/builder: operator-sdk-v1.34.1
@@ -224,6 +224,16 @@ spec:
           - roles
           verbs:
           - '*'
+        - apiGroups:
+          - view.open-cluster-management.io
+          resources:
+          - managedclusterviews
+          verbs:
+          - create
+          - get
+          - list
+          - update
+          - watch
         - apiGroups:
           - work.open-cluster-management.io
           resources:
