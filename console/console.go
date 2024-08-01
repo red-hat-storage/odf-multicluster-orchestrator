@@ -17,7 +17,7 @@ import (
 	"context"
 	"fmt"
 
-	consolev1alpha1 "github.com/openshift/api/console/v1alpha1"
+	consolev1 "github.com/openshift/api/console/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -70,28 +70,33 @@ func getService(serviceName string, port int, deploymentNamespace string) apiv1.
 	}
 }
 
-func getConsolePluginCR(consolePort int, serviceName string, deploymentNamespace string) consolev1alpha1.ConsolePlugin {
-	return consolev1alpha1.ConsolePlugin{
+func getConsolePluginCR(consolePort int, serviceName string, deploymentNamespace string) consolev1.ConsolePlugin {
+	return consolev1.ConsolePlugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: odfMulticlusterPluginName,
 		},
-		Spec: consolev1alpha1.ConsolePluginSpec{
+		Spec: consolev1.ConsolePluginSpec{
 			DisplayName: pluginDisplayName,
-			Service: consolev1alpha1.ConsolePluginService{
-				Name:      serviceName,
-				Namespace: deploymentNamespace,
-				Port:      int32(consolePort),
-				BasePath:  pluginBasePath,
+			Backend: consolev1.ConsolePluginBackend{
+				Service: &consolev1.ConsolePluginService{
+					Name:      serviceName,
+					Namespace: deploymentNamespace,
+					Port:      int32(consolePort),
+					BasePath:  pluginBasePath,
+				},
+				Type: consolev1.Service,
 			},
-			Proxy: []consolev1alpha1.ConsolePluginProxy{
+			Proxy: []consolev1.ConsolePluginProxy{
 				{
-					Type:      consolev1alpha1.ProxyTypeService,
-					Alias:     proxyAlias,
-					Authorize: true,
-					Service: consolev1alpha1.ConsolePluginProxyServiceConfig{
-						Name:      proxyServiceName,
-						Namespace: proxyServiceNamespace,
-						Port:      int32(proxyServicePort),
+					Alias:         proxyAlias,
+					Authorization: consolev1.UserToken,
+					Endpoint: consolev1.ConsolePluginProxyEndpoint{
+						Type: consolev1.ProxyTypeService,
+						Service: &consolev1.ConsolePluginProxyServiceConfig{
+							Name:      proxyServiceName,
+							Namespace: proxyServiceNamespace,
+							Port:      int32(proxyServicePort),
+						},
 					},
 				},
 			},

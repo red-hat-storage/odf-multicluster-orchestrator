@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/go-logr/zapr"
-	consolev1alpha1 "github.com/openshift/api/console/v1alpha1"
+	consolev1 "github.com/openshift/api/console/v1"
 	"github.com/openshift/library-go/pkg/operator/events"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
@@ -47,7 +47,7 @@ func init() {
 
 	utilruntime.Must(multiclusterv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(addonapiv1alpha1.AddToScheme(mgrScheme))
-	utilruntime.Must(consolev1alpha1.AddToScheme(mgrScheme))
+	utilruntime.Must(consolev1.AddToScheme(mgrScheme))
 
 	utilruntime.Must(ramenv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(workv1.AddToScheme(mgrScheme))
