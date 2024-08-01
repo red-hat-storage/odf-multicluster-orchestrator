@@ -46,11 +46,12 @@ import (
 
 // MirrorPeerReconciler reconciles a MirrorPeer object
 type MirrorPeerReconciler struct {
-	HubClient        client.Client
-	Scheme           *runtime.Scheme
-	SpokeClient      client.Client
-	SpokeClusterName string
-	Logger           *slog.Logger
+	HubClient            client.Client
+	Scheme               *runtime.Scheme
+	SpokeClient          client.Client
+	SpokeClusterName     string
+	OdfOperatorNamespace string
+	Logger               *slog.Logger
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -174,7 +175,6 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				return ctrl.Result{}, err
 			}
 			if err == nil {
-				// TODO: Replace it with exported type from ocs-operator
 				type OnboardingTicket struct {
 					ID                string `json:"id"`
 					ExpirationDate    int64  `json:"expirationDate,string"`
@@ -196,7 +196,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				}
 			}
 			logger.Info("Creating a new onboarding token", "Token", token.Name)
-			err = createStorageClusterPeerTokenSecret(ctx, r.HubClient, r.Scheme, r.SpokeClusterName, "openshift-storage", mirrorPeer, scr) //TODO: get odfOperatorNamespace from addon flags
+			err = createStorageClusterPeerTokenSecret(ctx, r.HubClient, r.Scheme, r.SpokeClusterName, r.OdfOperatorNamespace, mirrorPeer, scr)
 			if err != nil {
 				logger.Error("Failed to create StorageCluster peer token on the hub.", "error", err)
 				return ctrl.Result{}, err

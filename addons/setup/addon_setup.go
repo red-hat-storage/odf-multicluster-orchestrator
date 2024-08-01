@@ -84,10 +84,22 @@ func (a *Addons) Manifests(cluster *clusterv1.ManagedCluster, addon *addonapiv1a
 	groups := agent.DefaultGroups(cluster.Name, a.AddonName)
 	user := agent.DefaultUser(cluster.Name, a.AddonName, a.AddonName)
 
+	var odfOperatorNamespace string
+	if utils.HasRequiredODFKey(cluster) {
+		odfOperatorNamespacedName, err := utils.GetNamespacedNameForClusterInfo(*cluster)
+		if err != nil {
+			return objects, fmt.Errorf("error while getting ODF operator namespace on the spoke cluster %q. %w", cluster.Name, err)
+		}
+		odfOperatorNamespace = odfOperatorNamespacedName.Namespace
+	} else {
+		return objects, fmt.Errorf("error while getting ODF operator namespace on the spoke cluster %q. Expected ClusterClaim does not exist", cluster.Name)
+	}
+
 	manifestConfig := struct {
 		KubeConfigSecret      string
 		ClusterName           string
 		AddonInstallNamespace string
+		OdfOperatorNamespace  string
 		Image                 string
 		DRMode                string
 		Group                 string
@@ -95,6 +107,7 @@ func (a *Addons) Manifests(cluster *clusterv1.ManagedCluster, addon *addonapiv1a
 	}{
 		KubeConfigSecret:      fmt.Sprintf("%s-hub-kubeconfig", a.AddonName),
 		AddonInstallNamespace: installNamespace,
+		OdfOperatorNamespace:  odfOperatorNamespace,
 		ClusterName:           cluster.Name,
 		Image:                 a.AgentImage,
 		DRMode:                addon.Annotations[utils.DRModeAnnotationKey],

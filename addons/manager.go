@@ -86,6 +86,7 @@ type AddonAgentOptions struct {
 	ProbeAddr            string
 	HubKubeconfigFile    string
 	SpokeClusterName     string
+	OdfOperatorNamespace string
 	DRMode               string
 	DevMode              bool
 }
@@ -99,6 +100,7 @@ func (o *AddonAgentOptions) AddFlags(cmd *cobra.Command) {
 			"Enabling this will ensure there is only one active controller manager.")
 	flags.StringVar(&o.HubKubeconfigFile, "hub-kubeconfig", o.HubKubeconfigFile, "Location of kubeconfig file to connect to hub cluster.")
 	flags.StringVar(&o.SpokeClusterName, "cluster-name", o.SpokeClusterName, "Name of spoke cluster.")
+	flags.StringVar(&o.OdfOperatorNamespace, "odf-operator-namespace", o.OdfOperatorNamespace, "Namespace of ODF operator on the spoke cluster.")
 	flags.StringVar(&o.DRMode, "mode", o.DRMode, "The DR mode of token exchange addon. Valid values are: 'sync', 'async'")
 	flags.BoolVar(&o.DevMode, "dev", false, "Set to true for dev environment (Text logging)")
 }
@@ -184,11 +186,12 @@ func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.
 	}
 
 	if err = (&MirrorPeerReconciler{
-		Scheme:           mgr.GetScheme(),
-		HubClient:        mgr.GetClient(),
-		SpokeClient:      spokeClient,
-		SpokeClusterName: options.SpokeClusterName,
-		Logger:           logger.With("controller", "MirrorPeerReconciler"),
+		Scheme:               mgr.GetScheme(),
+		HubClient:            mgr.GetClient(),
+		SpokeClient:          spokeClient,
+		SpokeClusterName:     options.SpokeClusterName,
+		OdfOperatorNamespace: options.OdfOperatorNamespace,
+		Logger:               logger.With("controller", "MirrorPeerReconciler"),
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create MirrorPeer controller", "controller", "MirrorPeer", "error", err)
 		os.Exit(1)
