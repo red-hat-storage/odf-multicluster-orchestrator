@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	consolev1alpha1 "github.com/openshift/api/console/v1alpha1"
+	consolev1 "github.com/openshift/api/console/v1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
@@ -29,24 +29,29 @@ type testCase struct {
 	errExpected bool
 }
 
-func getExpectedConsolePluginSpec() consolev1alpha1.ConsolePluginSpec {
-	return consolev1alpha1.ConsolePluginSpec{
+func getExpectedConsolePluginSpec() consolev1.ConsolePluginSpec {
+	return consolev1.ConsolePluginSpec{
 		DisplayName: pluginDisplayName,
-		Service: consolev1alpha1.ConsolePluginService{
-			Name:      odfMulticlusterPluginName,
-			Namespace: testMulticlusterNamespace,
-			Port:      int32(testPort),
-			BasePath:  pluginBasePath,
+		Backend: consolev1.ConsolePluginBackend{
+			Service: &consolev1.ConsolePluginService{
+				Name:      odfMulticlusterPluginName,
+				Namespace: testMulticlusterNamespace,
+				Port:      int32(testPort),
+				BasePath:  pluginBasePath,
+			},
+			Type: consolev1.Service,
 		},
-		Proxy: []consolev1alpha1.ConsolePluginProxy{
+		Proxy: []consolev1.ConsolePluginProxy{
 			{
-				Type:      consolev1alpha1.ProxyTypeService,
-				Alias:     proxyAlias,
-				Authorize: true,
-				Service: consolev1alpha1.ConsolePluginProxyServiceConfig{
-					Name:      proxyServiceName,
-					Namespace: proxyServiceNamespace,
-					Port:      int32(proxyServicePort),
+				Alias:         proxyAlias,
+				Authorization: consolev1.UserToken,
+				Endpoint: consolev1.ConsolePluginProxyEndpoint{
+					Type: consolev1.ProxyTypeService,
+					Service: &consolev1.ConsolePluginProxyServiceConfig{
+						Name:      proxyServiceName,
+						Namespace: proxyServiceNamespace,
+						Port:      int32(proxyServicePort),
+					},
 				},
 			},
 		},
@@ -78,9 +83,9 @@ func createFakeScheme(t *testing.T) *runtime.Scheme {
 	if err != nil {
 		assert.Fail(t, "failed to add appsv1 scheme")
 	}
-	err = consolev1alpha1.AddToScheme(scheme)
+	err = consolev1.AddToScheme(scheme)
 	if err != nil {
-		assert.Fail(t, "failed to add consolev1alpha1 scheme")
+		assert.Fail(t, "failed to add consolev1 scheme")
 	}
 	err = apiv1.AddToScheme(scheme)
 	if err != nil {
@@ -120,7 +125,7 @@ func TestInitConsole(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
-				consolePlugin := consolev1alpha1.ConsolePlugin{}
+				consolePlugin := consolev1.ConsolePlugin{}
 				err := client.Get(context.TODO(), types.NamespacedName{
 					Name: odfMulticlusterPluginName,
 				}, &consolePlugin)
