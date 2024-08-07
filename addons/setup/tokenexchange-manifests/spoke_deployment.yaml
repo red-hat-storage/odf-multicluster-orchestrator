@@ -44,6 +44,7 @@ spec:
           - "addons"
           - "--hub-kubeconfig=/var/run/hub/kubeconfig"
           - "--cluster-name={{ .ClusterName }}"
+          - "--odf-operator-namespace={{ .OdfOperatorNamespace }}"
           - "--mode={{ .DRMode }}"
         volumeMounts:
           - name: hub-config
