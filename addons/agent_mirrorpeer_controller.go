@@ -115,14 +115,21 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
+	hasStorageClientRef, err := utils.IsStorageClientType(ctx, r.SpokeClient, mirrorPeer, true)
+
+	if err != nil {
+		logger.Error("Failed to check if storage client ref exists", "error", err)
+		return ctrl.Result{}, err
+	}
+
 	logger.Info("Creating S3 buckets")
-	err = r.createS3(ctx, mirrorPeer, scr.Namespace)
+	err = r.createS3(ctx, mirrorPeer, scr.Namespace, hasStorageClientRef)
 	if err != nil {
 		logger.Error("Failed to create ODR S3 resources", "error", err)
 		return ctrl.Result{}, err
 	}
 
-	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async && !utils.IsStorageClientType(mirrorPeer.Spec.Items) {
+	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async && !hasStorageClientRef {
 		clusterFSIDs := make(map[string]string)
 		logger.Info("Fetching clusterFSIDs")
 		err = r.fetchClusterFSIDs(ctx, &mirrorPeer, clusterFSIDs)
@@ -156,7 +163,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
+	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async && hasStorageClientRef {
 		if mirrorPeer.Status.Phase == multiclusterv1alpha1.ExchangedSecret {
 			logger.Info("Cleaning up stale onboarding token", "Token", string(mirrorPeer.GetUID()))
 			err = deleteStorageClusterPeerTokenSecret(ctx, r.HubClient, r.SpokeClusterName, string(mirrorPeer.GetUID()))
@@ -306,16 +313,15 @@ func (r *MirrorPeerReconciler) labelRBDStorageClasses(ctx context.Context, stora
 	return errs
 }
 
-func (r *MirrorPeerReconciler) createS3(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, scNamespace string) error {
-	logger := r.Logger.With("MirrorPeer", mirrorPeer.Name)
+func (r *MirrorPeerReconciler) createS3(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, scNamespace string, hasStorageClientRef bool) error {
 	bucketCount := 1
-	if utils.IsStorageClientType(mirrorPeer.Spec.Items) {
+	if hasStorageClientRef {
 		bucketCount = 2
 	}
 	for index := 0; index < bucketCount; index++ {
 		bucketNamespace := utils.GetEnv("ODR_NAMESPACE", scNamespace)
 		var bucketName string
-		if utils.IsStorageClientType(mirrorPeer.Spec.Items) {
+		if hasStorageClientRef {
 			bucketName = utils.GenerateBucketName(mirrorPeer, mirrorPeer.Spec.Items[index].StorageClusterRef.Name)
 		} else {
 			bucketName = utils.GenerateBucketName(mirrorPeer)
@@ -324,7 +330,7 @@ func (r *MirrorPeerReconciler) createS3(ctx context.Context, mirrorPeer multiclu
 		if err != nil {
 			return err
 		}
-		logger.Info(fmt.Sprintf("ObjectBucketClaim %s was %s in namespace %s", bucketName, operationResult, bucketNamespace))
+		r.Logger.Info(fmt.Sprintf("ObjectBucketClaim %s was %s in namespace %s", bucketName, operationResult, bucketNamespace))
 	}
 
 	return nil

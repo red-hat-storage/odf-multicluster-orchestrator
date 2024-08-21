@@ -38,7 +38,7 @@ type StorageClusterRef struct {
 	Name string `json:"name"`
 
 	// +kubebuilder:validation:Optional
-	Namespace string `json:"namespace"`
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // PeerRef holds a reference to a mirror peer

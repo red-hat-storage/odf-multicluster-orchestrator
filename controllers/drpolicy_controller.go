@@ -113,7 +113,14 @@ func (r *DRPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	if utils.IsStorageClientType(mirrorPeer.Spec.Items) {
+	// Check if the MirrorPeer contains StorageClient reference
+	hasStorageClientRef, err := utils.IsStorageClientType(ctx, r.HubClient, *mirrorPeer, false)
+	if err != nil {
+		logger.Error("Failed to determine if MirrorPeer contains StorageClient reference", "error", err)
+		return ctrl.Result{}, err
+	}
+
+	if hasStorageClientRef {
 		logger.Info("MirrorPeer contains StorageClient reference. Skipping creation of VolumeReplicationClasses", "MirrorPeer", mirrorPeer.Name)
 		return ctrl.Result{}, nil
 	}

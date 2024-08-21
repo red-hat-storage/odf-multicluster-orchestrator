@@ -59,7 +59,6 @@ type MirrorPeerReconciler struct {
 const (
 	mirrorPeerFinalizer         = "hub.multicluster.odf.openshift.io"
 	spokeClusterRoleBindingName = "spoke-clusterrole-bindings"
-	ClientConfigMapKeyTemplate  = "%s/%s"
 )
 
 //+kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers,verbs=get;list;watch;create;update;patch;delete
@@ -247,7 +246,14 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	if utils.IsStorageClientType(mirrorPeer.Spec.Items) {
+	// Check if the MirrorPeer contains StorageClient reference
+	hasStorageClientRef, err := utils.IsStorageClientType(ctx, r.Client, mirrorPeer, false)
+	if err != nil {
+		logger.Error("Failed to determine if MirrorPeer contains StorageClient reference", "error", err)
+		return ctrl.Result{}, err
+	}
+
+	if hasStorageClientRef {
 		result, err := createStorageClusterPeer(ctx, r.Client, logger, mirrorPeer)
 		if err != nil {
 			logger.Error("Failed to create StorageClusterPeer", "error", err)
@@ -258,7 +264,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 func getKey(clusterName, clientName string) string {
-	return fmt.Sprintf(ClientConfigMapKeyTemplate, clusterName, clientName)
+	return fmt.Sprintf("%s/%s", clusterName, clientName)
 }
 
 func createStorageClusterPeer(ctx context.Context, client client.Client, logger *slog.Logger, mirrorPeer multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
@@ -298,7 +304,7 @@ func createStorageClusterPeer(ctx context.Context, client client.Client, logger 
 		// Provider B's onboarding token will be used for Provider A's StorageClusterPeer
 		onboardingToken, err := fetchOnboardingTicket(ctx, client, oppositeClient, mirrorPeer)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to fetch onboarding token for provider %s. err %w", oppositeClient.ProviderInfo.ProviderManagedClusterName, err)
+			return ctrl.Result{}, fmt.Errorf("failed to fetch onboarding token for provider %s. %w", oppositeClient.ProviderInfo.ProviderManagedClusterName, err)
 		}
 		storageClusterPeer := ocsv1.StorageClusterPeer{
 			ObjectMeta: metav1.ObjectMeta{
@@ -374,7 +380,7 @@ func fetchClientInfoConfigMap(ctx context.Context, c client.Client) (*corev1.Con
 	if currentNamespace == "" {
 		return nil, fmt.Errorf("cannot detect the current namespace")
 	}
-	clientInfoMap, err := utils.FetchConfigMap(ctx, c, ClientInfoConfigMapName, currentNamespace)
+	clientInfoMap, err := utils.FetchConfigMap(ctx, c, utils.ClientInfoConfigMapName, currentNamespace)
 	if err != nil {
 		return nil, err
 	}
@@ -409,7 +415,14 @@ func getClientInfoFromConfigMap(clientInfoMap map[string]string, key string) (Cl
 
 func getConfig(ctx context.Context, c client.Client, mp multiclusterv1alpha1.MirrorPeer) ([]ManagedClusterAddonConfig, error) {
 	managedClusterAddonsConfig := make([]ManagedClusterAddonConfig, 0)
-	if utils.IsStorageClientType(mp.Spec.Items) {
+
+	// Check if the MirrorPeer contains StorageClient reference
+	hasStorageClientRef, err := utils.IsStorageClientType(ctx, c, mp, false)
+	if err != nil {
+		return []ManagedClusterAddonConfig{}, err
+	}
+
+	if hasStorageClientRef {
 		clientInfoMap, err := fetchClientInfoConfigMap(ctx, c)
 		if err != nil {
 			return []ManagedClusterAddonConfig{}, err
