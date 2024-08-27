@@ -34,7 +34,9 @@ func TestCreateOrUpdateConfigMap(t *testing.T) {
 	logger := utils.GetLogger(utils.GetZapLogger(true))
 
 	createManagedClusterView := func(name, namespace string, data map[string]string, ownerRefs []metav1.OwnerReference) *viewv1beta1.ManagedClusterView {
-		raw, _ := json.Marshal(data)
+		raw, _ := json.Marshal(map[string]interface{}{
+			"data": data,
+		})
 		return &viewv1beta1.ManagedClusterView{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            name,
