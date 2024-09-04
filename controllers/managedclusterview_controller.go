@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v4/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
@@ -77,7 +78,7 @@ func (r *ManagedClusterViewReconciler) SetupWithManager(mgr ctrl.Manager) error 
 }
 
 func hasODFInfoInScope(mc *viewv1beta1.ManagedClusterView) bool {
-	if mc.Spec.Scope.Name == ODFInfoConfigMapName && mc.Spec.Scope.Kind == ConfigMapResourceType {
+	if mc.Spec.Scope.Name == ODFInfoConfigMapName && mc.Spec.Scope.Resource == ConfigMapResourceType {
 		return true
 	}
 	return false
@@ -108,19 +109,33 @@ func (r *ManagedClusterViewReconciler) Reconcile(ctx context.Context, req reconc
 func createOrUpdateConfigMap(ctx context.Context, c client.Client, managedClusterView viewv1beta1.ManagedClusterView, logger *slog.Logger) error {
 	logger = logger.With("ManagedClusterView", managedClusterView.Name, "Namespace", managedClusterView.Namespace)
 
-	var resultData map[string]string
+	// Initialize an empty map to hold the result data.
+	var resultData map[string]interface{}
 	err := json.Unmarshal(managedClusterView.Status.Result.Raw, &resultData)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal result data. %w", err)
 	}
 
-	clientInfoMap := make(map[string]ClientInfo)
+	data, ok := resultData["data"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("unexpected data format in result: %v", resultData["data"])
+	}
 
-	for _, value := range resultData {
+	clientInfoMap := make(map[string]string)
+
+	for key, value := range data {
+		if !strings.Contains(key, ".yaml") {
+			continue
+		}
+
+		yamlContent, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected value format in data for key %s: expected string, got %T", key, value)
+		}
 		var odfInfo ocsv1alpha1.OdfInfoData
-		err := yaml.Unmarshal([]byte(value), &odfInfo)
+		err := yaml.Unmarshal([]byte(yamlContent), &odfInfo)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal ODF info data. %w", err)
+			return fmt.Errorf("failed to unmarshal ODF info data for key %s: %w", key, err)
 		}
 
 		providerInfo := ProviderInfo{
@@ -144,7 +159,12 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, managedCluste
 				ProviderInfo:             providerInfo,
 				ClientManagedClusterName: managedCluster.Name,
 			}
-			clientInfoMap[fmt.Sprintf("%s/%s", managedCluster.Name, client.Name)] = clientInfo
+			clientInfoJSON, err := json.Marshal(clientInfo)
+			if err != nil {
+				return fmt.Errorf("failed to marshal client info for key %s: %w", key, err)
+			}
+
+			clientInfoMap[fmt.Sprintf("%s/%s", managedCluster.Name, client.Name)] = string(clientInfoJSON)
 		}
 	}
 
@@ -166,11 +186,7 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, managedCluste
 
 	op, err := controllerutil.CreateOrUpdate(ctx, c, configMap, func() error {
 		for clientKey, clientInfo := range clientInfoMap {
-			clientInfoJSON, err := json.Marshal(clientInfo)
-			if err != nil {
-				return fmt.Errorf("failed to marshal client info. %w", err)
-			}
-			configMap.Data[clientKey] = string(clientInfoJSON)
+			configMap.Data[clientKey] = clientInfo
 		}
 
 		mcvOwnerRefs := managedClusterView.GetOwnerReferences()
@@ -183,6 +199,8 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, managedCluste
 				}
 			}
 			if !exists {
+				falseValue := false
+				mcvOwnerRef.Controller = &falseValue
 				configMap.OwnerReferences = append(configMap.OwnerReferences, mcvOwnerRef)
 			}
 		}
