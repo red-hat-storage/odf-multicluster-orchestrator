@@ -3,7 +3,7 @@ kind: ClusterServiceVersion
 metadata:
   annotations:
     alm-examples: '[]'
-    capabilities: Basic Install
+    capabilities: Seamless Upgrades
     console.openshift.io/plugins: '["odf-multicluster-console"]'
     operators.openshift.io/infrastructure-features: '["disconnected"]'
   labels:
