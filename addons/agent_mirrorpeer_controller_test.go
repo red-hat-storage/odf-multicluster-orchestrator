@@ -144,7 +144,7 @@ func TestMirrorPeerReconcile(t *testing.T) {
 				Namespace: pr.StorageClusterRef.Namespace,
 			},
 			Spec: ocsv1.StorageClusterSpec{
-				Mirroring: ocsv1.MirroringSpec{
+				Mirroring: &ocsv1.MirroringSpec{
 					Enabled:         false,
 					PeerSecretNames: secretNames,
 				},
@@ -219,7 +219,7 @@ func TestDisableMirroring(t *testing.T) {
 				Namespace: pr.StorageClusterRef.Namespace,
 			},
 			Spec: ocsv1.StorageClusterSpec{
-				Mirroring: ocsv1.MirroringSpec{
+				Mirroring: &ocsv1.MirroringSpec{
 					Enabled: true,
 				},
 			},
