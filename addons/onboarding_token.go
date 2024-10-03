@@ -27,7 +27,7 @@ func requestStorageClusterPeerToken(ctx context.Context, proxyServiceNamespace s
 	if err != nil {
 		return "", fmt.Errorf("failed to read token: %w", err)
 	}
-	url := fmt.Sprintf("https://ux-backend-proxy.%s.svc.cluster.local:8888/onboarding-tokens", proxyServiceNamespace)
+	url := fmt.Sprintf("https://ux-backend-proxy.%s.svc.cluster.local:8888/onboarding/peer-tokens", proxyServiceNamespace)
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
