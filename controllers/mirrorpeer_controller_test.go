@@ -21,11 +21,13 @@ package controllers
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -91,7 +93,7 @@ func getFakeMirrorPeerReconciler(mirrorpeer multiclusterv1alpha1.MirrorPeer) Mir
 	// Using a different scheme for test might cause issues like
 	// missing scheme in manager
 	scheme := mgrScheme
-
+	os.Setenv("POD_NAMESPACE", "openshift-operators")
 	managedcluster1 := clusterv1.ManagedCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "cluster1",
@@ -106,7 +108,23 @@ func getFakeMirrorPeerReconciler(mirrorpeer multiclusterv1alpha1.MirrorPeer) Mir
 		Spec: clusterv1.ManagedClusterSpec{},
 	}
 
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer, &managedcluster1, &managedcluster2).Build()
+	var odfClientInfoConfigMap = &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "odf-client-info",
+			Namespace: os.Getenv("POD_NAMESPACE"),
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: viewv1beta1.GroupVersion.String(),
+					Kind:       "ManagedClusterView",
+					Name:       "mcv-1",
+					UID:        "mcv-uid",
+				},
+			},
+		},
+		Data: map[string]string{},
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer, &managedcluster1, &managedcluster2, odfClientInfoConfigMap).Build()
 
 	r := MirrorPeerReconciler{
 		Client: fakeClient,

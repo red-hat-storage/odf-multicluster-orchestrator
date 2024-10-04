@@ -78,7 +78,7 @@ func (r *ManagedClusterViewReconciler) SetupWithManager(mgr ctrl.Manager) error 
 }
 
 func hasODFInfoInScope(mc *viewv1beta1.ManagedClusterView) bool {
-	if mc.Spec.Scope.Name == ODFInfoConfigMapName && mc.Spec.Scope.Resource == ConfigMapResourceType {
+	if mc.Spec.Scope.Name == utils.ODFInfoConfigMapName && mc.Spec.Scope.Resource == ConfigMapResourceType {
 		return true
 	}
 	return false

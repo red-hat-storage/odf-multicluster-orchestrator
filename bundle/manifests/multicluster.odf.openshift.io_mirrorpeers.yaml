@@ -60,7 +60,6 @@ spec:
                           type: string
                       required:
                       - name
-                      - namespace
                       type: object
                   required:
                   - clusterName

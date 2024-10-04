@@ -21,6 +21,27 @@ import (
 )
 
 var (
+	odfInfoConfigMap = corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "odf-info",
+			Namespace: "test-namespace", // Use a generic namespace
+			UID:       types.UID("268e6cdb-54fc-4f10-afab-67b106880be3"),
+		},
+		Data: map[string]string{
+			"test-namespace_test-storagecluster.config.yaml": `
+version: 4.17.0-95.stable
+deploymentType: internal
+clients: []
+storageCluster:
+  namespacedName:
+    namespace: test-namespace
+    name: test-storagecluster
+  storageProviderEndpoint: ""
+  cephClusterFSID: 986532da-8dba-4d35-a8d2-12f037712b39
+storageSystemName: ocs-storagecluster-storagesystem
+`,
+		},
+	}
 	mpItems = []multiclusterv1alpha1.PeerRef{
 		{
 			ClusterName: "cluster1",
@@ -123,7 +144,7 @@ func TestMirrorPeerReconcile(t *testing.T) {
 				Namespace: pr.StorageClusterRef.Namespace,
 			},
 			Spec: ocsv1.StorageClusterSpec{
-				Mirroring: ocsv1.MirroringSpec{
+				Mirroring: &ocsv1.MirroringSpec{
 					Enabled:         false,
 					PeerSecretNames: secretNames,
 				},
@@ -141,7 +162,7 @@ func TestMirrorPeerReconcile(t *testing.T) {
 		rcm.Data = make(map[string]string)
 		rcm.Data[RookCSIEnableKey] = "false"
 
-		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&storageCluster, &rcm, &clusterPeerToken, &exchangedSecret1, &exchangedSecret2, rbdStorageClass, cephfsStorageClass).Build()
+		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&storageCluster, &rcm, &clusterPeerToken, &exchangedSecret1, &exchangedSecret2, rbdStorageClass, cephfsStorageClass, &odfInfoConfigMap).Build()
 
 		r := MirrorPeerReconciler{
 			HubClient:        fakeHubClient,
@@ -198,7 +219,7 @@ func TestDisableMirroring(t *testing.T) {
 				Namespace: pr.StorageClusterRef.Namespace,
 			},
 			Spec: ocsv1.StorageClusterSpec{
-				Mirroring: ocsv1.MirroringSpec{
+				Mirroring: &ocsv1.MirroringSpec{
 					Enabled: true,
 				},
 			},
@@ -283,7 +304,7 @@ func TestDeleteGreenSecret(t *testing.T) {
 }
 
 func TestDeleteS3(t *testing.T) {
-	bucketName := "odrbucket-b1b922184baf"
+	bucketName := utils.GenerateBucketName(mirrorPeer)
 	ctx := context.TODO()
 	scheme := mgrScheme
 	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer1).Build()

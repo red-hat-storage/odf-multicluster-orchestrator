@@ -1,11 +1,15 @@
 package utils
 
 import (
+	"crypto/sha1"
 	"crypto/sha512"
+	"encoding/hex"
 	"fmt"
 	"hash/fnv"
 	"sort"
 	"strings"
+
+	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 )
 
 /*
@@ -50,4 +54,17 @@ func CreateUniqueReplicationId(clusterFSIDs map[string]string) (string, error) {
 	// To ensure reliability of hash generation
 	sort.Strings(fsids)
 	return CreateUniqueName(fsids...)[0:39], nil
+}
+
+func GenerateUniqueIdForMirrorPeer(mirrorPeer multiclusterv1alpha1.MirrorPeer) string {
+	var peerAccumulator []string
+
+	for _, peer := range mirrorPeer.Spec.Items {
+		peerAccumulator = append(peerAccumulator, peer.ClusterName)
+	}
+
+	sort.Strings(peerAccumulator)
+
+	checksum := sha1.Sum([]byte(strings.Join(peerAccumulator, "-")))
+	return hex.EncodeToString(checksum[:])
 }

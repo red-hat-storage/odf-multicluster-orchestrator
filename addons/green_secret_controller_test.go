@@ -36,7 +36,7 @@ var (
 			Namespace: "openshift-storage",
 		},
 		Spec: ocsv1.StorageClusterSpec{
-			Mirroring: ocsv1.MirroringSpec{
+			Mirroring: &ocsv1.MirroringSpec{
 				PeerSecretNames: []string{},
 			},
 		},
