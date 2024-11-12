@@ -313,12 +313,8 @@ func createStorageClusterPeer(ctx context.Context, client client.Client, logger 
 				Namespace: currentClient.ProviderInfo.NamespacedName.Namespace,
 			},
 			Spec: ocsv1.StorageClusterPeerSpec{
-				RemoteCluster: ocsv1.RemoteClusterSpec{
-					OnboardingTicket:   onboardingToken,
-					ApiEndpoint:        oppositeClient.ProviderInfo.StorageProviderEndpoint,
-					StorageClusterName: ocsv1.NamespacedName{Name: oppositeClient.ProviderInfo.NamespacedName.Name, Namespace: oppositeClient.ProviderInfo.NamespacedName.Namespace},
-				},
-				LocalCluster: ocsv1.LocalClusterSpec{Name: corev1.LocalObjectReference{Name: currentClient.ProviderInfo.NamespacedName.Name}},
+				OnboardingToken: onboardingToken,
+				ApiEndpoint:     oppositeClient.ProviderInfo.StorageProviderEndpoint,
 			},
 		}
 		storageClusterPeerJson, err := json.Marshal(storageClusterPeer)

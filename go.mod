@@ -12,7 +12,7 @@ require (
 	github.com/openshift/api v0.0.0-20240828125535-01b3675ba7b3
 	github.com/openshift/library-go v0.0.0-20240124134907-4dfbf6bc7b11
 	github.com/ramendr/ramen/api v0.0.0-20241001141243-29d6f22ad237
-	github.com/red-hat-storage/ocs-operator/api/v4 v4.0.0-20241001184356-b1c7177e28a6
+	github.com/red-hat-storage/ocs-operator/api/v4 v4.0.0-20241111204837-199e115469a1
 	github.com/rook/rook/pkg/apis v0.0.0-20240828225153-88eab510dd2b
 	github.com/spf13/cobra v1.8.1
 	github.com/stolostron/multicloud-operators-foundation v0.0.0-20220824091202-e9cd9710d009
