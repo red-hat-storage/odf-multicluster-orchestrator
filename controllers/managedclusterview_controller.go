@@ -51,6 +51,7 @@ type ClientInfo struct {
 	Name                     string       `json:"name"`
 	ProviderInfo             ProviderInfo `json:"providerInfo,omitempty"`
 	ClientManagedClusterName string       `json:"clientManagedClusterName,omitempty"`
+	ClientID                 string       `json:"clientId"`
 }
 
 func (r *ManagedClusterViewReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -158,6 +159,7 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, managedCluste
 				Name:                     client.Name,
 				ProviderInfo:             providerInfo,
 				ClientManagedClusterName: managedCluster.Name,
+				ClientID:                 client.ClientID,
 			}
 			clientInfoJSON, err := json.Marshal(clientInfo)
 			if err != nil {

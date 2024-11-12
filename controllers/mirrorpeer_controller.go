@@ -259,8 +259,102 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			logger.Error("Failed to create StorageClusterPeer", "error", err)
 			return result, err
 		}
+
+		result, err = createManifestWorkForClusterPairingConfigMap(ctx, r.Client, logger, mirrorPeer)
+		if err != nil {
+			logger.Error("Failed to create ManifestWork for ClusterPairingConfigMap", "error", err)
+			return result, err
+		}
 	}
 	return r.updateMirrorPeerStatus(ctx, mirrorPeer)
+}
+
+func createManifestWorkForClusterPairingConfigMap(ctx context.Context, client client.Client, logger *slog.Logger, mirrorPeer multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
+	clientInfoMap, err := fetchClientInfoConfigMap(ctx, client)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			logger.Info("Client info config map not found. Retrying request another time...")
+			return ctrl.Result{Requeue: true}, nil
+		}
+		return ctrl.Result{}, err
+	}
+
+	items := mirrorPeer.Spec.Items
+
+	ci1, err := getClientInfoFromConfigMap(clientInfoMap.Data, getKey(items[0].ClusterName, items[0].StorageClusterRef.Name))
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	ci2, err := getClientInfoFromConfigMap(clientInfoMap.Data, getKey(items[1].ClusterName, items[1].StorageClusterRef.Name))
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if err := updateProviderConfigMap(ctx, client, mirrorPeer, ci1, ci2); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if err := updateProviderConfigMap(ctx, client, mirrorPeer, ci2, ci1); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
+}
+
+// updateProviderConfigMap updates the ConfigMap on the provider with the new client pairing
+func updateProviderConfigMap(ctx context.Context, client client.Client, mirrorPeer multiclusterv1alpha1.MirrorPeer, providerClientInfo ClientInfo, pairedClientInfo ClientInfo) error {
+	providerName := providerClientInfo.ProviderInfo.ProviderManagedClusterName
+	manifestWorkName := "dr-client-pair"
+	manifestWorkNamespace := providerName
+
+	// Attempt to get the existing ManifestWork
+	manifestWork, err := utils.GetManifestWork(ctx, client, manifestWorkName, manifestWorkNamespace)
+	var configMap *corev1.ConfigMap
+
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			// ManifestWork does not exist; create a new ConfigMap
+			configMap = &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "dr-client-pair-config",
+				},
+				Data: make(map[string]string),
+			}
+		} else {
+			return fmt.Errorf("failed to get ManifestWork: %w", err)
+		}
+	} else {
+		// Decode existing ConfigMap
+		if len(manifestWork.Spec.Workload.Manifests) == 0 {
+			return fmt.Errorf("ManifestWork %s has no manifests", manifestWorkName)
+		}
+		objJson := manifestWork.Spec.Workload.Manifests[0].RawExtension.Raw
+		configMap, err = utils.DecodeConfigMap(objJson)
+		if err != nil {
+			return fmt.Errorf("failed to decode ConfigMap: %w", err)
+		}
+	}
+
+	configMap.Data[providerClientInfo.ClientID] = pairedClientInfo.ClientID
+
+	updatedObjJson, err := json.Marshal(configMap)
+	if err != nil {
+		return fmt.Errorf("failed to marshal updated ConfigMap: %w", err)
+	}
+
+	ownerRef := metav1.OwnerReference{
+		APIVersion: mirrorPeer.APIVersion,
+		Kind:       mirrorPeer.Kind,
+		Name:       mirrorPeer.Name,
+		UID:        mirrorPeer.UID,
+	}
+
+	_, err = utils.CreateOrUpdateManifestWork(ctx, client, manifestWorkName, manifestWorkNamespace, updatedObjJson, ownerRef)
+	if err != nil {
+		return fmt.Errorf("failed to update ManifestWork for provider %s: %w", providerName, err)
+	}
+
+	return nil
 }
 
 func getKey(clusterName, clientName string) string {

@@ -6,6 +6,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	workv1 "open-cluster-management.io/api/work/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -42,4 +43,17 @@ func CreateOrUpdateManifestWork(ctx context.Context, c client.Client, name strin
 	}
 
 	return operationResult, nil
+}
+
+func GetManifestWork(ctx context.Context, c client.Client, manifestWorkName string, namespace string) (*workv1.ManifestWork, error) {
+	var manifestWork workv1.ManifestWork
+
+	if err := c.Get(ctx, types.NamespacedName{
+		Name:      manifestWorkName,
+		Namespace: namespace,
+	}, &manifestWork); err != nil {
+		return nil, fmt.Errorf("failed to get ManifestWork %s in namespace %s: %w", manifestWorkName, namespace, err)
+	}
+
+	return &manifestWork, nil
 }

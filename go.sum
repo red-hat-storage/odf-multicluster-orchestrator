@@ -731,8 +731,8 @@ github.com/prometheus/procfs v0.15.1/go.mod h1:fB45yRUv8NstnjriLhBQLuOUt+WW4BsoG
 github.com/prometheus/tsdb v0.7.1/go.mod h1:qhTCs0VvXwvX/y3TZrWD7rabWM+ijKTux40TwIPHuXU=
 github.com/ramendr/ramen/api v0.0.0-20241001141243-29d6f22ad237 h1:ig6ePD0yopC5Qi5BRmhsIsKaOkdsGXTSmG3HTYIpquo=
 github.com/ramendr/ramen/api v0.0.0-20241001141243-29d6f22ad237/go.mod h1:nO6VM/+PEhcPGyFIQJdhY6ip822cA61PAy/s6IjenAA=
-github.com/red-hat-storage/ocs-operator/api/v4 v4.0.0-20241111204837-199e115469a1 h1:3fZJ6LVBgriKYuhBCSz0X5wYuyivcxhrbG9XaMhUt3M=
-github.com/red-hat-storage/ocs-operator/api/v4 v4.0.0-20241111204837-199e115469a1/go.mod h1:fcFoM7FdQba/2m0CecUGNu38JaTt8quRKXhCqt8C3Jg=
+github.com/red-hat-storage/ocs-operator/api/v4 v4.0.0-20241112092644-99fdb662050d h1:+5S4F665PL+8TK9OGHX/2A+N9jPoT2PRHO69g7z7ZLk=
+github.com/red-hat-storage/ocs-operator/api/v4 v4.0.0-20241112092644-99fdb662050d/go.mod h1:fcFoM7FdQba/2m0CecUGNu38JaTt8quRKXhCqt8C3Jg=
 github.com/rogpeppe/fastuuid v0.0.0-20150106093220-6724a57986af/go.mod h1:XWv6SoW27p1b0cqNHllgS5HIMJraePCO15w5zCzIWYg=
 github.com/rogpeppe/fastuuid v1.2.0/go.mod h1:jVj6XXZzXRy/MSR5jhDC/2q6DgLz+nrA6LYCDYWNEvQ=
 github.com/rogpeppe/go-charset v0.0.0-20180617210344-2471d30d28b4/go.mod h1:qgYeAmZ5ZIpBWTGllZSQnw97Dj+woV0toclVaRGI8pc=
