@@ -72,19 +72,20 @@ func TestCreateOrUpdateConfigMap(t *testing.T) {
 
 		data := map[string]string{
 			"openshift-storage_ocs-storagecluster.config.yaml": `
-                version: "4.Y.Z"
-                deploymentType: "internal"
-                clients:
-                  - name: "client1"
-                    clusterId: "cluster1"
-                storageCluster:
-                  namespacedName:
-                    name: "ocs-storagecluster"
-                    namespace: "openshift-storage"
-                  storageProviderEndpoint: ""
-                  cephClusterFSID: "7a3d6b81-a55d-44fe-84d0-46c67cd395ca"
-                storageSystemName: "ocs-storagecluster-storagesystem"
-            `,
+version: "4.Y.Z"
+deploymentType: "internal"
+clients:
+  - name: "client1"
+    clusterId: "cluster1"
+    clientId: "client1"
+storageCluster:
+  namespacedName:
+    name: "ocs-storagecluster"
+    namespace: "openshift-storage"
+  storageProviderEndpoint: ""
+  cephClusterFSID: "7a3d6b81-a55d-44fe-84d0-46c67cd395ca"
+storageSystemName: "ocs-storagecluster-storagesystem"
+`,
 		}
 		ownerRefs := []metav1.OwnerReference{
 			*metav1.NewControllerRef(mc1, clusterv1.SchemeGroupVersion.WithKind("ManagedCluster")),
@@ -104,7 +105,7 @@ func TestCreateOrUpdateConfigMap(t *testing.T) {
 		assert.NotNil(t, cm)
 
 		expectedData := map[string]string{
-			"cluster1-name/client1": `{"clusterId":"cluster1","name":"client1","providerInfo":{"version":"4.Y.Z","deploymentType":"internal","storageSystemName":"ocs-storagecluster-storagesystem","providerManagedClusterName":"cluster1","namespacedName":{"Namespace":"openshift-storage","Name":"ocs-storagecluster"},"storageProviderEndpoint":"","cephClusterFSID":"7a3d6b81-a55d-44fe-84d0-46c67cd395ca"},"clientManagedClusterName":"cluster1-name"}`,
+			"cluster1-name/client1": `{"clusterId":"cluster1","name":"client1","providerInfo":{"version":"4.Y.Z","deploymentType":"internal","storageSystemName":"ocs-storagecluster-storagesystem","providerManagedClusterName":"cluster1","namespacedName":{"Namespace":"openshift-storage","Name":"ocs-storagecluster"},"storageProviderEndpoint":"","cephClusterFSID":"7a3d6b81-a55d-44fe-84d0-46c67cd395ca"},"clientManagedClusterName":"cluster1-name","clientId":"client1"}`,
 		}
 
 		assert.Equal(t, expectedData, cm.Data)
@@ -112,7 +113,6 @@ func TestCreateOrUpdateConfigMap(t *testing.T) {
 		assert.Equal(t, mc1.Name, cm.OwnerReferences[0].Name)
 		assert.Equal(t, "ManagedCluster", cm.OwnerReferences[0].Kind)
 		assert.Equal(t, clusterv1.GroupVersion.String(), cm.OwnerReferences[0].APIVersion)
-
 	})
 
 	t.Run("Update ConfigMap with MCV in cluster2", func(t *testing.T) {
@@ -120,19 +120,20 @@ func TestCreateOrUpdateConfigMap(t *testing.T) {
 		ctx := context.TODO()
 		data := map[string]string{
 			"openshift-storage_ocs-storagecluster.config.yaml": `
-                version: "4.Y.Z"
-                deploymentType: "internal"
-                clients:
-                  - name: "client2"
-                    clusterId: "cluster2"
-                storageCluster:
-                  namespacedName:
-                    name: "ocs-storagecluster"
-                    namespace: "openshift-storage"
-                  storageProviderEndpoint: ""
-                  cephClusterFSID: "8b3d6b81-b55d-55fe-94d0-56c67cd495ca"
-                storageSystemName: "ocs-storagecluster-storagesystem"
-            `,
+version: "4.Y.Z"
+deploymentType: "internal"
+clients:
+  - name: "client2"
+    clusterId: "cluster2"
+    clientId: "client2"
+storageCluster:
+  namespacedName:
+    name: "ocs-storagecluster"
+    namespace: "openshift-storage"
+  storageProviderEndpoint: ""
+  cephClusterFSID: "8b3d6b81-b55d-55fe-94d0-56c67cd495ca"
+storageSystemName: "ocs-storagecluster-storagesystem"
+`,
 		}
 		ownerRefs := []metav1.OwnerReference{
 			*metav1.NewControllerRef(mc2, clusterv1.SchemeGroupVersion.WithKind("ManagedCluster")),
@@ -151,8 +152,8 @@ func TestCreateOrUpdateConfigMap(t *testing.T) {
 		assert.NotNil(t, cm)
 
 		expectedData := map[string]string{
-			"cluster1-name/client1": `{"clusterId":"cluster1","name":"client1","providerInfo":{"version":"4.Y.Z","deploymentType":"internal","storageSystemName":"ocs-storagecluster-storagesystem","providerManagedClusterName":"cluster1","namespacedName":{"Namespace":"openshift-storage","Name":"ocs-storagecluster"},"storageProviderEndpoint":"","cephClusterFSID":"7a3d6b81-a55d-44fe-84d0-46c67cd395ca"},"clientManagedClusterName":"cluster1-name"}`,
-			"cluster2-name/client2": `{"clusterId":"cluster2","name":"client2","providerInfo":{"version":"4.Y.Z","deploymentType":"internal","storageSystemName":"ocs-storagecluster-storagesystem","providerManagedClusterName":"cluster2","namespacedName":{"Namespace":"openshift-storage","Name":"ocs-storagecluster"},"storageProviderEndpoint":"","cephClusterFSID":"8b3d6b81-b55d-55fe-94d0-56c67cd495ca"},"clientManagedClusterName":"cluster2-name"}`,
+			"cluster1-name/client1": `{"clusterId":"cluster1","name":"client1","providerInfo":{"version":"4.Y.Z","deploymentType":"internal","storageSystemName":"ocs-storagecluster-storagesystem","providerManagedClusterName":"cluster1","namespacedName":{"Namespace":"openshift-storage","Name":"ocs-storagecluster"},"storageProviderEndpoint":"","cephClusterFSID":"7a3d6b81-a55d-44fe-84d0-46c67cd395ca"},"clientManagedClusterName":"cluster1-name","clientId":"client1"}`,
+			"cluster2-name/client2": `{"clusterId":"cluster2","name":"client2","providerInfo":{"version":"4.Y.Z","deploymentType":"internal","storageSystemName":"ocs-storagecluster-storagesystem","providerManagedClusterName":"cluster2","namespacedName":{"Namespace":"openshift-storage","Name":"ocs-storagecluster"},"storageProviderEndpoint":"","cephClusterFSID":"8b3d6b81-b55d-55fe-94d0-56c67cd495ca"},"clientManagedClusterName":"cluster2-name","clientId":"client2"}`,
 		}
 
 		assert.Equal(t, expectedData, cm.Data)
