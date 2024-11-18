@@ -61,3 +61,27 @@ func FetchAllCephClusters(ctx context.Context, client client.Client) (*rookv1.Ce
 	}
 	return &cephClusters, nil
 }
+
+func GetStorageClusterFromCurrentNamespace(ctx context.Context, c client.Client, namespace string) (*ocsv1.StorageCluster, error) {
+	storageClusterList := &ocsv1.StorageClusterList{}
+	listOptions := []client.ListOption{
+		client.InNamespace(namespace),
+	}
+
+	// List all StorageClusters in the specified namespace
+	if err := c.List(ctx, storageClusterList, listOptions...); err != nil {
+		return nil, fmt.Errorf("failed to list StorageClusters in namespace %s: %w", namespace, err)
+	}
+
+	// Ensure only one StorageCluster exists
+	if len(storageClusterList.Items) == 0 {
+		return nil, fmt.Errorf("no StorageCluster found in namespace %s", namespace)
+	}
+
+	if len(storageClusterList.Items) > 1 {
+		return nil, fmt.Errorf("multiple StorageClusters found in namespace %s", namespace)
+	}
+
+	// Return the single StorageCluster
+	return &storageClusterList.Items[0], nil
+}

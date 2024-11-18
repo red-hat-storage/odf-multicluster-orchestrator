@@ -267,18 +267,6 @@ func createOrUpdateExternalSecret(ctx context.Context, rc client.Client, secret 
 	return nil
 }
 
-func isS3ProfileManagedPeerRef(clusterPeerRef multiclusterv1alpha1.PeerRef, mirrorPeers []multiclusterv1alpha1.MirrorPeer) bool {
-	for _, mirrorpeer := range mirrorPeers {
-		for _, peerRef := range mirrorpeer.Spec.Items {
-			if reflect.DeepEqual(clusterPeerRef, peerRef) && (mirrorpeer.Spec.ManageS3) {
-				// found mirror peer with ManageS3 spec enabled
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func updateS3ProfileFields(expected *rmn.S3StoreProfile, found *rmn.S3StoreProfile) {
 	found.S3ProfileName = expected.S3ProfileName
 	found.S3Bucket = expected.S3Bucket
@@ -314,13 +302,8 @@ func areS3ProfileFieldsEqual(expected rmn.S3StoreProfile, found rmn.S3StoreProfi
 func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret *corev1.Secret, data map[string][]byte, mirrorPeers []multiclusterv1alpha1.MirrorPeer, ramenHubNamespace string, logger *slog.Logger) error {
 	logger.Info("Starting to update Ramen Hub Operator config", "SecretName", secret.Name, "Namespace", secret.Namespace)
 
-	clusterPeerRef, err := utils.CreatePeerRefFromSecret(secret)
-	if err != nil {
-		logger.Error("Failed to create peer reference from secret", "error", err, "SecretName", secret.Name, "Namespace", secret.Namespace)
-		return err
-	}
-
 	if mirrorPeers == nil {
+		var err error
 		mirrorPeers, err = utils.FetchAllMirrorPeers(ctx, rc)
 		if err != nil {
 			logger.Error("Failed to fetch all MirrorPeers", "error", err)
@@ -328,8 +311,25 @@ func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret 
 		}
 	}
 
-	if !isS3ProfileManagedPeerRef(clusterPeerRef, mirrorPeers) {
-		logger.Info("Manage S3 is disabled on MirrorPeer spec, skipping update", "PeerRef", clusterPeerRef)
+	if _, ok := secret.Annotations[utils.MirrorPeerNameAnnotationKey]; !ok {
+		return fmt.Errorf("failed to find MirrorPeerName on secret")
+	}
+
+	mirrorPeerName := secret.Annotations[utils.MirrorPeerNameAnnotationKey]
+	var foundMirrorPeer *multiclusterv1alpha1.MirrorPeer
+	for _, mp := range mirrorPeers {
+		if mp.Name == mirrorPeerName {
+			foundMirrorPeer = &mp
+			break
+		}
+	}
+
+	if foundMirrorPeer == nil {
+		return fmt.Errorf("MirrorPeer %q not found", mirrorPeerName)
+	}
+
+	if !foundMirrorPeer.Spec.ManageS3 {
+		logger.Info("Manage S3 is disabled on MirrorPeer spec, skipping update", "MirrorPeer", mirrorPeerName)
 		return nil
 	}
 
@@ -348,7 +348,7 @@ func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret 
 		Name:      utils.RamenHubOperatorConfigName,
 		Namespace: ramenHubNamespace,
 	}
-	err = rc.Get(ctx, namespacedName, &currentRamenConfigMap)
+	err := rc.Get(ctx, namespacedName, &currentRamenConfigMap)
 	if err != nil {
 		logger.Error("Failed to fetch Ramen Hub Operator config map", "error", err, "ConfigMapName", namespacedName)
 		return err

@@ -67,6 +67,10 @@ var (
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      s3SecretName,
 			Namespace: s3SecretNamespace,
+			Annotations: map[string]string{
+				OBCTypeAnnotationKey:              "cluster",
+				utils.MirrorPeerNameAnnotationKey: "test-mirrorpeer",
+			},
 		},
 		Status: obv1alpha1.ObjectBucketClaimStatus{
 			Phase: obv1alpha1.ObjectBucketClaimStatusPhaseBound,

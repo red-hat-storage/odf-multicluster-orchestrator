@@ -39,6 +39,10 @@ func CreateUniqueSecretName(managedCluster, storageClusterNamespace, storageClus
 	return CreateUniqueName(managedCluster, storageClusterNamespace, storageClusterName)[0:39]
 }
 
+func CreateUniqueSecretNameForClient(providerKey, clientKey1, clientKey2 string) string {
+	return CreateUniqueName(providerKey, clientKey1, clientKey2)[0:39]
+}
+
 func CreateUniqueReplicationId(clusterFSIDs map[string]string) (string, error) {
 	var fsids []string
 	for _, v := range clusterFSIDs {
@@ -56,15 +60,26 @@ func CreateUniqueReplicationId(clusterFSIDs map[string]string) (string, error) {
 	return CreateUniqueName(fsids...)[0:39], nil
 }
 
-func GenerateUniqueIdForMirrorPeer(mirrorPeer multiclusterv1alpha1.MirrorPeer) string {
+func GenerateUniqueIdForMirrorPeer(mirrorPeer multiclusterv1alpha1.MirrorPeer, hasStorageClientRef bool) string {
 	var peerAccumulator []string
 
-	for _, peer := range mirrorPeer.Spec.Items {
-		peerAccumulator = append(peerAccumulator, peer.ClusterName)
+	if hasStorageClientRef {
+		for _, peer := range mirrorPeer.Spec.Items {
+			peerAccumulator = append(peerAccumulator, GetKey(peer.ClusterName, peer.StorageClusterRef.Name))
+		}
+	} else {
+		for _, peer := range mirrorPeer.Spec.Items {
+			peerAccumulator = append(peerAccumulator, peer.ClusterName)
+		}
+
 	}
 
 	sort.Strings(peerAccumulator)
 
 	checksum := sha1.Sum([]byte(strings.Join(peerAccumulator, "-")))
 	return hex.EncodeToString(checksum[:])
+}
+
+func GetKey(clusterName, clientName string) string {
+	return fmt.Sprintf("%s_%s", clusterName, clientName)
 }

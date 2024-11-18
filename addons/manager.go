@@ -21,7 +21,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	runtimewait "k8s.io/apimachinery/pkg/util/wait"
@@ -214,6 +216,43 @@ func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.
 		os.Exit(1)
 	}
 }
+func isProviderModeEnabled(ctx context.Context, cl client.Reader, namespace string, logger *slog.Logger) bool {
+	storageClusterCRD := &metav1.PartialObjectMetadata{}
+	storageClusterCRD.SetGroupVersionKind(
+		extv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"),
+	)
+	storageClusterCRD.Name = "storageclusters.ocs.openshift.io"
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(storageClusterCRD), storageClusterCRD); client.IgnoreNotFound(err) != nil {
+		logger.Error("Failed to find presence of StorageCluster CRD", "Error", err)
+		return false
+	}
+
+	if storageClusterCRD.UID != "" {
+		storageClusters := &metav1.PartialObjectMetadataList{}
+		storageClusters.SetGroupVersionKind(
+			schema.GroupVersionKind{
+				Group:   "ocs.openshift.io",
+				Version: "v1",
+				Kind:    "StorageCluster",
+			},
+		)
+		if err := cl.List(ctx, storageClusters, client.InNamespace(namespace), client.Limit(1)); err != nil {
+			logger.Error("Failed to list StorageCluster CR")
+			return false
+		}
+		if len(storageClusters.Items) < 1 {
+			logger.Error("StorageCluster CR does not exist")
+			return false
+		}
+		logger.Info("Checking if StorageCluster indicates ODF is deployed in provider mode")
+		if storageClusters.Items[0].GetAnnotations()["ocs.openshift.io/deployment-mode"] != "provider" {
+			return false
+		}
+	}
+
+	logger.Info("Conditions not met. Controllers will be skipped.")
+	return true
+}
 
 func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slog.Logger) {
 	hubConfig, err := GetClientConfig(options.HubKubeconfigFile)
@@ -251,40 +290,54 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slo
 
 	currentNamespace := os.Getenv("POD_NAMESPACE")
 
-	if err = mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-		logger.Info("Waiting for MaintenanceMode CRD to be established. MaintenanceMode controller is not running yet.")
-		// Wait for 45s as it takes time for MaintenanceMode CRD to be created.
-		return runtimewait.PollUntilContextCancel(ctx, 15*time.Second, true,
-			func(ctx context.Context) (done bool, err error) {
-				var crd extv1.CustomResourceDefinition
-				readErr := mgr.GetAPIReader().Get(ctx, types.NamespacedName{Name: "maintenancemodes.ramendr.openshift.io"}, &crd)
-				if readErr != nil {
-					logger.Error("Unable to get MaintenanceMode CRD", readErr)
-					// Do not initialize err as we want to retry.
-					// err!=nil or done==true will end polling.
-					done = false
-					return
-				}
-				if crd.Spec.Group == "ramendr.openshift.io" && crd.Spec.Names.Kind == "MaintenanceMode" {
-					if err = (&MaintenanceModeReconciler{
-						Scheme:           mgr.GetScheme(),
-						SpokeClient:      mgr.GetClient(),
-						SpokeClusterName: options.SpokeClusterName,
-						Logger:           logger.With("controller", "MaintenanceModeReconciler"),
-					}).SetupWithManager(mgr); err != nil {
-						klog.Error("Unable to create MaintenanceMode controller.", err)
+	if !isProviderModeEnabled(ctx, mgr.GetAPIReader(), currentNamespace, logger) {
+		logger.Info("Cluster is not running in provider mode. Setting up blue and maintenance mode controllers")
+		if err = mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+			logger.Info("Waiting for MaintenanceMode CRD to be established. MaintenanceMode controller is not running yet.")
+			// Wait for 45s as it takes time for MaintenanceMode CRD to be created.
+			return runtimewait.PollUntilContextCancel(ctx, 15*time.Second, true,
+				func(ctx context.Context) (done bool, err error) {
+					var crd extv1.CustomResourceDefinition
+					readErr := mgr.GetAPIReader().Get(ctx, types.NamespacedName{Name: "maintenancemodes.ramendr.openshift.io"}, &crd)
+					if readErr != nil {
+						logger.Error("Unable to get MaintenanceMode CRD", "Error", readErr)
+						// Do not initialize err as we want to retry.
+						// err!=nil or done==true will end polling.
+						done = false
 						return
 					}
-					logger.Info("MaintenanceMode CRD exists and controller is now running")
-					done = true
+					if crd.Spec.Group == "ramendr.openshift.io" && crd.Spec.Names.Kind == "MaintenanceMode" {
+						if err = (&MaintenanceModeReconciler{
+							Scheme:           mgr.GetScheme(),
+							SpokeClient:      mgr.GetClient(),
+							SpokeClusterName: options.SpokeClusterName,
+							Logger:           logger.With("controller", "MaintenanceModeReconciler"),
+						}).SetupWithManager(mgr); err != nil {
+							klog.Error("Unable to create MaintenanceMode controller.", err)
+							return
+						}
+						logger.Info("MaintenanceMode CRD exists and controller is now running")
+						done = true
+						return
+					}
+					done = false
 					return
-				}
-				done = false
-				return
-			})
-	})); err != nil {
-		logger.Error("Failed to poll MaintenanceMode", "error", err)
-		os.Exit(1)
+				})
+		})); err != nil {
+			logger.Error("Failed to poll MaintenanceMode", "error", err)
+			os.Exit(1)
+		}
+
+		if err = (&BlueSecretReconciler{
+			Scheme:           mgr.GetScheme(),
+			HubClient:        hubClient,
+			SpokeClient:      mgr.GetClient(),
+			SpokeClusterName: options.SpokeClusterName,
+			Logger:           logger.With("controller", "BlueSecretReconciler"),
+		}).SetupWithManager(mgr); err != nil {
+			logger.Error("Failed to create BlueSecret controller", "controller", "BlueSecret", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	if err = mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
@@ -299,17 +352,6 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slo
 		return nil
 	})); err != nil {
 		logger.Error("Failed to start lease updater", "error", err)
-		os.Exit(1)
-	}
-
-	if err = (&BlueSecretReconciler{
-		Scheme:           mgr.GetScheme(),
-		HubClient:        hubClient,
-		SpokeClient:      mgr.GetClient(),
-		SpokeClusterName: options.SpokeClusterName,
-		Logger:           logger.With("controller", "BlueSecretReconciler"),
-	}).SetupWithManager(mgr); err != nil {
-		logger.Error("Failed to create BlueSecret controller", "controller", "BlueSecret", "error", err)
 		os.Exit(1)
 	}
 

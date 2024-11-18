@@ -77,7 +77,7 @@ func (r *BlueSecretReconciler) syncBlueSecretForRook(ctx context.Context, secret
 		}
 		labelType = utils.SourceLabel
 
-		blueSecret, err = generateBlueSecret(secret, labelType, utils.CreateUniqueSecretName(r.SpokeClusterName, secret.Namespace, storageClusterName), storageClusterName, r.SpokeClusterName, customData)
+		blueSecret, err = generateBlueSecret(secret, labelType, utils.CreateUniqueSecretName(r.SpokeClusterName, secret.Namespace, storageClusterName), storageClusterName, r.SpokeClusterName, customData, nil)
 		if err != nil {
 			return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: %v", secret.Name, secret.Namespace, r.SpokeClusterName, err)
 		}
