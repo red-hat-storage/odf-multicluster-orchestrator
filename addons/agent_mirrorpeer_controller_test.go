@@ -3,6 +3,7 @@ package addons
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
@@ -126,6 +127,7 @@ func TestMirrorPeerReconcile(t *testing.T) {
 	ctx := context.TODO()
 	scheme := mgrScheme
 	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer1, &mirrorpeer2).Build()
+	os.Setenv("POD_NAMESPACE", "test-namespace")
 	oppositePeerRefsArray := make([][]multiclusterv1alpha1.PeerRef, 0)
 	// Quick iteration to get peer refs
 	for _, pr := range mirrorpeer1.Spec.Items {
@@ -225,7 +227,7 @@ func TestDisableMirroring(t *testing.T) {
 			},
 		}
 
-		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&storageCluster).Build()
+		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&storageCluster, &odfInfoConfigMap).Build()
 		r := MirrorPeerReconciler{
 			HubClient:        fakeHubClient,
 			SpokeClient:      fakeSpokeClient,
@@ -304,7 +306,7 @@ func TestDeleteGreenSecret(t *testing.T) {
 }
 
 func TestDeleteS3(t *testing.T) {
-	bucketName := utils.GenerateBucketName(mirrorPeer)
+	bucketName := utils.GenerateBucketName(mirrorPeer, false)
 	ctx := context.TODO()
 	scheme := mgrScheme
 	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer1).Build()

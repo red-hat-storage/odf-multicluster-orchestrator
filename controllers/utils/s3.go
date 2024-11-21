@@ -28,9 +28,10 @@ const (
 	RamenHubOperatorConfigName = "ramen-hub-operator-config"
 
 	//handlers
-	RookSecretHandlerName = "rook"
-	S3SecretHandlerName   = "s3"
-	DRModeAnnotationKey   = "multicluster.openshift.io/mode"
+	RookSecretHandlerName       = "rook"
+	S3SecretHandlerName         = "s3"
+	DRModeAnnotationKey         = "multicluster.openshift.io/mode"
+	MirrorPeerNameAnnotationKey = "multicluster.odf.openshift.io/mirrorpeer"
 )
 
 func GetCurrentStorageClusterRef(mp *multiclusterv1alpha1.MirrorPeer, spokeClusterName string) (*multiclusterv1alpha1.StorageClusterRef, error) {
@@ -49,21 +50,18 @@ func GetEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-func GenerateBucketName(mirrorPeer multiclusterv1alpha1.MirrorPeer, clientName ...string) string {
-	mirrorPeerId := GenerateUniqueIdForMirrorPeer(mirrorPeer)
+func GenerateBucketName(mirrorPeer multiclusterv1alpha1.MirrorPeer, hasStorageClientRef bool) string {
+	mirrorPeerId := GenerateUniqueIdForMirrorPeer(mirrorPeer, hasStorageClientRef)
 	bucketGenerateName := BucketGenerateName
-	if len(clientName) > 0 && clientName[0] != "" {
-		bucketGenerateName = fmt.Sprintf("%s-%s", BucketGenerateName, clientName[0])
-	}
-
 	return fmt.Sprintf("%s-%s", bucketGenerateName, mirrorPeerId)
 }
 
-func CreateOrUpdateObjectBucketClaim(ctx context.Context, c client.Client, bucketName, bucketNamespace string) (controllerutil.OperationResult, error) {
+func CreateOrUpdateObjectBucketClaim(ctx context.Context, c client.Client, bucketName, bucketNamespace string, annotations map[string]string) (controllerutil.OperationResult, error) {
 	noobaaOBC := &obv1alpha1.ObjectBucketClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      bucketName,
-			Namespace: bucketNamespace,
+			Name:        bucketName,
+			Namespace:   bucketNamespace,
+			Annotations: annotations, // Set annotations here
 		},
 	}
 
@@ -71,6 +69,14 @@ func CreateOrUpdateObjectBucketClaim(ctx context.Context, c client.Client, bucke
 		noobaaOBC.Spec = obv1alpha1.ObjectBucketClaimSpec{
 			BucketName:       bucketName,
 			StorageClassName: fmt.Sprintf("%s.noobaa.io", bucketNamespace),
+		}
+
+		if noobaaOBC.Annotations == nil {
+			noobaaOBC.Annotations = annotations
+		} else {
+			for key, value := range annotations {
+				noobaaOBC.Annotations[key] = value
+			}
 		}
 
 		return nil

@@ -166,7 +166,7 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, managedCluste
 				return fmt.Errorf("failed to marshal client info for key %s: %w", key, err)
 			}
 
-			clientInfoMap[fmt.Sprintf("%s/%s", managedCluster.Name, client.Name)] = string(clientInfoJSON)
+			clientInfoMap[utils.GetKey(managedCluster.Name, client.Name)] = string(clientInfoJSON)
 		}
 	}
 
@@ -187,6 +187,11 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, managedCluste
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, c, configMap, func() error {
+
+		if configMap.Data == nil {
+			configMap.Data = make(map[string]string)
+		}
+
 		for clientKey, clientInfo := range clientInfoMap {
 			configMap.Data[clientKey] = clientInfo
 		}

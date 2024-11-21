@@ -105,7 +105,7 @@ storageSystemName: "ocs-storagecluster-storagesystem"
 		assert.NotNil(t, cm)
 
 		expectedData := map[string]string{
-			"cluster1-name/client1": `{"clusterId":"cluster1","name":"client1","providerInfo":{"version":"4.Y.Z","deploymentType":"internal","storageSystemName":"ocs-storagecluster-storagesystem","providerManagedClusterName":"cluster1","namespacedName":{"Namespace":"openshift-storage","Name":"ocs-storagecluster"},"storageProviderEndpoint":"","cephClusterFSID":"7a3d6b81-a55d-44fe-84d0-46c67cd395ca"},"clientManagedClusterName":"cluster1-name","clientId":"client1"}`,
+			"cluster1-name_client1": `{"clusterId":"cluster1","name":"client1","providerInfo":{"version":"4.Y.Z","deploymentType":"internal","storageSystemName":"ocs-storagecluster-storagesystem","providerManagedClusterName":"cluster1","namespacedName":{"Namespace":"openshift-storage","Name":"ocs-storagecluster"},"storageProviderEndpoint":"","cephClusterFSID":"7a3d6b81-a55d-44fe-84d0-46c67cd395ca"},"clientManagedClusterName":"cluster1-name","clientId":"client1"}`,
 		}
 
 		assert.Equal(t, expectedData, cm.Data)
@@ -152,8 +152,8 @@ storageSystemName: "ocs-storagecluster-storagesystem"
 		assert.NotNil(t, cm)
 
 		expectedData := map[string]string{
-			"cluster1-name/client1": `{"clusterId":"cluster1","name":"client1","providerInfo":{"version":"4.Y.Z","deploymentType":"internal","storageSystemName":"ocs-storagecluster-storagesystem","providerManagedClusterName":"cluster1","namespacedName":{"Namespace":"openshift-storage","Name":"ocs-storagecluster"},"storageProviderEndpoint":"","cephClusterFSID":"7a3d6b81-a55d-44fe-84d0-46c67cd395ca"},"clientManagedClusterName":"cluster1-name","clientId":"client1"}`,
-			"cluster2-name/client2": `{"clusterId":"cluster2","name":"client2","providerInfo":{"version":"4.Y.Z","deploymentType":"internal","storageSystemName":"ocs-storagecluster-storagesystem","providerManagedClusterName":"cluster2","namespacedName":{"Namespace":"openshift-storage","Name":"ocs-storagecluster"},"storageProviderEndpoint":"","cephClusterFSID":"8b3d6b81-b55d-55fe-94d0-56c67cd495ca"},"clientManagedClusterName":"cluster2-name","clientId":"client2"}`,
+			"cluster1-name_client1": `{"clusterId":"cluster1","name":"client1","providerInfo":{"version":"4.Y.Z","deploymentType":"internal","storageSystemName":"ocs-storagecluster-storagesystem","providerManagedClusterName":"cluster1","namespacedName":{"Namespace":"openshift-storage","Name":"ocs-storagecluster"},"storageProviderEndpoint":"","cephClusterFSID":"7a3d6b81-a55d-44fe-84d0-46c67cd395ca"},"clientManagedClusterName":"cluster1-name","clientId":"client1"}`,
+			"cluster2-name_client2": `{"clusterId":"cluster2","name":"client2","providerInfo":{"version":"4.Y.Z","deploymentType":"internal","storageSystemName":"ocs-storagecluster-storagesystem","providerManagedClusterName":"cluster2","namespacedName":{"Namespace":"openshift-storage","Name":"ocs-storagecluster"},"storageProviderEndpoint":"","cephClusterFSID":"8b3d6b81-b55d-55fe-94d0-56c67cd495ca"},"clientManagedClusterName":"cluster2-name","clientId":"client2"}`,
 		}
 
 		assert.Equal(t, expectedData, cm.Data)

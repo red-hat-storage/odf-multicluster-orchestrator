@@ -195,6 +195,13 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
+	// Check if the MirrorPeer contains StorageClient reference
+	hasStorageClientRef, err := utils.IsStorageClientType(ctx, r.Client, mirrorPeer, false)
+	if err != nil {
+		logger.Error("Failed to determine if MirrorPeer contains StorageClient reference", "error", err)
+		return ctrl.Result{}, err
+	}
+
 	if err := r.processManagedClusterAddon(ctx, mirrorPeer); err != nil {
 		logger.Error("Failed to process managedclusteraddon", "error", err)
 		return ctrl.Result{}, err
@@ -210,14 +217,28 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if mirrorPeer.Spec.ManageS3 {
 		for _, peerRef := range mirrorPeer.Spec.Items {
 			var s3Secret corev1.Secret
+			var secretName string
+
+			var namespace string
+			if hasStorageClientRef {
+				s3SecretName, s3SecretNamespace, err := GetNamespacedNameForClientS3Secret(ctx, r.Client, peerRef, &mirrorPeer)
+				if err != nil {
+					return ctrl.Result{}, fmt.Errorf("failed to get namespace for s3 secret %w", err)
+				}
+				secretName = s3SecretName
+				namespace = s3SecretNamespace
+			} else {
+				secretName = utils.GetSecretNameByPeerRef(peerRef, utils.S3ProfilePrefix)
+				namespace = peerRef.ClusterName
+			}
 			namespacedName := types.NamespacedName{
-				Name:      utils.GetSecretNameByPeerRef(peerRef, utils.S3ProfilePrefix),
-				Namespace: peerRef.ClusterName,
+				Name:      secretName,
+				Namespace: namespace,
 			}
 			err = r.Client.Get(ctx, namespacedName, &s3Secret)
 			if err != nil {
 				if k8serrors.IsNotFound(err) {
-					logger.Info("S3 secret is not yet synchronised. retrying till it is available. Requeing request...", "Cluster", peerRef.ClusterName)
+					logger.Info("S3 secret is not yet synchronised. retrying till it is available. Requeing request...", "Secret Name", secretName, "Namespace/Cluster", namespace)
 					return ctrl.Result{Requeue: true}, nil
 				}
 				logger.Error("Error in fetching s3 internal secret", "Cluster", peerRef.ClusterName, "error", err)
@@ -236,20 +257,13 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	err = r.createDRClusters(ctx, &mirrorPeer)
+	err = r.createDRClusters(ctx, &mirrorPeer, hasStorageClientRef)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.Info("Secret not synchronised yet, retrying to create DRCluster", "MirrorPeer", mirrorPeer.Name)
 			return ctrl.Result{Requeue: true}, nil
 		}
 		logger.Error("Failed to create DRClusters for MirrorPeer", "error", err)
-		return ctrl.Result{}, err
-	}
-
-	// Check if the MirrorPeer contains StorageClient reference
-	hasStorageClientRef, err := utils.IsStorageClientType(ctx, r.Client, mirrorPeer, false)
-	if err != nil {
-		logger.Error("Failed to determine if MirrorPeer contains StorageClient reference", "error", err)
 		return ctrl.Result{}, err
 	}
 
@@ -266,57 +280,74 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return result, err
 		}
 	}
-	return r.updateMirrorPeerStatus(ctx, mirrorPeer)
+	return r.updateMirrorPeerStatus(ctx, mirrorPeer, hasStorageClientRef)
 }
 
 func createManifestWorkForClusterPairingConfigMap(ctx context.Context, client client.Client, logger *slog.Logger, mirrorPeer multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
+	logger.Info("Starting to create ManifestWork for cluster pairing ConfigMap")
+
 	clientInfoMap, err := fetchClientInfoConfigMap(ctx, client)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			logger.Info("Client info config map not found. Retrying request another time...")
+			logger.Info("Client info ConfigMap not found; requeuing for later retry")
 			return ctrl.Result{Requeue: true}, nil
 		}
 		return ctrl.Result{}, err
 	}
 
+	logger.Info("Fetched client info ConfigMap successfully")
 	items := mirrorPeer.Spec.Items
 
-	ci1, err := getClientInfoFromConfigMap(clientInfoMap.Data, getKey(items[0].ClusterName, items[0].StorageClusterRef.Name))
+	ci1, err := getClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(items[0].ClusterName, items[0].StorageClusterRef.Name))
 	if err != nil {
+		logger.Error("Failed to get client info from ConfigMap for the first cluster")
 		return ctrl.Result{}, err
 	}
-	ci2, err := getClientInfoFromConfigMap(clientInfoMap.Data, getKey(items[1].ClusterName, items[1].StorageClusterRef.Name))
+
+	logger.Info("Fetched client info for the first cluster", "ClientInfo", ci1)
+
+	ci2, err := getClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(items[1].ClusterName, items[1].StorageClusterRef.Name))
 	if err != nil {
+		logger.Error("Failed to get client info from ConfigMap for the second cluster")
 		return ctrl.Result{}, err
 	}
 
-	if err := updateProviderConfigMap(ctx, client, mirrorPeer, ci1, ci2); err != nil {
+	logger.Info("Fetched client info for the second cluster", "ClientInfo", ci2)
+	logger.Info("Updating provider ConfigMap with client pairing", "ProviderClient1", ci1.ClientID, "PairedClient1", ci2.ClientID)
+	if err := updateProviderConfigMap(logger, ctx, client, mirrorPeer, ci1, ci2); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if err := updateProviderConfigMap(ctx, client, mirrorPeer, ci2, ci1); err != nil {
+	logger.Info("Updating provider ConfigMap with client pairing", "ProviderClient2", ci2.ClientID, "PairedClient2", ci1.ClientID)
+	if err := updateProviderConfigMap(logger, ctx, client, mirrorPeer, ci2, ci1); err != nil {
 		return ctrl.Result{}, err
 	}
 
+	logger.Info("Successfully created ManifestWork for cluster pairing ConfigMap")
 	return ctrl.Result{}, nil
 }
 
 // updateProviderConfigMap updates the ConfigMap on the provider with the new client pairing
-func updateProviderConfigMap(ctx context.Context, client client.Client, mirrorPeer multiclusterv1alpha1.MirrorPeer, providerClientInfo ClientInfo, pairedClientInfo ClientInfo) error {
+func updateProviderConfigMap(logger *slog.Logger, ctx context.Context, client client.Client, mirrorPeer multiclusterv1alpha1.MirrorPeer, providerClientInfo ClientInfo, pairedClientInfo ClientInfo) error {
 	providerName := providerClientInfo.ProviderInfo.ProviderManagedClusterName
-	manifestWorkName := "dr-client-pair"
+	manifestWorkName := "storage-client-mapping"
 	manifestWorkNamespace := providerName
 
-	// Attempt to get the existing ManifestWork
+	logger.Info("Fetching existing ManifestWork for provider", "Namespace", manifestWorkNamespace)
 	manifestWork, err := utils.GetManifestWork(ctx, client, manifestWorkName, manifestWorkNamespace)
 	var configMap *corev1.ConfigMap
 
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			// ManifestWork does not exist; create a new ConfigMap
+			logger.Info("ManifestWork not found; creating a new ConfigMap")
 			configMap = &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "ConfigMap",
+					APIVersion: corev1.SchemeGroupVersion.String(),
+				},
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "dr-client-pair-config",
+					Name:      "storage-client-mapping",
+					Namespace: providerClientInfo.ProviderInfo.NamespacedName.Namespace,
 				},
 				Data: make(map[string]string),
 			}
@@ -324,7 +355,7 @@ func updateProviderConfigMap(ctx context.Context, client client.Client, mirrorPe
 			return fmt.Errorf("failed to get ManifestWork: %w", err)
 		}
 	} else {
-		// Decode existing ConfigMap
+		logger.Info("Found existing ManifestWork, decoding ConfigMap")
 		if len(manifestWork.Spec.Workload.Manifests) == 0 {
 			return fmt.Errorf("ManifestWork %s has no manifests", manifestWorkName)
 		}
@@ -335,6 +366,7 @@ func updateProviderConfigMap(ctx context.Context, client client.Client, mirrorPe
 		}
 	}
 
+	logger.Info("Updating ConfigMap with paired client info", "ProviderClientID", providerClientInfo.ClientID, "PairedClientID", pairedClientInfo.ClientID)
 	configMap.Data[providerClientInfo.ClientID] = pairedClientInfo.ClientID
 
 	updatedObjJson, err := json.Marshal(configMap)
@@ -349,16 +381,14 @@ func updateProviderConfigMap(ctx context.Context, client client.Client, mirrorPe
 		UID:        mirrorPeer.UID,
 	}
 
+	logger.Info("Creating or updating ManifestWork with updated ConfigMap")
 	_, err = utils.CreateOrUpdateManifestWork(ctx, client, manifestWorkName, manifestWorkNamespace, updatedObjJson, ownerRef)
 	if err != nil {
 		return fmt.Errorf("failed to update ManifestWork for provider %s: %w", providerName, err)
 	}
 
+	logger.Info("Successfully updated ManifestWork for provider", "ProviderName", providerName)
 	return nil
-}
-
-func getKey(clusterName, clientName string) string {
-	return fmt.Sprintf("%s/%s", clusterName, clientName)
 }
 
 func createStorageClusterPeer(ctx context.Context, client client.Client, logger *slog.Logger, mirrorPeer multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
@@ -375,10 +405,12 @@ func createStorageClusterPeer(ctx context.Context, client client.Client, logger 
 	clientInfo := make([]ClientInfo, 0)
 
 	for _, item := range items {
-		ci, err := getClientInfoFromConfigMap(clientInfoMap.Data, getKey(item.ClusterName, item.StorageClusterRef.Name))
+		logger.Info("Fetching info for client", "ClientKey", utils.GetKey(item.ClusterName, item.StorageClusterRef.Name))
+		ci, err := getClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(item.ClusterName, item.StorageClusterRef.Name))
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+		logger.Info("Client Info found", "ClientInfo", ci)
 		clientInfo = append(clientInfo, ci)
 	}
 
@@ -388,7 +420,7 @@ func createStorageClusterPeer(ctx context.Context, client client.Client, logger 
 		currentClient := clientInfo[i]
 		// Provider A StorageClusterPeer contains info of Provider B endpoint and ticket, hence this
 		if i == 0 {
-			oppositeClient := clientInfo[1]
+			oppositeClient = clientInfo[1]
 			storageClusterPeerName = getStorageClusterPeerName(oppositeClient.ProviderInfo.ProviderManagedClusterName)
 		} else {
 			oppositeClient = clientInfo[0]
@@ -396,11 +428,16 @@ func createStorageClusterPeer(ctx context.Context, client client.Client, logger 
 		}
 
 		// Provider B's onboarding token will be used for Provider A's StorageClusterPeer
+		logger.Info("Fetching onboarding ticket in with name and namespace", "Name", mirrorPeer.GetUID(), "Namespace", oppositeClient.ProviderInfo.ProviderManagedClusterName)
 		onboardingToken, err := fetchOnboardingTicket(ctx, client, oppositeClient, mirrorPeer)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to fetch onboarding token for provider %s. %w", oppositeClient.ProviderInfo.ProviderManagedClusterName, err)
 		}
 		storageClusterPeer := ocsv1.StorageClusterPeer{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "StorageClusterPeer",
+				APIVersion: ocsv1.GroupVersion.String(),
+			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name: storageClusterPeerName,
 				// This provider A namespace on which the Storage object exists
@@ -453,7 +490,7 @@ func fetchOnboardingTicket(ctx context.Context, client client.Client, clientInfo
 		return "", fmt.Errorf("failed to fetch secret %s in namespace %s", secretName, secretNamespace)
 	}
 
-	tokenData, exists := tokenSecret.Data["storagecluster-peer-token"]
+	tokenData, exists := tokenSecret.Data[utils.SecretDataKey]
 	if !exists {
 		return "", fmt.Errorf("token data not found in secret %s", secretName)
 	}
@@ -519,7 +556,7 @@ func getConfig(ctx context.Context, c client.Client, mp multiclusterv1alpha1.Mir
 		}
 		for _, item := range mp.Spec.Items {
 			clientName := item.StorageClusterRef.Name
-			clientInfo, err := getClientInfoFromConfigMap(clientInfoMap.Data, getKey(item.ClusterName, clientName))
+			clientInfo, err := getClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(item.ClusterName, clientName))
 			if err != nil {
 				return []ManagedClusterAddonConfig{}, err
 			}
@@ -578,6 +615,7 @@ func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, m
 			}
 		}
 
+		logger.Info("Installing agents on the namespace", "InstallNamespace", config.InstallNamespace)
 		_, err = controllerutil.CreateOrUpdate(ctx, r.Client, &managedClusterAddOn, func() error {
 			managedClusterAddOn.Spec.InstallNamespace = config.InstallNamespace
 			if err := controllerutil.SetOwnerReference(&mirrorPeer, &managedClusterAddOn, r.Scheme); err != nil {
@@ -820,14 +858,45 @@ func checkK8sUpdateErrors(err error, obj client.Object, logger *slog.Logger) (ct
 	return ctrl.Result{}, nil
 }
 
-func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer) error {
+func GetNamespacedNameForClientS3Secret(ctx context.Context, client client.Client, pr multiclusterv1alpha1.PeerRef, mp *multiclusterv1alpha1.MirrorPeer) (string, string, error) {
+	clientInfoMap, err := fetchClientInfoConfigMap(ctx, client)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return "", "", fmt.Errorf("client info ConfigMap not found; requeuing for later retry %w", err)
+		}
+		return "", "", err
+	}
+	ci, err := getClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(pr.ClusterName, pr.StorageClusterRef.Name))
+	if err != nil {
+		return "", "", err
+	}
+	providerManagedClusterName := ci.ProviderInfo.ProviderManagedClusterName
+	pr1 := mp.Spec.Items[0]
+	pr2 := mp.Spec.Items[1]
+	s3SecretName := utils.CreateUniqueSecretNameForClient(providerManagedClusterName, utils.GetKey(pr1.ClusterName, pr1.StorageClusterRef.Name), utils.GetKey(pr2.ClusterName, pr2.StorageClusterRef.Name))
+	s3SecretNamespace := providerManagedClusterName
+
+	return s3SecretName, s3SecretNamespace, nil
+}
+func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer, hasStorageClientRef bool) error {
 	logger := r.Logger
 	currentNamespace := os.Getenv("POD_NAMESPACE")
 
 	for _, pr := range mp.Spec.Items {
 		clusterName := pr.ClusterName
-		s3SecretName := utils.GetSecretNameByPeerRef(pr, utils.S3ProfilePrefix)
-
+		var s3SecretName string
+		var s3SecretNamespace string
+		if hasStorageClientRef {
+			name, namespace, err := GetNamespacedNameForClientS3Secret(ctx, r.Client, pr, mp)
+			if err != nil {
+				return fmt.Errorf("failed to get namespace for s3 secret %w", err)
+			}
+			s3SecretName = name
+			s3SecretNamespace = namespace
+		} else {
+			s3SecretName = utils.GetSecretNameByPeerRef(pr, utils.S3ProfilePrefix)
+			s3SecretNamespace = pr.ClusterName
+		}
 		dc := ramenv1alpha1.DRCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: clusterName},
 		}
@@ -849,6 +918,21 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multicl
 				return err
 			}
 			fsid = rt.FSID
+		} else if mp.Spec.Type == multiclusterv1alpha1.Async && hasStorageClientRef {
+			logger.Info("Fetching client info and then FSID for creating DRClusters", "Client", utils.GetKey(pr.ClusterName, pr.StorageClusterRef.Name))
+			clientInfoMap, err := fetchClientInfoConfigMap(ctx, r.Client)
+			if err != nil {
+				if k8serrors.IsNotFound(err) {
+					return fmt.Errorf("client info config map not found. Retrying request another time")
+				}
+				return err
+			}
+			ci, err := getClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(pr.ClusterName, pr.StorageClusterRef.Name))
+			if err != nil {
+				return err
+			}
+			logger.Info("Found FSID for client", "Client", utils.GetKey(pr.ClusterName, pr.StorageClusterRef.Name), "FSID", ci.ProviderInfo.CephClusterFSID)
+			fsid = ci.ProviderInfo.CephClusterFSID
 		} else {
 			logger.Info("Fetching rook secret ", "Secret Name:", rookSecretName)
 			hs, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: rookSecretName, Namespace: clusterName})
@@ -866,9 +950,9 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multicl
 
 		dc.Spec.Region = ramenv1alpha1.Region(fsid)
 		logger.Info("Fetching s3 secret ", "Secret Name:", s3SecretName)
-		ss, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: s3SecretName, Namespace: clusterName})
+		ss, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: s3SecretName, Namespace: s3SecretNamespace})
 		if err != nil {
-			logger.Error("Failed to fetch S3 secret", "error", err, "SecretName", s3SecretName, "Namespace", clusterName)
+			logger.Error("Failed to fetch S3 secret", "error", err, "SecretName", s3SecretName, "Namespace", s3SecretNamespace)
 			return err
 		}
 
@@ -956,29 +1040,47 @@ func (r *MirrorPeerReconciler) createClusterRoleBindingsForSpoke(ctx context.Con
 	return nil
 }
 
-func (r *MirrorPeerReconciler) updateMirrorPeerStatus(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
+func (r *MirrorPeerReconciler) updateMirrorPeerStatus(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, hasStorageClientRef bool) (ctrl.Result, error) {
 	logger := r.Logger
 
 	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
-		tokensExchanged, err := r.checkTokenExchangeStatus(ctx, mirrorPeer)
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				logger.Info("Secrets not found; Attempting to reconcile again", "MirrorPeer", mirrorPeer.Name)
-				return ctrl.Result{Requeue: true}, nil
+		isPeeringDone := false
+		if hasStorageClientRef {
+			providerModePeeringDone, err := isProviderModePeeringDone(ctx, r.Client, r.Logger, &mirrorPeer)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to check if provider mode peering is correctly done %w", err)
 			}
-			logger.Error("Error while exchanging tokens", "error", err, "MirrorPeer", mirrorPeer.Name)
-			mirrorPeer.Status.Message = err.Error()
+			isPeeringDone = providerModePeeringDone
+		} else {
+			tokensExchanged, err := r.checkTokenExchangeStatus(ctx, mirrorPeer)
+			if err != nil {
+				if k8serrors.IsNotFound(err) {
+					logger.Info("Secrets not found; Attempting to reconcile again", "MirrorPeer", mirrorPeer.Name)
+					return ctrl.Result{Requeue: true}, nil
+				}
+				logger.Error("Error while exchanging tokens", "error", err, "MirrorPeer", mirrorPeer.Name)
+				mirrorPeer.Status.Message = err.Error()
+				statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
+				if statusErr != nil {
+					logger.Error("Error occurred while updating the status of mirrorpeer", "error", statusErr, "MirrorPeer", mirrorPeer.Name)
+				}
+				return ctrl.Result{}, err
+			}
+			isPeeringDone = tokensExchanged
+		}
+
+		if isPeeringDone {
+			logger.Info("Peering of clusters is completed", "MirrorPeer", mirrorPeer.Name)
+			mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangedSecret
+			mirrorPeer.Status.Message = ""
 			statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
 			if statusErr != nil {
 				logger.Error("Error occurred while updating the status of mirrorpeer", "error", statusErr, "MirrorPeer", mirrorPeer.Name)
+				return ctrl.Result{Requeue: true}, nil
 			}
-			return ctrl.Result{}, err
-		}
-
-		if tokensExchanged {
-			logger.Info("Tokens exchanged", "MirrorPeer", mirrorPeer.Name)
-			mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangedSecret
-			mirrorPeer.Status.Message = ""
+			return ctrl.Result{}, nil
+		} else {
+			mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangingSecret
 			statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
 			if statusErr != nil {
 				logger.Error("Error occurred while updating the status of mirrorpeer", "error", statusErr, "MirrorPeer", mirrorPeer.Name)
@@ -988,7 +1090,7 @@ func (r *MirrorPeerReconciler) updateMirrorPeerStatus(ctx context.Context, mirro
 		}
 	} else {
 		// Sync mode status update, same flow as async but for s3 profile
-		s3ProfileSynced, err := r.checkS3ProfileStatus(ctx, mirrorPeer)
+		s3ProfileSynced, err := checkS3ProfileStatus(ctx, r.Client, logger, mirrorPeer, hasStorageClientRef)
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
 				logger.Info("S3 secrets not found; Attempting to reconcile again", "MirrorPeer", mirrorPeer.Name)
@@ -1018,22 +1120,97 @@ func (r *MirrorPeerReconciler) updateMirrorPeerStatus(ctx context.Context, mirro
 	return ctrl.Result{Requeue: true}, nil
 }
 
-func (r *MirrorPeerReconciler) checkS3ProfileStatus(ctx context.Context, mp multiclusterv1alpha1.MirrorPeer) (bool, error) {
-	logger := r.Logger
+func isProviderModePeeringDone(ctx context.Context, client client.Client, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer) (bool, error) {
+	isS3SecretSynced, err := checkS3ProfileStatus(ctx, client, logger, *mirrorPeer, true)
+	if err != nil {
+		logger.Error("failed to check if s3 secrets have been synced")
+		return false, err
+	}
+	logger.Info("S3 secrets sync status", "isS3SecretSynced", isS3SecretSynced)
+
+	isStorageClusterPeerManifestWorkCreated, err := checkStorageClusterPeerStatus(ctx, client, logger, mirrorPeer)
+	if err != nil {
+		logger.Error("failed to check if StorageClusterPeer have been created")
+		return false, err
+	}
+
+	logger.Info("StorageClusterPeer manifest work creation status", "isStorageClusterPeerManifestWorkCreated", isStorageClusterPeerManifestWorkCreated)
+	isClientPairingConfigMapCreated, err := checkClientPairingConfigMapStatus(ctx, client, logger, mirrorPeer)
+	if err != nil {
+		logger.Error("failed to check if client pair config map has been created")
+		return false, err
+	}
+
+	logger.Info("Client pairing ConfigMap creation status", "isClientPairingConfigMapCreated", isClientPairingConfigMapCreated)
+
+	isOnboardingTicketCreated, err := checkOnboardingTicketStatus(ctx, client, logger, mirrorPeer)
+	if err != nil {
+		logger.Error("failed to check if onboarding tickets has been created")
+		return false, err
+	}
+
+	logger.Info("Onboarding ticket creation status", "isOnboardingTicketCreated", isOnboardingTicketCreated)
+
+	allChecksPassed := isS3SecretSynced &&
+		isStorageClusterPeerManifestWorkCreated &&
+		isClientPairingConfigMapCreated &&
+		isOnboardingTicketCreated
+
+	logger.Info("Provider mode peering status", "AllChecksPassed", allChecksPassed)
+	return allChecksPassed, nil
+}
+
+func checkOnboardingTicketStatus(ctx context.Context, client client.Client, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer) (bool, error) {
+	logger = logger.With("MirrorPeer", mirrorPeer.Name)
+	clientInfoMap, err := fetchClientInfoConfigMap(ctx, client)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return false, fmt.Errorf("client info config map not found")
+		}
+		return false, fmt.Errorf("failed to fetch client info config map %w", err)
+	}
+	for _, item := range mirrorPeer.Spec.Items {
+		logger.Info("Fetching info for client", "ClientKey", utils.GetKey(item.ClusterName, item.StorageClusterRef.Name))
+		ci, err := getClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(item.ClusterName, item.StorageClusterRef.Name))
+		if err != nil {
+			return false, fmt.Errorf("failed to fetch client info from the config map %w", err)
+		}
+		logger.Info("Client Info found for checking onboarding ticket status", "ClientInfo", ci)
+		_, err = fetchOnboardingTicket(ctx, client, ci, *mirrorPeer)
+		if err != nil {
+			return false, fmt.Errorf("failed to fetch onboarding token for provider %s. %w", ci.ProviderInfo.ProviderManagedClusterName, err)
+		}
+	}
+
+	return true, nil
+}
+
+func checkS3ProfileStatus(ctx context.Context, client client.Client, logger *slog.Logger, mp multiclusterv1alpha1.MirrorPeer, hasStorageClientRef bool) (bool, error) {
 	logger.Info("Checking S3 profile status for each peer reference in the MirrorPeer", "MirrorPeerName", mp.Name)
 
 	for _, pr := range mp.Spec.Items {
-		clusterName := pr.ClusterName
-		s3SecretName := utils.GetSecretNameByPeerRef(pr, utils.S3ProfilePrefix)
-		logger.Info("Attempting to fetch S3 secret", "SecretName", s3SecretName, "ClusterName", clusterName)
+		var s3SecretName string
+		var s3SecretNamespace string
+		if hasStorageClientRef {
+			name, namespace, err := GetNamespacedNameForClientS3Secret(ctx, client, pr, &mp)
+			if err != nil {
+				return false, err
+			}
+			s3SecretName = name
+			s3SecretNamespace = namespace
+		} else {
+			s3SecretNamespace = pr.ClusterName
+			s3SecretName = utils.GetSecretNameByPeerRef(pr, utils.S3ProfilePrefix)
+		}
+		logger.Info("Attempting to fetch S3 secret", "SecretName", s3SecretName, "Namespace", s3SecretNamespace)
 
-		_, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: s3SecretName, Namespace: clusterName})
+		_, err := utils.FetchSecretWithName(ctx, client, types.NamespacedName{Name: s3SecretName, Namespace: s3SecretNamespace})
 		if err != nil {
-			logger.Error("Failed to fetch S3 secret", "error", err, "SecretName", s3SecretName, "ClusterName", clusterName)
+			logger.Error("Failed to fetch S3 secret", "error", err, "SecretName", s3SecretName, "Namespace", s3SecretNamespace)
 			return false, err
 		}
 
-		logger.Info("Successfully fetched S3 secret", "SecretName", s3SecretName, "ClusterName", clusterName)
+		logger.Info("Successfully fetched S3 secret", "SecretName", s3SecretName, "Namespace", s3SecretNamespace)
 	}
 
 	logger.Info("Successfully verified S3 profile status for all peer references", "MirrorPeerName", mp.Name)

@@ -5,9 +5,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -21,6 +23,7 @@ const (
 	DestinationLabel      SecretLabelType = "GREEN"
 	InternalLabel         SecretLabelType = "INTERNAL"
 	IgnoreLabel           SecretLabelType = "IGNORE"
+	ProviderLabel         SecretLabelType = "PROVIDER"
 	SecretLabelTypeKey                    = "multicluster.odf.openshift.io/secret-type"
 	CreatedByLabelKey                     = "multicluster.odf.openshift.io/created-by"
 	NamespaceKey                          = "namespace"
@@ -259,6 +262,15 @@ func FetchAllMirrorPeers(ctx context.Context, rc client.Client) ([]multiclusterv
 		return nil, err
 	}
 	return mirrorPeerListObj.Items, nil
+}
+
+func FetchMirrorPeerByName(ctx context.Context, rc client.Client, name string) (*multiclusterv1alpha1.MirrorPeer, error) {
+	var mirrorPeer multiclusterv1alpha1.MirrorPeer
+	err := rc.Get(ctx, types.NamespacedName{Name: name}, &mirrorPeer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch MirrorPeer %s: %w", name, err)
+	}
+	return &mirrorPeer, nil
 }
 
 func FetchSecretWithName(ctx context.Context, rc client.Client, secretName types.NamespacedName) (*corev1.Secret, error) {

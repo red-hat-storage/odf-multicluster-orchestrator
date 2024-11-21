@@ -53,25 +53,25 @@ func GetPeerRefForSpokeCluster(mp *multiclusterv1alpha1.MirrorPeer, spokeCluster
 
 func getPeerRefType(ctx context.Context, c client.Client, peerRef multiclusterv1alpha1.PeerRef, isManagedCluster bool) (PeerRefType, error) {
 	if isManagedCluster {
-		cm, err := GetODFInfoConfigMap(ctx, c, peerRef.StorageClusterRef.Namespace)
+		operatorNamespace := os.Getenv("POD_NAMESPACE")
+		cm, err := GetODFInfoConfigMap(ctx, c, operatorNamespace)
 		if err != nil {
 			return PeerRefTypeUnknown, fmt.Errorf("failed to get ODF Info ConfigMap for namespace %s: %w", peerRef.StorageClusterRef.Namespace, err)
 		}
 		var odfInfo ocsv1alpha1.OdfInfoData
 		for key, value := range cm.Data {
-			namespacedName := SplitKeyForNamespacedName(key)
-			if namespacedName.Name == peerRef.StorageClusterRef.Name {
-				err := yaml.Unmarshal([]byte(value), &odfInfo)
-				if err != nil {
-					return PeerRefTypeUnknown, fmt.Errorf("failed to unmarshal ODF info data for key %s: %w", key, err)
-				}
 
-				for _, client := range odfInfo.Clients {
-					if client.Name == peerRef.ClusterName {
-						return PeerRefTypeStorageClient, nil
-					}
+			err := yaml.Unmarshal([]byte(value), &odfInfo)
+			if err != nil {
+				return PeerRefTypeUnknown, fmt.Errorf("failed to unmarshal ODF info data for key %s: %w", key, err)
+			}
+
+			for _, client := range odfInfo.Clients {
+				if client.Name == peerRef.StorageClusterRef.Name {
+					return PeerRefTypeStorageClient, nil
 				}
 			}
+
 		}
 		return PeerRefTypeStorageCluster, nil
 	} else {
@@ -84,7 +84,7 @@ func getPeerRefType(ctx context.Context, c client.Client, peerRef multiclusterv1
 			return PeerRefTypeUnknown, err
 		}
 
-		if _, ok := cm.Data[peerRef.ClusterName]; ok {
+		if _, ok := cm.Data[fmt.Sprintf("%s_%s", peerRef.ClusterName, peerRef.StorageClusterRef.Name)]; ok {
 			return PeerRefTypeStorageClient, nil
 		}
 		return PeerRefTypeStorageCluster, nil

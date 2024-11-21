@@ -112,6 +112,9 @@ func fakeS3InternalSecret(t *testing.T, clusterName string) *corev1.Secret {
 			Labels: map[string]string{
 				utils.SecretLabelTypeKey: string(utils.InternalLabel),
 			},
+			Annotations: map[string]string{
+				utils.MirrorPeerNameAnnotationKey: "mirrorpeer",
+			},
 		},
 		Type: utils.SecretLabelTypeKey,
 		Data: data,
