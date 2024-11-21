@@ -40,6 +40,7 @@ const (
 	RBDFlattenVolumeReplicationClassLabelKey     = "replication.storage.openshift.io/flatten-mode"
 	RBDFlattenVolumeReplicationClassLabelValue   = "force"
 	RBDVolumeReplicationClassDefaultAnnotation   = "replication.storage.openshift.io/is-default-class"
+	StorageIDKey                                 = "storageid"
 )
 
 type DRPolicyReconciler struct {
@@ -188,6 +189,7 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 		labels := make(map[string]string)
 		labels[fmt.Sprintf(RamenLabelTemplate, ReplicationIDKey)] = replicationId
 		labels[fmt.Sprintf(RamenLabelTemplate, "maintenancemodes")] = "Failover"
+		labels[fmt.Sprintf(RamenLabelTemplate, StorageIDKey)] = clusterFSIDs[pr.ClusterName]
 		vrc := replicationv1alpha1.VolumeReplicationClass{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "VolumeReplicationClass",
