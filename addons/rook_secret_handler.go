@@ -197,6 +197,9 @@ func updateStorageCluster(secretName, storageClusterName, storageClusterNamespac
 	}
 
 	// Update secret name
+	if sc.Spec.Mirroring == nil {
+		sc.Spec.Mirroring = &ocsv1.MirroringSpec{}
+	}
 	if !utils.ContainsString(sc.Spec.Mirroring.PeerSecretNames, secretName) {
 		sc.Spec.Mirroring.PeerSecretNames = append(sc.Spec.Mirroring.PeerSecretNames, secretName)
 		err := spokeClient.Update(ctx, sc)

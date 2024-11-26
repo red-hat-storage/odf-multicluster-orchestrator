@@ -246,7 +246,7 @@ func TestDisableMirroring(t *testing.T) {
 			t.Error("failed to get storage cluster", err)
 		}
 
-		if sc.Spec.Mirroring.Enabled {
+		if sc.Spec.Mirroring != nil {
 			t.Error("failed to disable mirroring")
 		}
 	}
