@@ -419,6 +419,9 @@ func (r *MirrorPeerReconciler) toggleMirroring(ctx context.Context, storageClust
 
 	// Determine if mirroring should be enabled or disabled
 	if enabled {
+		if sc.Spec.Mirroring == nil {
+			sc.Spec.Mirroring = &ocsv1.MirroringSpec{}
+		}
 		oppPeers := getOppositePeerRefs(mp, r.SpokeClusterName)
 		if hasRequiredSecret(sc.Spec.Mirroring.PeerSecretNames, oppPeers) {
 			sc.Spec.Mirroring.Enabled = true
@@ -427,7 +430,7 @@ func (r *MirrorPeerReconciler) toggleMirroring(ctx context.Context, storageClust
 			return fmt.Errorf("StorageCluster %q does not have required PeerSecrets", storageClusterName)
 		}
 	} else {
-		sc.Spec.Mirroring.Enabled = false
+		sc.Spec.Mirroring = nil
 		r.Logger.Info("Mirroring disabled on StorageCluster", "storageClusterName", storageClusterName)
 	}
 
