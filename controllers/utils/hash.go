@@ -61,23 +61,27 @@ func CreateUniqueReplicationId(clusterFSIDs map[string]string) (string, error) {
 }
 
 func GenerateUniqueIdForMirrorPeer(mirrorPeer multiclusterv1alpha1.MirrorPeer, hasStorageClientRef bool) string {
-	var peerAccumulator []string
-
 	if hasStorageClientRef {
+		var peerAccumulator []string
 		for _, peer := range mirrorPeer.Spec.Items {
 			peerAccumulator = append(peerAccumulator, GetKey(peer.ClusterName, peer.StorageClusterRef.Name))
 		}
+
+		sort.Strings(peerAccumulator)
+
+		checksum := sha1.Sum([]byte(strings.Join(peerAccumulator, "-")))
+
+		return hex.EncodeToString(checksum[:])[0 : len(BucketGenerateName)+1+12]
+
 	} else {
+		var peerAccumulator string
 		for _, peer := range mirrorPeer.Spec.Items {
-			peerAccumulator = append(peerAccumulator, peer.ClusterName)
+			peerAccumulator += peer.ClusterName
 		}
+		checksum := sha1.Sum([]byte(peerAccumulator))
 
+		return hex.EncodeToString(checksum[:])[0 : len(BucketGenerateName)+1+12]
 	}
-
-	sort.Strings(peerAccumulator)
-
-	checksum := sha1.Sum([]byte(strings.Join(peerAccumulator, "-")))
-	return hex.EncodeToString(checksum[:])
 }
 
 func GetKey(clusterName, clientName string) string {
