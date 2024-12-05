@@ -348,6 +348,9 @@ func updateProviderConfigMap(logger *slog.Logger, ctx context.Context, client cl
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "storage-client-mapping",
 					Namespace: providerClientInfo.ProviderInfo.NamespacedName.Namespace,
+					Annotations: map[string]string{
+						utils.StorageClusterPeerNameAnnotationKey: getStorageClusterPeerName(pairedClientInfo.ProviderInfo.ProviderManagedClusterName),
+					},
 				},
 				Data: make(map[string]string),
 			}
