@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	ODFInfoConfigMapName    = "odf-info"
-	ConfigMapResourceType   = "ConfigMap"
-	ClientInfoConfigMapName = "odf-client-info"
+	ODFInfoConfigMapName                = "odf-info"
+	ConfigMapResourceType               = "ConfigMap"
+	ClientInfoConfigMapName             = "odf-client-info"
+	StorageClusterPeerNameAnnotationKey = "ocs.openshift.io/storage-cluster-peer"
 )
 
 // FetchConfigMap fetches a ConfigMap with a given name from a given namespace
