@@ -10,6 +10,7 @@ import (
 	replicationv1alpha1 "github.com/csi-addons/kubernetes-csi-addons/apis/replication.storage/v1alpha1"
 	"github.com/go-logr/zapr"
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
+	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	routev1 "github.com/openshift/api/route/v1"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
@@ -61,6 +62,7 @@ func init() {
 	utilruntime.Must(routev1.AddToScheme(mgrScheme))
 	utilruntime.Must(rookv1.AddToScheme(mgrScheme))
 	utilruntime.Must(extv1.AddToScheme(mgrScheme))
+	utilruntime.Must(snapshotv1.AddToScheme(mgrScheme))
 	//+kubebuilder:scaffold:scheme
 }
 
