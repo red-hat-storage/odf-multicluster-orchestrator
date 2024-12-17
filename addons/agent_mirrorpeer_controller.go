@@ -148,17 +148,17 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	clusterFSIDs := make(map[string]string)
-	logger.Info("Fetching clusterFSIDs")
-	err = r.fetchClusterFSIDs(ctx, &mirrorPeer, clusterFSIDs)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
-		}
-		return ctrl.Result{}, fmt.Errorf("an unknown error occurred while fetching the cluster fsids, retrying again: %v", err)
-	}
-
 	if !hasStorageClientRef {
+		clusterFSIDs := make(map[string]string)
+		logger.Info("Fetching clusterFSIDs")
+		err = r.fetchClusterFSIDs(ctx, &mirrorPeer, clusterFSIDs)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
+			}
+			return ctrl.Result{}, fmt.Errorf("an unknown error occurred while fetching the cluster fsids, retrying again: %v", err)
+		}
+
 		logger.Info("Labeling RBD storageclasses")
 		errs := r.labelStorageClasses(ctx, scr.Namespace, clusterFSIDs)
 		if len(errs) > 0 {
@@ -168,25 +168,25 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if len(errs) > 0 {
 			return ctrl.Result{}, fmt.Errorf("few failures occurred while labeling VolumeSnapshotClasses: %v", errs)
 		}
-	}
 
-	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async && !hasStorageClientRef {
-		logger.Info("Enabling async mode dependencies")
-		err = r.labelCephClusters(ctx, scr, clusterFSIDs)
-		if err != nil {
-			logger.Error("Failed to label cephcluster", "error", err)
-			return ctrl.Result{}, err
-		}
-		err = r.enableCSIAddons(ctx, scr.Namespace)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to start CSI Addons for rook: %v", err)
-		}
+		if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
+			logger.Info("Enabling async mode dependencies")
+			err = r.labelCephClusters(ctx, scr, clusterFSIDs)
+			if err != nil {
+				logger.Error("Failed to label cephcluster", "error", err)
+				return ctrl.Result{}, err
+			}
+			err = r.enableCSIAddons(ctx, scr.Namespace)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to start CSI Addons for rook: %v", err)
+			}
 
-		err = r.enableMirroring(ctx, scr.Name, scr.Namespace, &mirrorPeer)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to enable mirroring the storagecluster %q in namespace %q in managed cluster: %v", scr.Name, scr.Namespace, err)
-		}
+			err = r.enableMirroring(ctx, scr.Name, scr.Namespace, &mirrorPeer)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to enable mirroring the storagecluster %q in namespace %q in managed cluster: %v", scr.Name, scr.Namespace, err)
+			}
 
+		}
 	}
 
 	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async && hasStorageClientRef {
