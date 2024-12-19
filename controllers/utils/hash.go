@@ -77,7 +77,7 @@ func GenerateUniqueIdForMirrorPeer(mirrorPeer multiclusterv1alpha1.MirrorPeer, h
 		checksum = sha1.Sum([]byte(peerAccumulator))
 	}
 	// truncate to bucketGenerateName + "-" + first 12 (out of 20) byte representations of sha1 checksum
-	return hex.EncodeToString(checksum[:])[0 : len(BucketGenerateName)+1+12]
+	return hex.EncodeToString(checksum[:])
 }
 
 func GetKey(clusterName, clientName string) string {
