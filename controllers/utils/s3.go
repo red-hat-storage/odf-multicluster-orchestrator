@@ -53,7 +53,7 @@ func GetEnv(key, defaultValue string) string {
 func GenerateBucketName(mirrorPeer multiclusterv1alpha1.MirrorPeer, hasStorageClientRef bool) string {
 	mirrorPeerId := GenerateUniqueIdForMirrorPeer(mirrorPeer, hasStorageClientRef)
 	bucketGenerateName := BucketGenerateName
-	return fmt.Sprintf("%s-%s", bucketGenerateName, mirrorPeerId)
+	return fmt.Sprintf("%s-%s", bucketGenerateName, mirrorPeerId)[0 : len(BucketGenerateName)+1+12]
 }
 
 func CreateOrUpdateObjectBucketClaim(ctx context.Context, c client.Client, bucketName, bucketNamespace string, annotations map[string]string) (controllerutil.OperationResult, error) {
