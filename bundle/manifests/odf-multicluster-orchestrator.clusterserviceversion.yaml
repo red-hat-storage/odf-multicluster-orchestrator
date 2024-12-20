@@ -319,6 +319,7 @@ spec:
               labels:
                 app.kubernetes.io/name: odf-multicluster-console
             spec:
+              automountServiceAccountToken: false
               containers:
               - image: quay.io/ocs-dev/odf-multicluster-console:latest
                 name: odf-multicluster-console

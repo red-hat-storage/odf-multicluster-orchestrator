@@ -8,6 +8,7 @@ spec:
       app.kubernetes.io/name: odf-multicluster-console
   template:
     spec:
+      automountServiceAccountToken: false
       containers:
         - name: odf-multicluster-console
           image: odf-multicluster-console:latest
