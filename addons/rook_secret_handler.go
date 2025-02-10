@@ -71,6 +71,7 @@ func (r *BlueSecretReconciler) syncBlueSecretForRook(ctx context.Context, secret
 	var blueSecret *corev1.Secret
 
 	if clusterType == utils.CONVERGED && secret.Name != DefaultExternalSecretName {
+
 		customData = map[string][]byte{
 			utils.SecretOriginKey: []byte(utils.OriginMap["RookOrigin"]),
 			utils.ClusterTypeKey:  []byte(utils.CONVERGED),
