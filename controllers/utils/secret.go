@@ -34,6 +34,7 @@ const (
 	RookTokenKey                          = "token"
 	ClusterTypeKey                        = "cluster_type"
 	HubRecoveryLabel                      = "cluster.open-cluster-management.io/backup"
+	StorageIDKey                          = "multicluster.odf.openshift.io/storageid"
 )
 
 type RookToken struct {

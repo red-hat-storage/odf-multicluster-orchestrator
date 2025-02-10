@@ -24,13 +24,11 @@ import (
 	"strconv"
 	"time"
 
-	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
-	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -159,15 +157,26 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{}, fmt.Errorf("an unknown error occurred while fetching the cluster fsids, retrying again: %v", err)
 		}
 
-		logger.Info("Labeling RBD storageclasses")
-		errs := r.labelStorageClasses(ctx, scr.Namespace, clusterFSIDs)
-		if len(errs) > 0 {
-			return ctrl.Result{}, fmt.Errorf("few failures occurred while labeling StorageClasses: %v", errs)
+		logger.Info("Labeling the default StorageClasses")
+		storageIdsMap, err := utils.GetStorageIdsForDefaultStorageClasses(ctx, r.SpokeClient, types.NamespacedName{Name: scr.Name, Namespace: scr.Namespace}, r.SpokeClusterName)
+		logger.Info("StorageIDs found", "storageIds", storageIdsMap)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("an unknown error has occurred while generating StorageIDs: %v", err)
 		}
-		errs = labelVolumeSnapshotClasses(ctx, logger, r.SpokeClient, r.SpokeClusterName, scr.Namespace, clusterFSIDs)
-		if len(errs) > 0 {
-			return ctrl.Result{}, fmt.Errorf("few failures occurred while labeling VolumeSnapshotClasses: %v", errs)
+		err = labelDefaultStorageClasses(ctx, logger, r.SpokeClient, scr.Name, scr.Namespace, storageIdsMap)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("an unknown error has occurred while labelling default StorageClasses: %v", err)
 		}
+
+		logger.Info("Labeled the default StorageClasses successfully")
+		logger.Info("Labeling the default VolumeSnapshotClasses")
+
+		err = labelDefaultVolumeSnapshotClasses(ctx, logger, r.SpokeClient, scr.Name, scr.Namespace, storageIdsMap)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("an unknown error has occurred while labelling default VolumeSnapshotClasses: %v", err)
+		}
+
+		logger.Info("Labeled the default VolumeSnapshotClasses successfully")
 
 		if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
 			logger.Info("Enabling async mode dependencies")
@@ -234,6 +243,61 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	return ctrl.Result{}, nil
 }
 
+func labelDefaultStorageClasses(ctx context.Context, logger *slog.Logger, client client.Client, storageClusterName string, storageClusterNamespace string, storageIdsMap map[utils.CephType]string) error {
+	storageClasses, err := utils.GetDefaultStorageClasses(ctx, client, storageClusterName)
+	if err != nil {
+		return err
+	}
+
+	for _, sc := range storageClasses {
+		storageClassType, err := utils.GetStorageClassType(sc, storageClusterNamespace)
+		if err != nil {
+			return err
+		}
+
+		if sc.Labels == nil {
+			sc.Labels = make(map[string]string)
+		}
+
+		logger.Info("Labelling StorageClass", "StorageClass", sc.Name)
+		sc.Labels[fmt.Sprintf(RamenLabelTemplate, StorageIDKey)] = storageIdsMap[storageClassType]
+
+		if err := client.Update(ctx, sc); err != nil {
+			return fmt.Errorf("failed to update StorageClass %s: %v", sc.Name, err)
+		}
+	}
+
+	return nil
+}
+
+func labelDefaultVolumeSnapshotClasses(ctx context.Context, logger *slog.Logger, client client.Client, storageClusterName string, storageClusterNamespace string, storageIdsMap map[utils.CephType]string) error {
+	volumesnapshotclasses, err := utils.GetDefaultVolumeSnapshotClasses(ctx, client, storageClusterName)
+	logger.Info("Found VSCs", "Count", len(volumesnapshotclasses))
+	if err != nil {
+		return err
+	}
+
+	for _, vsc := range volumesnapshotclasses {
+		volumeSnapshotClassType, err := utils.GetVolumeSnapshotClassType(vsc, storageClusterNamespace)
+		if err != nil {
+			return err
+		}
+
+		if vsc.Labels == nil {
+			vsc.Labels = make(map[string]string)
+		}
+
+		logger.Info("Labelling VolumeSnapshotClass", "VolumeSnapshotClass", vsc.Name)
+		vsc.Labels[fmt.Sprintf(RamenLabelTemplate, StorageIDKey)] = storageIdsMap[volumeSnapshotClassType]
+
+		if err := client.Update(ctx, vsc); err != nil {
+			return fmt.Errorf("failed to update VolumeSnapshotClass %s: %v", vsc.Name, err)
+		}
+	}
+
+	return nil
+}
+
 func (r *MirrorPeerReconciler) fetchClusterFSIDs(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer, clusterFSIDs map[string]string) error {
 	for _, pr := range mp.Spec.Items {
 		clusterType, err := utils.GetClusterType(pr.StorageClusterRef.Name, pr.StorageClusterRef.Namespace, r.SpokeClient)
@@ -296,81 +360,6 @@ func (r *MirrorPeerReconciler) getSecretNameByType(clusterType utils.ClusterType
 		secretName = DefaultExternalSecretName
 	}
 	return secretName
-}
-
-func (r *MirrorPeerReconciler) labelStorageClasses(ctx context.Context, storageClusterNamespace string, clusterFSIDs map[string]string) []error {
-	// Get all StorageClasses in storageClusterNamespace
-	scs := &storagev1.StorageClassList{}
-	err := r.SpokeClient.List(ctx, scs)
-	var errs []error
-	if err != nil {
-		errs = append(errs, err)
-		r.Logger.Error("Failed to list StorageClasses", "namespace", storageClusterNamespace, "error", err)
-		return errs
-	}
-	r.Logger.Info("Found StorageClasses", "count", len(scs.Items), "namespace", storageClusterNamespace)
-
-	key := r.SpokeClusterName
-	for _, sc := range scs.Items {
-		if fsid, ok := clusterFSIDs[key]; !ok {
-			errMsg := fmt.Errorf("no FSID found for key: %s, unable to update StorageClass", key)
-			errs = append(errs, errMsg)
-			r.Logger.Error("Missing FSID for StorageClass update", "key", key, "StorageClass", sc.Name)
-			continue
-		} else {
-			if sc.Provisioner == fmt.Sprintf(RBDProvisionerTemplate, storageClusterNamespace) || sc.Provisioner == fmt.Sprintf(CephFSProvisionerTemplate, storageClusterNamespace) {
-				r.Logger.Info("Updating StorageClass with FSID", "StorageClass", sc.Name, "FSID", fsid)
-				if sc.Labels == nil {
-					sc.Labels = make(map[string]string)
-				}
-				sc.Labels[fmt.Sprintf(RamenLabelTemplate, StorageIDKey)] = fsid
-				if err = r.SpokeClient.Update(ctx, &sc); err != nil {
-					errs = append(errs, err)
-					r.Logger.Error("Failed to update StorageClass with FSID", "StorageClass", sc.Name, "FSID", fsid, "error", err)
-				}
-			}
-		}
-	}
-
-	return errs
-}
-
-func labelVolumeSnapshotClasses(ctx context.Context, logger *slog.Logger, spokeClient client.Client, spokeClusterName, storageClusterNamespace string, clusterFSIDs map[string]string) []error {
-	vscList := &snapshotv1.VolumeSnapshotClassList{}
-	err := spokeClient.List(ctx, vscList)
-	var errs []error
-	if err != nil {
-		errs = append(errs, err)
-		logger.Error("Failed to list VolumeSnapshotClasses", "error", err)
-		return errs
-	}
-	logger.Info("Found VolumeSnapshotClasses", "count", len(vscList.Items))
-
-	key := spokeClusterName
-	fsid, ok := clusterFSIDs[key]
-	if !ok {
-		errMsg := fmt.Errorf("no FSID found for key: %s, unable to update VolumeSnapshotClasses", key)
-		errs = append(errs, errMsg)
-		logger.Error("Missing FSID for VolumeSnapshotClass update", "key", key)
-		return errs
-	}
-
-	for _, vsc := range vscList.Items {
-		if vsc.Driver == fmt.Sprintf(RBDProvisionerTemplate, storageClusterNamespace) ||
-			vsc.Driver == fmt.Sprintf(CephFSProvisionerTemplate, storageClusterNamespace) {
-			logger.Info("Updating VolumeSnapshotClass with FSID", "VolumeSnapshotClass", vsc.Name, "FSID", fsid)
-			if vsc.Labels == nil {
-				vsc.Labels = make(map[string]string)
-			}
-			vsc.Labels[fmt.Sprintf(RamenLabelTemplate, StorageIDKey)] = fsid
-			if err = spokeClient.Update(ctx, &vsc); err != nil {
-				errs = append(errs, err)
-				logger.Error("Failed to update VolumeSnapshotClass with FSID", "VolumeSnapshotClass", vsc.Name, "FSID", fsid, "error", err)
-			}
-		}
-	}
-
-	return errs
 }
 
 func (r *MirrorPeerReconciler) createS3(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, scNamespace string, hasStorageClientRef bool) error {
