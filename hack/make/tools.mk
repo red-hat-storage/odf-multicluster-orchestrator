@@ -57,7 +57,7 @@ endif
 endif
 
 GOLANGCI_URL := https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh
-GOLANGCI_VERSION := 1.57.0
+GOLANGCI_VERSION := 1.63.4
 
 .PHONY: golangci-bin
 GOLANGCI_BIN := $(CWD)/bin/golangci-lint

@@ -25,8 +25,8 @@ var (
 
 	managedClusterSecret = &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cluster-peer-token-ocs-storagecluster-cephcluster",
-			Namespace: "openshift-storage",
+			Name:      "cluster-peer-token-test-storagecluster-cephcluster",
+			Namespace: "test-namespace",
 			Labels: map[string]string{
 				"app": "rook",
 			},
@@ -34,7 +34,7 @@ var (
 				{
 					APIVersion: "ceph.rook.io/v1",
 					Kind:       "CephCluster",
-					Name:       "ocs-storagecluster-cephcluster",
+					Name:       "test-storagecluster-cephcluster",
 					UID:        "390fa888-59c0-4212-8e3b-e426e52c800e",
 				},
 			},
@@ -45,28 +45,13 @@ var (
 
 	storageCluster = &ocsv1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ocs-storagecluster",
-			Namespace: "openshift-storage",
+			Name:      "test-storagecluster",
+			Namespace: "test-namespace",
 			UID:       "12345678-1234-1234-1234-123456789012",
 		},
 	}
 
-	cephCluster = &rookv1.CephCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ocs-storagecluster-cephcluster",
-			Namespace: "openshift-storage",
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion: "ocs.openshift.io/v1",
-					Kind:       "StorageCluster",
-					Name:       "ocs-storagecluster",
-					UID:        "12345678-1234-1234-1234-123456789012",
-				},
-			},
-		},
-		Spec:   rookv1.ClusterSpec{},
-		Status: rookv1.ClusterStatus{},
-	}
+	cephCluster      = GetTestCephCluster()
 	hubClusterSecret = &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      utils.CreateUniqueSecretName(spokeClusterName, managedClusterSecret.Namespace, storageCluster.Name),

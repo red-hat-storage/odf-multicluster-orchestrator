@@ -10,7 +10,7 @@ rules:
   resources: ["secrets"]
   verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
 - apiGroups: ["ceph.rook.io"]
-  resources: ["cephclusters"]
+  resources: ["cephclusters", "cephblockpools"]
   verbs: ["get", "list", "watch", "update"]
 - apiGroups: ["ocs.openshift.io"]
   resources: ["storageclusters"]
