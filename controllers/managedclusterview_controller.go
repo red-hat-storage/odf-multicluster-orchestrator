@@ -37,13 +37,14 @@ const (
 )
 
 type ProviderInfo struct {
-	Version                    string               `json:"version"`
-	DeploymentType             string               `json:"deploymentType"`
-	StorageSystemName          string               `json:"storageSystemName"`
-	ProviderManagedClusterName string               `json:"providerManagedClusterName"`
-	NamespacedName             types.NamespacedName `json:"namespacedName"`
-	StorageProviderEndpoint    string               `json:"storageProviderEndpoint"`
-	CephClusterFSID            string               `json:"cephClusterFSID"`
+	Version                       string               `json:"version"`
+	DeploymentType                string               `json:"deploymentType"`
+	StorageSystemName             string               `json:"storageSystemName"`
+	ProviderManagedClusterName    string               `json:"providerManagedClusterName"`
+	NamespacedName                types.NamespacedName `json:"namespacedName"`
+	StorageProviderEndpoint       string               `json:"storageProviderEndpoint"`
+	CephClusterFSID               string               `json:"cephClusterFSID"`
+	StorageProviderPublicEndpoint string               `json:"storageProviderPublicEndpoint"`
 }
 
 type ClientInfo struct {
@@ -139,14 +140,19 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, managedCluste
 			return fmt.Errorf("failed to unmarshal ODF info data for key %s: %w", key, err)
 		}
 
+		providerPublicEndpoint := odfInfo.StorageCluster.Annotations[ocsv1alpha1.ApiServerExportedAddressAnnotationName]
+		if providerPublicEndpoint == "" {
+			logger.Info("StorageProviderPublicEndpoint is not available.")
+		}
 		providerInfo := ProviderInfo{
-			Version:                    odfInfo.Version,
-			DeploymentType:             odfInfo.DeploymentType,
-			CephClusterFSID:            odfInfo.StorageCluster.CephClusterFSID,
-			StorageProviderEndpoint:    odfInfo.StorageCluster.StorageProviderEndpoint,
-			NamespacedName:             odfInfo.StorageCluster.NamespacedName,
-			StorageSystemName:          odfInfo.StorageSystemName,
-			ProviderManagedClusterName: managedClusterView.Namespace,
+			Version:                       odfInfo.Version,
+			DeploymentType:                odfInfo.DeploymentType,
+			CephClusterFSID:               odfInfo.StorageCluster.CephClusterFSID,
+			StorageProviderEndpoint:       odfInfo.StorageCluster.StorageProviderEndpoint,
+			NamespacedName:                odfInfo.StorageCluster.NamespacedName,
+			StorageSystemName:             odfInfo.StorageSystemName,
+			ProviderManagedClusterName:    managedClusterView.Namespace,
+			StorageProviderPublicEndpoint: providerPublicEndpoint,
 		}
 
 		for _, client := range odfInfo.Clients {
