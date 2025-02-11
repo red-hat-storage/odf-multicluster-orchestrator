@@ -436,6 +436,13 @@ func createStorageClusterPeer(ctx context.Context, client client.Client, logger 
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to fetch onboarding token for provider %s. %w", oppositeClient.ProviderInfo.ProviderManagedClusterName, err)
 		}
+
+		apiEndpoint := oppositeClient.ProviderInfo.StorageProviderPublicEndpoint
+		if apiEndpoint == "" {
+			logger.Error("'StorageProviderPublicEndpoint' not found. Using 'StorageProviderEndpoint' instead. It might not be accessible externally.")
+			apiEndpoint = oppositeClient.ProviderInfo.StorageProviderEndpoint
+		}
+
 		storageClusterPeer := ocsv1.StorageClusterPeer{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "StorageClusterPeer",
@@ -448,7 +455,7 @@ func createStorageClusterPeer(ctx context.Context, client client.Client, logger 
 			},
 			Spec: ocsv1.StorageClusterPeerSpec{
 				OnboardingToken: onboardingToken,
-				ApiEndpoint:     oppositeClient.ProviderInfo.StorageProviderEndpoint,
+				ApiEndpoint:     apiEndpoint,
 			},
 		}
 		storageClusterPeerJson, err := json.Marshal(storageClusterPeer)
