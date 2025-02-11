@@ -1,9 +1,11 @@
 package utils
 
 import (
+	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha512"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"sort"
@@ -82,4 +84,14 @@ func GenerateUniqueIdForMirrorPeer(mirrorPeer multiclusterv1alpha1.MirrorPeer, h
 
 func GetKey(clusterName, clientName string) string {
 	return fmt.Sprintf("%s_%s", clusterName, clientName)
+}
+
+func CalculateMD5Hash(value any) string {
+	data, err := json.Marshal(value)
+	if err != nil {
+		errStr := fmt.Errorf("failed to marshal for %#v", value)
+		panic(errStr)
+	}
+	hash := md5.Sum(data)
+	return hex.EncodeToString(hash[:])
 }
