@@ -15,7 +15,7 @@ require (
 	github.com/openshift/api v0.0.0-20241216151652-de9de05a8e43
 	github.com/openshift/library-go v0.0.0-20240124134907-4dfbf6bc7b11
 	github.com/ramendr/ramen/api v0.0.0-20241001141243-29d6f22ad237
-	github.com/red-hat-storage/ocs-operator/api/v4 v4.0.0-20241112092644-99fdb662050d
+	github.com/red-hat-storage/ocs-operator/api/v4 v4.0.0-20250211080844-377e36d6d211
 	github.com/rook/rook/pkg/apis v0.0.0-20250204173727-c0a3db95a25f
 	github.com/spf13/cobra v1.8.1
 	github.com/stolostron/multicloud-operators-foundation v0.0.0-20220824091202-e9cd9710d009
@@ -81,7 +81,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/noobaa/noobaa-operator/v5 v5.0.0-20240827070548-002966de315a // indirect
+	github.com/noobaa/noobaa-operator/v5 v5.0.0-20241112075542-b62bb7eb535d // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/openshift/custom-resource-status v1.1.3-0.20220503160415-f2fdb4999d87 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
