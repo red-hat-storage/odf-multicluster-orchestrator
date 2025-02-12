@@ -23,7 +23,7 @@ rules:
   verbs: ["get", "list", "watch", "update"]
 - apiGroups: ["storage.k8s.io"]
   resources: ["storageclasses"]
-  verbs: ["get","list","update"]
+  verbs: ["get","list","update", "watch"]
 - apiGroups: ["submariner.io"]
   resources: ["submariners"]
   verbs: ["get"]

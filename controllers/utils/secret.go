@@ -35,6 +35,7 @@ const (
 	ClusterTypeKey                        = "cluster_type"
 	HubRecoveryLabel                      = "cluster.open-cluster-management.io/backup"
 	StorageIDKey                          = "multicluster.odf.openshift.io/storageid"
+	SecretStorageIDKey                    = "storage_id"
 )
 
 type RookToken struct {
@@ -154,7 +155,7 @@ func ValidateS3Secret(data map[string][]byte) bool {
 func createInternalSecret(secretNameAndNamespace types.NamespacedName,
 	storageClusterNameAndNamespace types.NamespacedName,
 	secretType SecretLabelType,
-	secretData []byte, secretOrigin string) *corev1.Secret {
+	secretData []byte, secretOrigin string, storageId string) *corev1.Secret {
 	retSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretNameAndNamespace.Name,
@@ -169,6 +170,7 @@ func createInternalSecret(secretNameAndNamespace types.NamespacedName,
 			NamespaceKey:          []byte(storageClusterNameAndNamespace.Namespace),
 			StorageClusterNameKey: []byte(storageClusterNameAndNamespace.Name),
 			SecretOriginKey:       []byte(secretOrigin),
+			SecretStorageIDKey:    []byte(storageId),
 		},
 	}
 	return retSecret
@@ -177,23 +179,24 @@ func createInternalSecret(secretNameAndNamespace types.NamespacedName,
 // CreateSourceSecret creates a source secret
 func CreateSourceSecret(secretNameAndNamespace types.NamespacedName,
 	storageClusterNameAndNamespace types.NamespacedName,
-	secretData []byte, SecretOrigin string) *corev1.Secret {
+	secretData []byte, SecretOrigin string, storageId string) *corev1.Secret {
 	return createInternalSecret(secretNameAndNamespace,
 		storageClusterNameAndNamespace,
 		SourceLabel,
 		secretData,
-		SecretOrigin)
+		SecretOrigin, storageId)
 }
 
 // CreateDestinationSecret creates a destination secret
 func CreateDestinationSecret(secretNameAndNamespace types.NamespacedName,
 	storageClusterNameAndNamespace types.NamespacedName,
-	secretData []byte, secretOrigin string) *corev1.Secret {
+	secretData []byte, secretOrigin string, storageId string) *corev1.Secret {
 	return createInternalSecret(secretNameAndNamespace,
 		storageClusterNameAndNamespace,
 		DestinationLabel,
 		secretData,
 		secretOrigin,
+		storageId,
 	)
 }
 
@@ -298,6 +301,33 @@ func UnmarshalRookSecret(rookSecret *corev1.Secret) (*RookToken, error) {
 	return &token, nil
 }
 
+func GetStorageIdsFromGreenSecret(greenSecret *corev1.Secret) (map[string]string, error) {
+	// Check if StorageIDs exist in the secret
+	storageIDsData, exists := greenSecret.Data[SecretStorageIDKey]
+	if !exists {
+		return nil, fmt.Errorf("StorageIDs key %q not found in green secret", SecretStorageIDKey)
+	}
+
+	// Unmarshal the StorageIDs JSON
+	var storageIDs map[string]string
+	if err := json.Unmarshal(storageIDsData, &storageIDs); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal StorageIDs from green secret: %v", err)
+	}
+
+	// Validate that required storage types exist
+	requiredTypes := []string{"cephfs", "rbd"}
+	for _, storageType := range requiredTypes {
+		if _, exists := storageIDs[storageType]; !exists {
+			return nil, fmt.Errorf("required storage type %q not found in StorageIDs", storageType)
+		}
+		if storageIDs[storageType] == "" {
+			return nil, fmt.Errorf("empty StorageID found for storage type %q", storageType)
+		}
+	}
+
+	return storageIDs, nil
+}
+
 func UnmarshalRookSecretExternal(rookSecret *corev1.Secret) (*RookTokenExternal, error) {
 	fsid := string(rookSecret.Data["fsid"])
 
@@ -344,6 +374,27 @@ func UnmarshalHubSecret(hubSecret *corev1.Secret) (*RookToken, error) {
 	}
 
 	return &actualtoken, nil
+}
+
+func GetStorageIdsFromHubSecret(hubSecret *corev1.Secret) (map[string]string, error) {
+	storageIDsData, exists := hubSecret.Data[SecretStorageIDKey]
+	if !exists {
+		return nil, fmt.Errorf("StorageIDs key %q not found in hub secret", SecretStorageIDKey)
+	}
+
+	var storageIDs map[string]string
+	if err := json.Unmarshal(storageIDsData, &storageIDs); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal StorageIDs from hub secret: %v", err)
+	}
+
+	requiredTypes := []string{"cephfs", "rbd"}
+	for _, storageType := range requiredTypes {
+		if _, exists := storageIDs[storageType]; !exists {
+			return nil, fmt.Errorf("required storage type %q not found in StorageIDs", storageType)
+		}
+	}
+
+	return storageIDs, nil
 }
 
 func UnmarshalS3Secret(s3Secret *corev1.Secret) (*S3Token, error) {
