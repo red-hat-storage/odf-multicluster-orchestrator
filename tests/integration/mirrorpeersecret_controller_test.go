@@ -92,7 +92,7 @@ func (mppp MirrorPeerPlusPlus) GetDummySourceSecrets(prefixName string) []corev1
 			Name:      eachPR.StorageClusterRef.Name,
 			Namespace: eachPR.StorageClusterRef.Namespace,
 		}
-		sourceSecret := utils.CreateSourceSecret(secretNN, storageClusterNN, []byte("MySecretData1234"), utils.OriginMap["RookOrigin"])
+		sourceSecret := utils.CreateSourceSecret(secretNN, storageClusterNN, []byte("MySecretData1234"), utils.OriginMap["RookOrigin"], `{"cephfs":"f9708852fe4cf1f4d5de7e525f1b0aba","rbd":"dcd70114947d0bb1f6b96f0dd6a9aaca"}`)
 		sourceSecrets = append(sourceSecrets, *sourceSecret)
 	}
 	return sourceSecrets
@@ -465,7 +465,7 @@ var _ = Describe("MirrorPeerSecret Controller", func() {
 				}
 				sourceNN := types.NamespacedName{Name: "source-3", Namespace: newPeer.ClusterName}
 				storageClusterNN := types.NamespacedName{Name: newPeer.StorageClusterRef.Name, Namespace: newPeer.StorageClusterRef.Namespace}
-				newSource := utils.CreateSourceSecret(sourceNN, storageClusterNN, []byte("new-secret-3"), utils.OriginMap["RookOrigin"])
+				newSource := utils.CreateSourceSecret(sourceNN, storageClusterNN, []byte("new-secret-3"), utils.OriginMap["RookOrigin"], `{"cephfs":"f9708852fe4cf1f4d5de7e525f1b0aba","rbd":"dcd70114947d0bb1f6b96f0dd6a9aaca"}`)
 				err = k8sClient.Create(ctx, newSource)
 				Expect(err).To(BeNil())
 				err = k8sClient.Update(ctx, &mirrorPR)

@@ -45,21 +45,15 @@ func CreateUniqueSecretNameForClient(providerKey, clientKey1, clientKey2 string)
 	return CreateUniqueName(providerKey, clientKey1, clientKey2)[0:39]
 }
 
-func CreateUniqueReplicationId(clusterFSIDs map[string]string) (string, error) {
-	var fsids []string
-	for _, v := range clusterFSIDs {
-		if v != "" {
-			fsids = append(fsids, v)
-		}
+func CreateUniqueReplicationId(storageIds ...string) (string, error) {
+	if len(storageIds) < 2 {
+		return "", fmt.Errorf("replicationID can not be generated due to missing cluster StorageIds")
 	}
 
-	if len(fsids) < 2 {
-		return "", fmt.Errorf("replicationID can not be generated due to missing cluster FSID")
-	}
+	sort.Strings(storageIds)
 
-	// To ensure reliability of hash generation
-	sort.Strings(fsids)
-	return CreateUniqueName(fsids...)[0:39], nil
+	id := CalculateMD5Hash(storageIds)
+	return id, nil
 }
 
 func GenerateUniqueIdForMirrorPeer(mirrorPeer multiclusterv1alpha1.MirrorPeer, hasStorageClientRef bool) string {

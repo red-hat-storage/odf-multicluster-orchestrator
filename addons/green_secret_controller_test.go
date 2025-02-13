@@ -3,6 +3,7 @@ package addons
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
@@ -20,9 +21,10 @@ var (
 	greenSecretName      = "d8433b8cb5b6d99c4d785ebd6082efd19cad50c"
 	greenSecretNamespace = "local-cluster"
 	greenSecretData      = map[string][]byte{
-		"namespace":            []byte("openshift-storage"),
-		"secret-origin":        []byte("rook"),
-		"storage-cluster-name": []byte("ocs-storagecluster"),
+		"namespace":              []byte("openshift-storage"),
+		"secret-origin":          []byte("rook"),
+		"storage-cluster-name":   []byte("ocs-storagecluster"),
+		utils.SecretStorageIDKey: []byte("{\"cephfs\":\"f9708852fe4cf1f4d5de7e525f1b0aba\",\"rbd\":\"dcd70114947d0bb1f6b96f0dd6a9aaca\"}"),
 	}
 
 	secretDataContent = map[string]string{
@@ -69,10 +71,11 @@ func TestGreenSecretReconciler_Reconcile(t *testing.T) {
 			},
 		},
 		Data: map[string][]byte{
-			"namespace":            greenSecretData["namespace"],
-			"secret-data":          encodedSecretData,
-			"secret-origin":        greenSecretData["secret-origin"],
-			"storage-cluster-name": greenSecretData["storage-cluster-name"],
+			"namespace":              greenSecretData["namespace"],
+			"secret-data":            encodedSecretData,
+			"secret-origin":          greenSecretData["secret-origin"],
+			"storage-cluster-name":   greenSecretData["storage-cluster-name"],
+			utils.SecretStorageIDKey: greenSecretData[utils.SecretStorageIDKey],
 		},
 		Type: corev1.SecretTypeOpaque,
 	}
@@ -140,7 +143,26 @@ func TestGreenSecretReconciler_Reconcile(t *testing.T) {
 					t.Errorf("expected label %s to be %s", utils.CreatedByLabelKey, setup.TokenExchangeName)
 				}
 
-				// Verify storage cluster update
+				expectedStorageIDsData := greenSecretData[utils.SecretStorageIDKey]
+				reconciledStorageIDsData, exists := reconciledSecret.Data[utils.SecretStorageIDKey]
+				if !exists {
+					t.Errorf("StorageIDs key %q not found in reconciled secret", utils.SecretStorageIDKey)
+				}
+
+				var expectedStorageIDs, reconciledStorageIDs map[string]string
+				if err := json.Unmarshal(expectedStorageIDsData, &expectedStorageIDs); err != nil {
+					t.Errorf("Failed to unmarshal expected StorageIDs: %v", err)
+				}
+				if err := json.Unmarshal(reconciledStorageIDsData, &reconciledStorageIDs); err != nil {
+					t.Errorf("Failed to unmarshal reconciled StorageIDs: %v", err)
+				}
+
+				if !reflect.DeepEqual(expectedStorageIDs, reconciledStorageIDs) {
+					t.Errorf("StorageIDs mismatch - expected: %+v, got: %+v",
+						expectedStorageIDs, reconciledStorageIDs)
+				}
+
+				// Verify storage cluster update (existing code)
 				updatedStorageCluster := &ocsv1.StorageCluster{}
 				err = fakeSpokeClient.Get(ctx, types.NamespacedName{
 					Name:      storageClusterToUpdate.Name,
