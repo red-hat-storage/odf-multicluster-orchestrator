@@ -2,12 +2,15 @@ package addons
 
 import (
 	"context"
+	"encoding/json"
+	"reflect"
 	"testing"
 
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -81,9 +84,14 @@ func TestBlueSecretReconciler_Reconcile(t *testing.T) {
 		t.Error("failed to add rookv1 scheme")
 	}
 
+	err = storagev1.AddToScheme(scheme)
+	if err != nil {
+		t.Error("failed to add storagev1 scheme")
+	}
+
 	// Create fake clients
 	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects().Build()
-	fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(managedClusterSecret, storageCluster, cephCluster).Build()
+	fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(managedClusterSecret, storageCluster, GetTestCephBlockPool(), GetTestCephCluster(), GetTestCephFSStorageClass(), GetTestCephRBDStorageClass(), GetTestCephRBDVirtStorageClass()).Build()
 
 	logger := utils.GetLogger(utils.GetZapLogger(true))
 	reconciler := &BlueSecretReconciler{
@@ -131,7 +139,30 @@ func TestBlueSecretReconciler_Reconcile(t *testing.T) {
 			if reconciledSecret.Labels[utils.SecretLabelTypeKey] != string(utils.SourceLabel) {
 				t.Errorf("expected label %s to be %s", utils.SecretLabelTypeKey, string(utils.SourceLabel))
 			}
+			// Check StorageIDs
+			expectedStorageIDs := map[string]string{
+				"cephfs": "f9708852fe4cf1f4d5de7e525f1b0aba",
+				"rbd":    "dcd70114947d0bb1f6b96f0dd6a9aaca",
+			}
 
+			storageIDsData, exists := reconciledSecret.Data[utils.SecretStorageIDKey]
+			if !exists {
+				t.Errorf("StorageIDs key %q not found in reconciled secret", utils.SecretStorageIDKey)
+				return
+			}
+
+			var reconciledStorageIDs map[string]string
+			if err := json.Unmarshal(storageIDsData, &reconciledStorageIDs); err != nil {
+				t.Errorf("Failed to unmarshal StorageIDs from secret: %v", err)
+				return
+			}
+
+			if !reflect.DeepEqual(expectedStorageIDs, reconciledStorageIDs) {
+				t.Errorf("StorageIDs mismatch - expected: %+v, got: %+v",
+					expectedStorageIDs,
+					reconciledStorageIDs)
+			}
 		})
+
 	}
 }

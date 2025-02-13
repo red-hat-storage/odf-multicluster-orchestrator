@@ -23,6 +23,7 @@ type NamedPeerRefWithSecretData struct {
 	Name         string
 	Data         []byte
 	SecretOrigin string
+	StorageID    string
 }
 
 // NewNamedPeerRefWithSecretData creates a new PeerRef instance which has the source Name and Data details
@@ -34,6 +35,7 @@ func NewNamedPeerRefWithSecretData(secret *corev1.Secret, peerRef multiclusterv1
 		Data:         secret.Data[utils.SecretDataKey],
 		PeerRef:      peerRef,
 		SecretOrigin: string(secret.Data[utils.SecretOriginKey]),
+		StorageID:    string(secret.Data[utils.SecretStorageIDKey]),
 	}
 	return &nPeerRef
 }
@@ -59,9 +61,9 @@ func (nPR *NamedPeerRefWithSecretData) GenerateSecret(secretLabelType utils.Secr
 	}
 	var retSecret *corev1.Secret
 	if secretLabelType == utils.DestinationLabel {
-		retSecret = utils.CreateDestinationSecret(secretNamespacedName, storageClusterNamespacedName, nPR.Data, nPR.SecretOrigin)
+		retSecret = utils.CreateDestinationSecret(secretNamespacedName, storageClusterNamespacedName, nPR.Data, nPR.SecretOrigin, nPR.StorageID)
 	} else if secretLabelType == utils.SourceLabel {
-		retSecret = utils.CreateSourceSecret(secretNamespacedName, storageClusterNamespacedName, nPR.Data, nPR.SecretOrigin)
+		retSecret = utils.CreateSourceSecret(secretNamespacedName, storageClusterNamespacedName, nPR.Data, nPR.SecretOrigin, nPR.StorageID)
 	}
 
 	return retSecret

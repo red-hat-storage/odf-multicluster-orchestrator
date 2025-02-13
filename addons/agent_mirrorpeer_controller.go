@@ -147,23 +147,19 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if !hasStorageClientRef {
-		clusterFSIDs := make(map[string]string)
-		logger.Info("Fetching clusterFSIDs")
-		err = r.fetchClusterFSIDs(ctx, &mirrorPeer, clusterFSIDs)
+		logger.Info("Fetching StorageIds")
+		clusterStorageIds, err := r.fetchClusterStorageIds(ctx, &mirrorPeer, types.NamespacedName{Namespace: scr.Namespace, Name: scr.Name})
 		if err != nil {
-			if errors.IsNotFound(err) {
-				return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
-			}
-			return ctrl.Result{}, fmt.Errorf("an unknown error occurred while fetching the cluster fsids, retrying again: %v", err)
+			return ctrl.Result{}, fmt.Errorf("failed to fetch cluster storage IDs: %v", err)
 		}
 
 		logger.Info("Labeling the default StorageClasses")
-		storageIdsMap, err := utils.GetStorageIdsForDefaultStorageClasses(ctx, r.SpokeClient, types.NamespacedName{Name: scr.Name, Namespace: scr.Namespace}, r.SpokeClusterName)
-		logger.Info("StorageIDs found", "storageIds", storageIdsMap)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("an unknown error has occurred while generating StorageIDs: %v", err)
+		storageIds := make(map[utils.CephType]string)
+		for k, v := range clusterStorageIds[r.SpokeClusterName] {
+			storageIds[utils.CephType(k)] = v
 		}
-		err = labelDefaultStorageClasses(ctx, logger, r.SpokeClient, scr.Name, scr.Namespace, storageIdsMap)
+
+		err = labelDefaultStorageClasses(ctx, logger, r.SpokeClient, scr.Name, scr.Namespace, storageIds)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("an unknown error has occurred while labelling default StorageClasses: %v", err)
 		}
@@ -171,7 +167,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		logger.Info("Labeled the default StorageClasses successfully")
 		logger.Info("Labeling the default VolumeSnapshotClasses")
 
-		err = labelDefaultVolumeSnapshotClasses(ctx, logger, r.SpokeClient, scr.Name, scr.Namespace, storageIdsMap)
+		err = labelDefaultVolumeSnapshotClasses(ctx, logger, r.SpokeClient, scr.Name, scr.Namespace, storageIds)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("an unknown error has occurred while labelling default VolumeSnapshotClasses: %v", err)
 		}
@@ -180,7 +176,9 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 		if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
 			logger.Info("Enabling async mode dependencies")
-			err = r.labelCephClusters(ctx, scr, clusterFSIDs)
+			storageId1 := clusterStorageIds[mirrorPeer.Spec.Items[0].ClusterName]["rbd"]
+			storageId2 := clusterStorageIds[mirrorPeer.Spec.Items[1].ClusterName]["rbd"]
+			err = r.labelCephClusters(ctx, scr, storageId1, storageId2)
 			if err != nil {
 				logger.Error("Failed to label cephcluster", "error", err)
 				return ctrl.Result{}, err
@@ -298,64 +296,80 @@ func labelDefaultVolumeSnapshotClasses(ctx context.Context, logger *slog.Logger,
 	return nil
 }
 
-func (r *MirrorPeerReconciler) fetchClusterFSIDs(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer, clusterFSIDs map[string]string) error {
+func (r *MirrorPeerReconciler) fetchClusterStorageIds(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer, storageClusterNamespacedName types.NamespacedName) (map[string]map[string]string, error) {
+	// Initialize map to store cluster name -> storage IDs mapping
+	clusterStorageIds := make(map[string]map[string]string)
+
 	for _, pr := range mp.Spec.Items {
-		clusterType, err := utils.GetClusterType(pr.StorageClusterRef.Name, pr.StorageClusterRef.Namespace, r.SpokeClient)
-		if err != nil {
-			r.Logger.Error("Failed to get cluster type", "clusterName", pr.StorageClusterRef.Name, "namespace", pr.StorageClusterRef.Namespace, "error", err)
-			return err
-		}
-		secretName := r.getSecretNameByType(clusterType, pr)
+		logger := r.Logger.With("clusterName", pr.ClusterName,
+			"namespace", pr.StorageClusterRef.Namespace)
 
-		r.Logger.Info("Checking secret", "secretName", secretName, "mode", clusterType, "clusterName", pr.StorageClusterRef.Name, "namespace", pr.StorageClusterRef.Namespace)
-		secret, err := utils.FetchSecretWithName(ctx, r.SpokeClient, types.NamespacedName{Name: secretName, Namespace: pr.StorageClusterRef.Namespace})
+		// Get cluster type (converged/external)
+		clusterType, err := utils.GetClusterType(pr.StorageClusterRef.Name,
+			pr.StorageClusterRef.Namespace, r.SpokeClient)
 		if err != nil {
-			r.Logger.Error("Failed to fetch secret", "secretName", secretName, "namespace", pr.StorageClusterRef.Namespace, "error", err)
-			return err
+			logger.Error("Failed to get cluster type", "error", err)
+			return nil, fmt.Errorf("failed to get cluster type for %s: %v", pr.ClusterName, err)
 		}
 
-		fsid, err := r.getFsidFromSecretByType(clusterType, secret)
-		if err != nil {
-			r.Logger.Error("Failed to extract FSID from secret", "secretName", secretName, "namespace", pr.StorageClusterRef.Namespace, "error", err)
-			return err
+		var currentPeerStorageIds = make(map[string]string)
+
+		// Handle local cluster vs remote cluster
+		if r.SpokeClusterName == pr.ClusterName {
+			// For local cluster, get storage IDs from storage classes
+			storageIds, err := utils.GetStorageIdsForDefaultStorageClasses(ctx,
+				r.SpokeClient,
+				storageClusterNamespacedName,
+				r.SpokeClusterName)
+			if err != nil {
+				logger.Error("Failed to get storage IDs from storage classes", "error", err)
+				return nil, fmt.Errorf("failed to get storage IDs for local cluster %s: %v",
+					pr.ClusterName, err)
+			}
+
+			for k, v := range storageIds {
+				currentPeerStorageIds[string(k)] = v
+			}
+		} else {
+			// For remote cluster, get storage IDs from secret
+			secretName := r.getSecretNameByType(clusterType, pr)
+			logger.Info("Checking secret",
+				"secretName", secretName,
+				"mode", clusterType)
+
+			secret, err := utils.FetchSecretWithName(ctx, r.SpokeClient,
+				types.NamespacedName{
+					Name:      secretName,
+					Namespace: pr.StorageClusterRef.Namespace,
+				})
+			if err != nil {
+				logger.Error("Failed to fetch secret", "error", err)
+				return nil, fmt.Errorf("failed to fetch secret %s: %v", secretName, err)
+			}
+
+			currentPeerStorageIds, err = utils.GetStorageIdsFromGreenSecret(secret)
+			if err != nil {
+				logger.Error("Failed to extract storage IDs from secret", "error", err)
+				return nil, fmt.Errorf("failed to get storage IDs from secret %s: %v",
+					secretName, err)
+			}
 		}
 
-		clusterFSIDs[pr.ClusterName] = fsid
-		r.Logger.Info("FSID fetched for cluster", "clusterName", pr.ClusterName, "FSID", fsid)
+		clusterStorageIds[pr.ClusterName] = currentPeerStorageIds
+		logger.Info("Storage IDs fetched for cluster",
+			"storageIDs", currentPeerStorageIds)
 	}
-	return nil
-}
 
-func (r *MirrorPeerReconciler) getFsidFromSecretByType(clusterType utils.ClusterType, secret *corev1.Secret) (string, error) {
-	var fsid string
-	if clusterType == utils.CONVERGED {
-		token, err := utils.UnmarshalRookSecret(secret)
-		if err != nil {
-			r.Logger.Error("Failed to unmarshal converged mode peer secret", "peerSecret", secret.Name, "error", err)
-			return "", err
-		}
-		fsid = token.FSID
-		r.Logger.Info("FSID retrieved for converged mode", "FSID", fsid, "secret", secret.Name)
-	} else if clusterType == utils.EXTERNAL {
-		token, err := utils.UnmarshalRookSecretExternal(secret)
-		if err != nil {
-			r.Logger.Error("Failed to unmarshal external mode peer secret", "peerSecret", secret.Name, "error", err)
-			return "", err
-		}
-		fsid = token.FSID
-		r.Logger.Info("FSID retrieved for external mode", "FSID", fsid, "secret", secret.Name)
-	}
-	return fsid, nil
+	r.Logger.Info("Successfully fetched all cluster storage IDs",
+		"mirrorPeer", mp.Name,
+		"clusterCount", len(clusterStorageIds))
+	return clusterStorageIds, nil
 }
 
 func (r *MirrorPeerReconciler) getSecretNameByType(clusterType utils.ClusterType, pr multiclusterv1alpha1.PeerRef) string {
 	var secretName string
 	if clusterType == utils.CONVERGED {
-		if pr.ClusterName == r.SpokeClusterName {
-			secretName = fmt.Sprintf("cluster-peer-token-%s-cephcluster", pr.StorageClusterRef.Name)
-		} else {
-			secretName = utils.GetSecretNameByPeerRef(pr)
-		}
+		secretName = utils.GetSecretNameByPeerRef(pr)
 	} else if clusterType == utils.EXTERNAL {
 		secretName = DefaultExternalSecretName
 	}
@@ -631,7 +645,7 @@ func (r *MirrorPeerReconciler) deleteMirrorPeer(ctx context.Context, mirrorPeer 
 	return ctrl.Result{}, nil
 }
 
-func (r *MirrorPeerReconciler) labelCephClusters(ctx context.Context, scr *multiclusterv1alpha1.StorageClusterRef, clusterFSIDs map[string]string) error {
+func (r *MirrorPeerReconciler) labelCephClusters(ctx context.Context, scr *multiclusterv1alpha1.StorageClusterRef, storageId1, storageId2 string) error {
 	r.Logger.Info("Labelling CephClusters with replication ID")
 	cephClusters, err := utils.FetchAllCephClusters(ctx, r.SpokeClient)
 	if err != nil {
@@ -666,9 +680,9 @@ func (r *MirrorPeerReconciler) labelCephClusters(ctx context.Context, scr *multi
 		found.Labels = make(map[string]string)
 	}
 
-	replicationId, err := utils.CreateUniqueReplicationId(clusterFSIDs)
+	replicationId, err := utils.CreateUniqueReplicationId(storageId1, storageId2)
 	if err != nil {
-		r.Logger.Error("Failed to create a unique replication ID", "error", err)
+		r.Logger.Error("Failed to create unique replication ID", "error", err)
 		return err
 	}
 

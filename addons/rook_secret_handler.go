@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
@@ -72,10 +73,24 @@ func (r *BlueSecretReconciler) syncBlueSecretForRook(ctx context.Context, secret
 
 	if clusterType == utils.CONVERGED && secret.Name != DefaultExternalSecretName {
 
-		customData = map[string][]byte{
-			utils.SecretOriginKey: []byte(utils.OriginMap["RookOrigin"]),
-			utils.ClusterTypeKey:  []byte(utils.CONVERGED),
+		storageIdsMap, err := utils.GetStorageIdsForDefaultStorageClasses(ctx, r.SpokeClient, types.NamespacedName{Name: storageClusterName, Namespace: secret.Namespace}, r.SpokeClusterName)
+		if err != nil {
+			return fmt.Errorf("An error occured while fetching the StorageIDs for the default StorageClasses %v", err)
 		}
+
+		storageIDsJSON, err := json.Marshal(storageIdsMap)
+		if err != nil {
+			return fmt.Errorf("failed to marshal StorageIDs map to JSON: %v", err)
+		}
+
+		logger.Info("Found StorageIds", "StorageIDs", storageIdsMap)
+
+		customData = map[string][]byte{
+			utils.SecretOriginKey:    []byte(utils.OriginMap["RookOrigin"]),
+			utils.ClusterTypeKey:     []byte(utils.CONVERGED),
+			utils.SecretStorageIDKey: storageIDsJSON,
+		}
+
 		labelType = utils.SourceLabel
 
 		blueSecret, err = generateBlueSecret(secret, labelType, utils.CreateUniqueSecretName(r.SpokeClusterName, secret.Namespace, storageClusterName), storageClusterName, r.SpokeClusterName, customData, nil)
@@ -100,17 +115,40 @@ func (r *BlueSecretReconciler) syncBlueSecretForRook(ctx context.Context, secret
 		return fmt.Errorf("failed to create secret from the managed cluster secret %q from namespace %v for the hub cluster in namespace %q err: ClusterType is unknown, should be converged or external", secret.Name, secret.Namespace, r.SpokeClusterName)
 	}
 
-	// Create secret on hub cluster
 	err = r.HubClient.Create(ctx, blueSecret, &client.CreateOptions{})
 	if err != nil {
 		if errors.IsAlreadyExists(err) {
-			logger.Info("Secret already exists on hub cluster, not creating again")
+			existingSecret := &corev1.Secret{}
+			err = r.HubClient.Get(ctx, types.NamespacedName{
+				Name:      blueSecret.Name,
+				Namespace: r.SpokeClusterName,
+			}, existingSecret)
+			if err != nil {
+				return fmt.Errorf("failed to get existing secret %q from hub cluster namespace %q: %v",
+					blueSecret.Name, r.SpokeClusterName, err)
+			}
+			if !reflect.DeepEqual(existingSecret.Data, blueSecret.Data) {
+				existingSecret.Data = blueSecret.Data
+				err = r.HubClient.Update(ctx, existingSecret, &client.UpdateOptions{})
+				if err != nil {
+					return fmt.Errorf("failed to update secret %q in hub cluster namespace %q: %v",
+						blueSecret.Name, r.SpokeClusterName, err)
+				}
+				logger.Info("Successfully updated existing secret in hub cluster",
+					"hubNamespace", r.SpokeClusterName)
+				return nil
+			}
+
+			logger.Info("Secret already exists on hub cluster with matching specs",
+				"hubNamespace", r.SpokeClusterName)
 			return nil
 		}
-		return fmt.Errorf("failed to sync managed cluster secret %q from namespace %v to the hub cluster in namespace %q err: %v", secret.Name, secret.Namespace, r.SpokeClusterName, err)
+		return fmt.Errorf("failed to sync managed cluster secret %q from namespace %q to hub cluster namespace %q: %v",
+			secret.Name, secret.Namespace, r.SpokeClusterName, err)
 	}
 
-	logger.Info("Successfully synced managed cluster secret to hub cluster", "hubNamespace", r.SpokeClusterName)
+	logger.Info("Successfully created new secret in hub cluster",
+		"hubNamespace", r.SpokeClusterName)
 	return nil
 }
 
@@ -118,9 +156,9 @@ func (r *GreenSecretReconciler) syncGreenSecretForRook(ctx context.Context, secr
 	var err error
 
 	data := make(map[string][]byte)
-	err = json.Unmarshal(secret.Data[utils.SecretDataKey], &data)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal secret data for the secret %q in namespace %q: %v", secret.Name, secret.Namespace, err)
+
+	for k, v := range secret.Data {
+		data[k] = v
 	}
 
 	toNamespace := string(secret.Data["namespace"])
@@ -133,15 +171,45 @@ func (r *GreenSecretReconciler) syncGreenSecretForRook(ctx context.Context, secr
 		Data: data,
 	}
 
-	// Create secret on spoke cluster
 	err = r.SpokeClient.Create(ctx, newSecret, &client.CreateOptions{})
 	if err != nil {
 		if errors.IsAlreadyExists(err) {
-			r.Logger.Info("Secret already exists on spoke cluster, not creating again", "secret", newSecret.Name, "namespace", newSecret.Namespace)
+			existingSecret := &corev1.Secret{}
+			err = r.SpokeClient.Get(ctx, types.NamespacedName{
+				Name:      newSecret.Name,
+				Namespace: newSecret.Namespace,
+			}, existingSecret)
+			if err != nil {
+				return fmt.Errorf("failed to get existing secret %q in namespace %q: %v",
+					newSecret.Name, newSecret.Namespace, err)
+			}
+
+			if !reflect.DeepEqual(existingSecret.Data, newSecret.Data) {
+				existingSecret.Data = newSecret.Data
+
+				err = r.SpokeClient.Update(ctx, existingSecret, &client.UpdateOptions{})
+				if err != nil {
+					return fmt.Errorf("failed to update secret %q in namespace %q: %v",
+						newSecret.Name, newSecret.Namespace, err)
+				}
+				r.Logger.Info("Successfully updated existing secret on spoke cluster",
+					"secret", newSecret.Name,
+					"namespace", newSecret.Namespace)
+				return nil
+			}
+
+			r.Logger.Info("Secret already exists on spoke cluster with matching data",
+				"secret", newSecret.Name,
+				"namespace", newSecret.Namespace)
 			return nil
 		}
-		return fmt.Errorf("failed to sync hub secret %q to managed cluster in namespace %q: %v", newSecret.Name, toNamespace, err)
+		return fmt.Errorf("failed to sync hub secret %q to managed cluster in namespace %q: %v",
+			newSecret.Name, toNamespace, err)
 	}
+
+	r.Logger.Info("Successfully created new secret on spoke cluster",
+		"secret", newSecret.Name,
+		"namespace", newSecret.Namespace)
 
 	storageClusterName := string(secret.Data[utils.StorageClusterNameKey])
 	err = updateStorageCluster(newSecret.Name, storageClusterName, toNamespace, r.SpokeClient)
