@@ -156,9 +156,14 @@ func (r *GreenSecretReconciler) syncGreenSecretForRook(ctx context.Context, secr
 	var err error
 
 	data := make(map[string][]byte)
-
+	err = json.Unmarshal(secret.Data[utils.SecretDataKey], &data)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal secret data for the secret %q in namespace %q: %v", secret.Name, secret.Namespace, err)
+	}
 	for k, v := range secret.Data {
-		data[k] = v
+		if k != utils.SecretDataKey {
+			data[k] = v
+		}
 	}
 
 	toNamespace := string(secret.Data["namespace"])
