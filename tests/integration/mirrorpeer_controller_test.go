@@ -21,8 +21,10 @@ package integration_test
 
 import (
 	"context"
+	"os"
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -53,14 +55,23 @@ var (
 			Name: "test-provider-cluster2",
 		},
 	}
+	ns33 = v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "openshift-operators-mirrorpeer",
+		},
+	}
 	mirrorPeerLookupKey = types.NamespacedName{Namespace: mirrorPeer.Namespace, Name: mirrorPeer.Name}
 )
 
-func GetFakeS3SecretForPeerRef(peer multiclusterv1alpha1.PeerRef) *v1.Secret {
+func GetFakeS3SecretForPeerRef(pr1, pr2 multiclusterv1alpha1.PeerRef, spokeClusterName string) *v1.Secret {
+	utils.CreateUniqueSecretNameForClient(spokeClusterName, utils.GetKey(pr1.ClusterName, pr1.StorageClusterRef.Name), utils.GetKey(pr2.ClusterName, pr2.StorageClusterRef.Name))
 	return &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      utils.GetSecretNameByPeerRef(peer, utils.S3ProfilePrefix),
-			Namespace: peer.ClusterName,
+			Name: utils.CreateUniqueSecretNameForClient(
+				spokeClusterName,
+				utils.GetKey(pr1.ClusterName, pr1.StorageClusterRef.Name),
+				utils.GetKey(pr2.ClusterName, pr2.StorageClusterRef.Name)),
+			Namespace: spokeClusterName,
 		},
 		Data: map[string][]byte{
 			"namespace":            []byte("openshift-storage"),
@@ -265,8 +276,68 @@ var _ = Describe("MirrorPeer Validations", func() {
 })
 
 var _ = Describe("MirrorPeerReconciler Reconcile", func() {
+	odfClientInfoConfigMap := v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "odf-client-info",
+			Namespace: "openshift-operators-mirrorpeer",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: viewv1beta1.GroupVersion.String(),
+					Kind:       "ManagedClusterView",
+					Name:       "mcv-1",
+					UID:        "mcv-uid",
+				},
+			},
+		},
+		Data: map[string]string{
+			"test-provider-cluster1_test-storagecluster-1": `
+{
+	"clusterId": "test-provider-cluster1",
+	"name": "test-provider-cluster1",
+	"providerInfo": {
+		"version": "4.19.0",
+		"deploymentType": "internal",
+		"storageSystemName": "odf-storagesystem",
+		"providerManagedClusterName": "test-provider-cluster1",
+		"namespacedName": {
+			"namespace": "test-namespace",
+			"name": "test-storagecluster-1"
+		},
+		"storageProviderEndpoint": "fake-endpoint.svc",
+		"cephClusterFSID": "fsid",
+		"storageProviderPublicEndpoint": "fake-endpoint.svc.cluster.local"
+	},
+	"clientManagedClusterName": "test-provider-cluster1",
+	"clientId": "client-1"
+}
+`,
+			"test-provider-cluster2_test-storagecluster-2": `
+{
+	"clusterId": "test-provider-cluster2",
+	"name": "test-provider-cluster2",
+	"providerInfo": {
+		"version": "4.19.0",
+		"deploymentType": "internal",
+		"storageSystemName": "odf-storagesystem",
+		"providerManagedClusterName": "test-provider-cluster2",
+		"namespacedName": {
+			"namespace": "test-namespace",
+			"name": "test-storagecluster-2"
+		},
+		"storageProviderEndpoint": "fake-endpoint.svc",
+		"cephClusterFSID": "fsid",
+		"storageProviderPublicEndpoint": "fake-endpoint.svc.cluster.local"
+	},
+	"clientManagedClusterName": "test-provider-cluster2",
+	"clientId": "client-2"
+}
+`,
+		},
+	}
 	When("creating MirrorPeer", func() {
 		BeforeEach(func() {
+			Expect(os.Setenv("POD_NAMESPACE", "openshift-operators-mirrorpeer")).To(BeNil())
+
 			managedcluster1 := clusterv1.ManagedCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-provider-cluster1",
@@ -288,6 +359,11 @@ var _ = Describe("MirrorPeerReconciler Reconcile", func() {
 			err = k8sClient.Create(context.TODO(), &ns11, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Create(context.TODO(), &ns22, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Create(context.TODO(), &ns33, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = k8sClient.Create(context.TODO(), &odfClientInfoConfigMap, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 
 			newMirrorPeer := mirrorPeer.DeepCopy()
@@ -313,25 +389,29 @@ var _ = Describe("MirrorPeerReconciler Reconcile", func() {
 			}
 			err = k8sClient.Create(context.TODO(), newMirrorPeer, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
+
 		})
 		AfterEach(func() {
 			newMirrorPeer := mirrorPeer.DeepCopy()
 			newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-create"
 			err := k8sClient.Delete(context.TODO(), newMirrorPeer, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
-
 			err = k8sClient.DeleteAllOf(context.TODO(), &clusterv1.ManagedCluster{}, &client.DeleteAllOfOptions{
 				ListOptions: client.ListOptions{
 					Namespace: "",
 				},
 			})
 			Expect(err).NotTo(HaveOccurred())
-
+			err = k8sClient.Delete(context.TODO(), &odfClientInfoConfigMap, &client.DeleteOptions{})
+			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Delete(context.TODO(), &ns11, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Delete(context.TODO(), &ns22, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Delete(context.TODO(), &ns33, &client.DeleteOptions{})
+			Expect(err).NotTo(HaveOccurred())
 
+			Expect(os.Unsetenv("POD_NAMESPACE")).To(BeNil())
 		})
 		It("should be able to read ManagedCluster object", func() {
 			By("providing valid ManagedCluster names", func() {

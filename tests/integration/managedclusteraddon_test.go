@@ -21,10 +21,12 @@ package integration_test
 
 import (
 	"context"
+	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
@@ -45,37 +47,102 @@ var (
 	}
 	ns1 = v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "cluster1",
+			Name: "cluster11",
 		},
 	}
 	ns2 = v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "cluster2",
+			Name: "cluster22",
 		},
 	}
+	ns3 = v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "openshift-operators-addon",
+		},
+	}
+
 	mirrorPeer1LookupKey = types.NamespacedName{Namespace: mirrorPeer1.Namespace, Name: mirrorPeer1.Name}
-	mcAddOn1LookupKey    = types.NamespacedName{Namespace: "cluster1", Name: setup.TokenExchangeName}
-	mcAddOn2LookupKey    = types.NamespacedName{Namespace: "cluster2", Name: setup.TokenExchangeName}
+	mcAddOn1LookupKey    = types.NamespacedName{Namespace: "cluster11", Name: setup.TokenExchangeName}
+	mcAddOn2LookupKey    = types.NamespacedName{Namespace: "cluster22", Name: setup.TokenExchangeName}
 	mcAddOn1             = addonapiv1alpha1.ManagedClusterAddOn{}
 	mcAddOn2             = addonapiv1alpha1.ManagedClusterAddOn{}
 )
 
 var _ = Describe("ManagedClusterAddOn creation, updation and deletion", func() {
+	odfClientInfoConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "odf-client-info",
+			Namespace: "openshift-operators-addon",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: viewv1beta1.GroupVersion.String(),
+					Kind:       "ManagedClusterView",
+					Name:       "mcv-1",
+					UID:        "mcv-uid",
+				},
+			},
+		},
+		Data: map[string]string{
+			"cluster11_test-storagecluster": `
+{
+    "clusterId": "cluster11",
+    "name": "cluster11",
+    "providerInfo": {
+        "version": "4.19.0",
+        "deploymentType": "internal",
+        "storageSystemName": "odf-storagesystem",
+        "providerManagedClusterName": "cluster11",
+        "namespacedName": {
+            "namespace": "test-namespace",
+            "name": "test-storagecluster"
+        },
+        "storageProviderEndpoint": "fake-endpoint.svc",
+        "cephClusterFSID": "fsid",
+        "storageProviderPublicEndpoint": "fake-endpoint.svc.cluster.local"
+    },
+    "clientManagedClusterName": "cluster11",
+    "clientId": "client-1"
+}
+`,
+			"cluster22_test-storagecluster": `
+{
+    "clusterId": "cluster22",
+    "name": "cluster22",
+    "providerInfo": {
+        "version": "4.19.0",
+        "deploymentType": "internal",
+        "storageSystemName": "odf-storagesystem",
+        "providerManagedClusterName": "cluster22",
+        "namespacedName": {
+            "namespace": "test-namespace",
+            "name": "test-storagecluster"
+        },
+        "storageProviderEndpoint": "fake-endpoint.svc",
+        "cephClusterFSID": "fsid",
+        "storageProviderPublicEndpoint": "fake-endpoint.svc.cluster.local"
+    },
+    "clientManagedClusterName": "cluter22",
+    "clientId": "client-2"
+}
+`,
+		},
+	}
 	When("creating or updating ManagedClusterAddOn", func() {
 		BeforeEach(func() {
+			Expect(os.Setenv("POD_NAMESPACE", "openshift-operators-addon")).To(BeNil())
 			newMirrorPeer := mirrorPeer1.DeepCopy()
 			newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
 				Type: "async",
 				Items: []multiclusterv1alpha1.PeerRef{
 					{
-						ClusterName: "cluster1",
+						ClusterName: "cluster11",
 						StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
 							Name:      "test-storagecluster",
 							Namespace: "test-namespace",
 						},
 					},
 					{
-						ClusterName: "cluster2",
+						ClusterName: "cluster22",
 						StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
 							Name:      "test-storagecluster",
 							Namespace: "test-namespace",
@@ -85,12 +152,12 @@ var _ = Describe("ManagedClusterAddOn creation, updation and deletion", func() {
 			}
 			managedcluster1 := clusterv1.ManagedCluster{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "cluster1",
+					Name: "cluster11",
 				},
 			}
 			managedcluster2 := clusterv1.ManagedCluster{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "cluster2",
+					Name: "cluster22",
 				},
 			}
 			err := k8sClient.Create(context.TODO(), &managedcluster1, &client.CreateOptions{})
@@ -101,14 +168,20 @@ var _ = Describe("ManagedClusterAddOn creation, updation and deletion", func() {
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Create(context.TODO(), &ns2, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Create(context.TODO(), &ns3, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Create(context.TODO(), odfClientInfoConfigMap, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
 
 			err = k8sClient.Create(context.TODO(), newMirrorPeer, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
+
 		})
 		AfterEach(func() {
 			newMirrorPeer := mirrorPeer1.DeepCopy()
 			err := k8sClient.Delete(context.TODO(), newMirrorPeer, &client.DeleteOptions{})
-
+			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Delete(context.TODO(), odfClientInfoConfigMap, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Delete(context.TODO(), &mcAddOn1, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
@@ -125,6 +198,10 @@ var _ = Describe("ManagedClusterAddOn creation, updation and deletion", func() {
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Delete(context.TODO(), &ns2, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Delete(context.TODO(), &ns3, &client.DeleteOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(os.Unsetenv("POD_NAMESPACE")).To(BeNil())
 		})
 		It("should not return any error", func() {
 			By("polling for the created ManagedClusterAddOn", func() {
