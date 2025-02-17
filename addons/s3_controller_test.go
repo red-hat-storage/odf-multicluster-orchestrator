@@ -68,7 +68,6 @@ var (
 			Name:      s3SecretName,
 			Namespace: s3SecretNamespace,
 			Annotations: map[string]string{
-				OBCTypeAnnotationKey:              "cluster",
 				utils.MirrorPeerNameAnnotationKey: "test-mirrorpeer",
 			},
 		},
@@ -175,7 +174,10 @@ func TestS3SecretReconciler_Reconcile(t *testing.T) {
 			if tt.name == "Reconcile OBC successfully" {
 				reconciledSecret := &corev1.Secret{}
 				err = fakeHubClient.Get(ctx, types.NamespacedName{
-					Name:      utils.CreateUniqueSecretName(reconciler.SpokeClusterName, storageClusterOnManagedCluster.Namespace, storageClusterOnManagedCluster.Name, utils.S3ProfilePrefix),
+					Name: utils.CreateUniqueSecretNameForClient(
+						reconciler.SpokeClusterName,
+						utils.GetKey(mirrorPeer.Spec.Items[0].ClusterName, mirrorPeer.Spec.Items[0].StorageClusterRef.Name),
+						utils.GetKey(mirrorPeer.Spec.Items[1].ClusterName, mirrorPeer.Spec.Items[1].StorageClusterRef.Name)),
 					Namespace: reconciler.SpokeClusterName,
 				}, reconciledSecret)
 				if err != nil {

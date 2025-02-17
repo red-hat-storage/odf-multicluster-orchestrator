@@ -56,22 +56,14 @@ func CreateUniqueReplicationId(storageIds ...string) (string, error) {
 	return id, nil
 }
 
-func GenerateUniqueIdForMirrorPeer(mirrorPeer multiclusterv1alpha1.MirrorPeer, hasStorageClientRef bool) string {
+func GenerateUniqueIdForMirrorPeer(mirrorPeer multiclusterv1alpha1.MirrorPeer) string {
 	var checksum [20]byte
-	if hasStorageClientRef {
-		var peerAccumulator []string
-		for _, peer := range mirrorPeer.Spec.Items {
-			peerAccumulator = append(peerAccumulator, GetKey(peer.ClusterName, peer.StorageClusterRef.Name))
-		}
-		sort.Strings(peerAccumulator)
-		checksum = sha1.Sum([]byte(strings.Join(peerAccumulator, "-")))
-	} else {
-		var peerAccumulator string
-		for _, peer := range mirrorPeer.Spec.Items {
-			peerAccumulator += peer.ClusterName
-		}
-		checksum = sha1.Sum([]byte(peerAccumulator))
+	var peerAccumulator []string
+	for _, peer := range mirrorPeer.Spec.Items {
+		peerAccumulator = append(peerAccumulator, GetKey(peer.ClusterName, peer.StorageClusterRef.Name))
 	}
+	sort.Strings(peerAccumulator)
+	checksum = sha1.Sum([]byte(strings.Join(peerAccumulator, "-")))
 	// truncate to bucketGenerateName + "-" + first 12 (out of 20) byte representations of sha1 checksum
 	return hex.EncodeToString(checksum[:])
 }

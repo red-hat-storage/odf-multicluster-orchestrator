@@ -91,15 +91,9 @@ func (r *S3SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	if _, ok := obc.Annotations[OBCTypeAnnotationKey]; !ok {
-		logger.Error("Failed to find OBC type on OBC")
-		return ctrl.Result{}, err
-	}
-
 	mirrorPeerName := obc.Annotations[utils.MirrorPeerNameAnnotationKey]
-	obcType := obc.Annotations[OBCTypeAnnotationKey]
 
-	err = r.syncBlueSecretForS3(ctx, obc.Name, obc.Namespace, mirrorPeerName, obcType)
+	err = r.syncS3SecretToHub(ctx, obc.Name, obc.Namespace, mirrorPeerName)
 	if err != nil {
 		logger.Error("Failed to sync Blue Secret for S3", "error", err)
 		return ctrl.Result{}, err

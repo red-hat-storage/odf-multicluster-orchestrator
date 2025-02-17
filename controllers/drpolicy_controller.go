@@ -33,7 +33,6 @@ const (
 	ReplicationSecretNamespaceKey                = "replication.storage.openshift.io/replication-secret-namespace"
 	ReplicationIDKey                             = "replicationid"
 	RBDVolumeReplicationClassNameTemplate        = "rbd-volumereplicationclass-%v"
-	RBDReplicationSecretName                     = "rook-csi-rbd-provisioner"
 	RamenLabelTemplate                           = "ramendr.openshift.io/%s"
 	RBDProvisionerTemplate                       = "%s.rbd.csi.ceph.com"
 	RBDFlattenVolumeReplicationClassNameTemplate = "rbd-flatten-volumereplicationclass-%v"
@@ -114,31 +113,8 @@ func (r *DRPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	// Check if the MirrorPeer contains StorageClient reference
-	hasStorageClientRef, err := utils.IsStorageClientType(ctx, r.HubClient, *mirrorPeer, false)
-	if err != nil {
-		logger.Error("Failed to determine if MirrorPeer contains StorageClient reference", "error", err)
-		return ctrl.Result{}, err
-	}
-
-	if hasStorageClientRef {
-		logger.Info("MirrorPeer contains StorageClient reference. Skipping creation of VolumeReplicationClasses", "MirrorPeer", mirrorPeer.Name)
-		return ctrl.Result{}, nil
-	}
-
 	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
-		logger.Info("Fetching Cluster StorageIDs")
-		clusterStorageIds, err := r.fetchClusterStorageIds(ctx, mirrorPeer)
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				logger.Info("Cluster StorageIds not found, requeuing")
-				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
-			}
-			logger.Error("An unknown error occurred while fetching the cluster FSIDs, retrying", "error", err)
-			return ctrl.Result{}, fmt.Errorf("an unknown error occurred while fetching the cluster FSIDs, retrying: %v", err)
-		}
-
-		err = r.createOrUpdateManifestWorkForVRC(ctx, mirrorPeer, &drpolicy, clusterStorageIds)
+		err = r.createOrUpdateManifestWorkForVRC(ctx, mirrorPeer, &drpolicy)
 		if err != nil {
 			logger.Error("Failed to create VolumeReplicationClass via ManifestWork", "error", err)
 			return ctrl.Result{}, fmt.Errorf("failed to create VolumeReplicationClass via ManifestWork: %v", err)
@@ -149,16 +125,8 @@ func (r *DRPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	return ctrl.Result{}, nil
 }
 
-func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer, dp *ramenv1alpha1.DRPolicy, storageIdsMap map[string]map[string]string) error {
+func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer, dp *ramenv1alpha1.DRPolicy) error {
 	logger := r.Logger.With("DRPolicy", dp.Name, "MirrorPeer", mp.Name)
-
-	storageId1 := storageIdsMap[mp.Spec.Items[0].ClusterName]["rbd"]
-	storageId2 := storageIdsMap[mp.Spec.Items[1].ClusterName]["rbd"]
-	replicationId, err := utils.CreateUniqueReplicationId(storageId1, storageId2)
-	if err != nil {
-		logger.Error("Failed to create unique replication ID", "error", err)
-		return err
-	}
 
 	manifestWorkName := fmt.Sprintf("vrc-%v", utils.FnvHash(dp.Name)) // Two ManifestWork per DRPolicy
 
@@ -184,13 +152,9 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 		params := make(map[string]string)
 		params[MirroringModeKey] = DefaultMirroringMode
 		params[SchedulingIntervalKey] = interval
-		params[ReplicationSecretNameKey] = RBDReplicationSecretName
-		params[ReplicationSecretNamespaceKey] = pr.StorageClusterRef.Namespace
 		vrcName := fmt.Sprintf(RBDVolumeReplicationClassNameTemplate, utils.FnvHash(interval))
 		labels := make(map[string]string)
-		labels[fmt.Sprintf(RamenLabelTemplate, ReplicationIDKey)] = replicationId
 		labels[fmt.Sprintf(RamenLabelTemplate, "maintenancemodes")] = "Failover"
-		labels[fmt.Sprintf(RamenLabelTemplate, StorageIDKey)] = storageIdsMap[pr.ClusterName]["rbd"]
 		vrc := replicationv1alpha1.VolumeReplicationClass{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "VolumeReplicationClass",
@@ -273,50 +237,4 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 	}
 
 	return nil
-}
-
-func (r *DRPolicyReconciler) fetchClusterStorageIds(ctx context.Context, peer *multiclusterv1alpha1.MirrorPeer) (map[string]map[string]string, error) {
-	clusterStorageIds := make(map[string]map[string]string)
-
-	for _, pr := range peer.Spec.Items {
-		logger := r.Logger.With("MirrorPeer", peer.Name, "ClusterName", pr.ClusterName)
-		rookSecretName := utils.GetSecretNameByPeerRef(pr)
-		logger.Info("Fetching rook secret", "SecretName", rookSecretName)
-
-		hs, err := utils.FetchSecretWithName(ctx, r.HubClient, types.NamespacedName{
-			Name:      rookSecretName,
-			Namespace: pr.ClusterName,
-		})
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				logger.Info("Secret not found, will attempt to fetch again after a delay",
-					"SecretName", rookSecretName)
-				return nil, err
-			}
-			logger.Error("Failed to fetch rook secret",
-				"SecretName", rookSecretName,
-				"error", err)
-			return nil, err
-		}
-
-		logger.Info("Unmarshalling rook secret", "SecretName", rookSecretName)
-		storageIds, err := utils.GetStorageIdsFromHubSecret(hs)
-		if err != nil {
-			logger.Error("Failed to unmarshal rook secret",
-				"SecretName", rookSecretName,
-				"error", err)
-			return nil, err
-		}
-
-		// Store the storage IDs mapped to cluster name
-		clusterStorageIds[pr.ClusterName] = storageIds
-		logger.Info("Successfully fetched StorageIds for cluster",
-			"ClusterName", pr.ClusterName,
-			"StorageIDs", storageIds)
-	}
-
-	r.Logger.Info("Successfully fetched all cluster StorageIDs",
-		"MirrorPeer", peer.Name,
-		"ClusterCount", len(clusterStorageIds))
-	return clusterStorageIds, nil
 }

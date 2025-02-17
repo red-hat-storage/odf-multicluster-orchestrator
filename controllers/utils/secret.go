@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 
@@ -200,21 +199,6 @@ func CreateDestinationSecret(secretNameAndNamespace types.NamespacedName,
 	)
 }
 
-// CreatePeerRefFromSecret function creates a 'PeerRef' object
-// from the internal secret details
-func CreatePeerRefFromSecret(secret *corev1.Secret) (multiclusterv1alpha1.PeerRef, error) {
-	if err := ValidateInternalSecret(secret, IgnoreLabel); err != nil {
-		return multiclusterv1alpha1.PeerRef{}, err
-	}
-	retPeerRef := multiclusterv1alpha1.PeerRef{
-		ClusterName: secret.Namespace,
-		StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
-			Name:      string(secret.Data[StorageClusterNameKey]),
-			Namespace: string(secret.Data[NamespaceKey])},
-	}
-	return retPeerRef, nil
-}
-
 // FetchAllSecretsWithLabel will get all the internal secrets in the namespace and with the provided label
 // if the namespace is empty, it will fetch from all the namespaces
 // if the label type is 'Ignore', it will fetch all the internal secrets (both source and destination)
@@ -241,22 +225,6 @@ func FetchAllSecretsWithLabel(ctx context.Context, rc client.Client, namespace s
 	// find all the secrets with the provided internal label
 	err = rc.List(ctx, &sourceSecretList, clientListOptions...)
 	return sourceSecretList.Items, err
-}
-
-func FindMatchingSecretWithPeerRef(peerRef multiclusterv1alpha1.PeerRef, secrets []corev1.Secret) *corev1.Secret {
-	var matchingSourceSecret *corev1.Secret
-	for _, eachSecret := range secrets {
-		secretPeerRef, err := CreatePeerRefFromSecret(&eachSecret)
-		// ignore any error and continue with the next
-		if err != nil {
-			continue
-		}
-		if reflect.DeepEqual(secretPeerRef, peerRef) {
-			matchingSourceSecret = &eachSecret
-			break
-		}
-	}
-	return matchingSourceSecret
 }
 
 func FetchAllMirrorPeers(ctx context.Context, rc client.Client) ([]multiclusterv1alpha1.MirrorPeer, error) {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	routev1 "github.com/openshift/api/route/v1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -25,7 +24,7 @@ const (
 	DefaultS3Region = "noobaa"
 )
 
-func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name string, namespace string, mirrorPeerName string, obcType string) error {
+func (r *S3SecretReconciler) syncS3SecretToHub(ctx context.Context, name string, namespace string, mirrorPeerName string) error {
 	// fetch obc secret
 	var secret corev1.Secret
 	err := r.SpokeClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &secret)
@@ -46,29 +45,16 @@ func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name strin
 		return err
 	}
 
-	var storageClusterRef *v1alpha1.StorageClusterRef
 	var s3ProfileName string
 
-	if obcType == string(CLUSTER) {
-		storageClusterRef, err = utils.GetCurrentStorageClusterRef(mirrorPeer, r.SpokeClusterName)
-		s3ProfileName = fmt.Sprintf("%s-%s-%s", utils.S3ProfilePrefix, r.SpokeClusterName, storageClusterRef.Name)
-	} else {
-		sc, err := utils.GetStorageClusterFromCurrentNamespace(ctx, r.SpokeClient, namespace)
-		if err != nil {
-			return fmt.Errorf("failed to find StorageCluster for given provider cluster %s", r.SpokeClusterName)
-		}
-
-		r.Logger.Info("Found StorageCluster for provider", "Provider", r.SpokeClusterName, "StorageClusterName", sc.Name, "StorageCluster Namespace", sc.Namespace)
-		storageClusterRef = &v1alpha1.StorageClusterRef{
-			Name:      sc.Name,
-			Namespace: sc.Namespace,
-		}
-		s3ProfileName = fmt.Sprintf("%s-%s", utils.S3ProfilePrefix, utils.CreateUniqueName(mirrorPeerName, r.SpokeClusterName, storageClusterRef.Name)[0:39])
+	sc, err := utils.GetStorageClusterFromCurrentNamespace(ctx, r.SpokeClient, namespace)
+	if err != nil {
+		return fmt.Errorf("failed to find StorageCluster for given provider cluster %s", r.SpokeClusterName)
 	}
 
-	if storageClusterRef == nil || err != nil {
-		return fmt.Errorf("failed to find storage cluster ref using spoke cluster name %s from mirrorpeers: %v", r.SpokeClusterName, err)
-	}
+	r.Logger.Info("Found StorageCluster for provider", "Provider", r.SpokeClusterName, "StorageClusterName", sc.Name, "StorageCluster Namespace", sc.Namespace)
+	storageClusterRefName := sc.Name
+	s3ProfileName = fmt.Sprintf("%s-%s", utils.S3ProfilePrefix, utils.CreateUniqueName(mirrorPeerName, r.SpokeClusterName, storageClusterRefName)[0:39])
 
 	// fetch s3 endpoint
 	route := &routev1.Route{}
@@ -103,22 +89,16 @@ func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name strin
 		utils.SecretOriginKey: []byte(utils.OriginMap["S3Origin"]),
 	}
 
-	var secretName string
-	if obcType == string(CLUSTER) {
-		secretName = utils.CreateUniqueSecretName(r.SpokeClusterName, storageClusterRef.Namespace, storageClusterRef.Name, utils.S3ProfilePrefix)
-	} else {
-		pr1 := mirrorPeer.Spec.Items[0]
-		pr2 := mirrorPeer.Spec.Items[1]
-		secretName = utils.CreateUniqueSecretNameForClient(r.SpokeClusterName, utils.GetKey(pr1.ClusterName, pr1.StorageClusterRef.Name), utils.GetKey(pr2.ClusterName, pr2.StorageClusterRef.Name))
-	}
+	pr1 := mirrorPeer.Spec.Items[0]
+	pr2 := mirrorPeer.Spec.Items[1]
+	secretName := utils.CreateUniqueSecretNameForClient(r.SpokeClusterName, utils.GetKey(pr1.ClusterName, pr1.StorageClusterRef.Name), utils.GetKey(pr2.ClusterName, pr2.StorageClusterRef.Name))
 
 	annotations := map[string]string{
 		OBCNameAnnotationKey:              name,
 		utils.MirrorPeerNameAnnotationKey: mirrorPeerName,
-		OBCTypeAnnotationKey:              obcType,
 	}
 
-	newSecret, err := generateBlueSecret(s3Secret, utils.InternalLabel, secretName, storageClusterRef.Name, r.SpokeClusterName, customData, annotations)
+	newSecret, err := generateBlueSecret(s3Secret, utils.InternalLabel, secretName, storageClusterRefName, r.SpokeClusterName, customData, annotations)
 	if err != nil {
 		return fmt.Errorf("failed to create secret from the managed cluster secret %q in namespace %q for the hub cluster in namespace %q: %v", secret.Name, secret.Namespace, r.SpokeClusterName, err)
 	}
