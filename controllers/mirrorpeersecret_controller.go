@@ -31,7 +31,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
@@ -71,26 +70,6 @@ func (r *MirrorPeerSecretReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	return result, err
 }
 
-func updateSecretWithHubRecoveryLabel(ctx context.Context, rc client.Client, logger *slog.Logger, peerSecret corev1.Secret) error {
-	logger = logger.With("SecretName", peerSecret.Name, "Namespace", peerSecret.Namespace)
-	logger.Info("Adding backup labels to the secret")
-
-	if peerSecret.ObjectMeta.Labels == nil {
-		peerSecret.ObjectMeta.Labels = make(map[string]string)
-	}
-
-	_, err := controllerutil.CreateOrUpdate(ctx, rc, &peerSecret, func() error {
-		peerSecret.ObjectMeta.Labels[utils.HubRecoveryLabel] = ""
-		return nil
-	})
-
-	if err != nil {
-		logger.Error("Failed to add or update hub recovery label", "error", err)
-	}
-
-	return err
-}
-
 func (r *MirrorPeerSecretReconciler) mirrorPeerSecretReconcile(ctx context.Context, rc client.Client, req ctrl.Request) (ctrl.Result, error) {
 	logger := r.Logger.With("Request", req.NamespacedName)
 	logger.Info("Reconciling secret")
@@ -99,37 +78,14 @@ func (r *MirrorPeerSecretReconciler) mirrorPeerSecretReconcile(ctx context.Conte
 	err := rc.Get(ctx, req.NamespacedName, &peerSecret)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			logger.Info("Secret not found, processing deletion", "Request", req.NamespacedName)
-			return ctrl.Result{}, processDeletedSecrets(ctx, rc, req.NamespacedName, logger)
+			logger.Info("Secret not found. Ignoring as it might have been deleted.", "Request", req.NamespacedName)
+			return ctrl.Result{}, nil
 		}
 		logger.Error("Error retrieving secret", "error", err, "Request", req.NamespacedName)
 		return ctrl.Result{}, err
 	}
 
-	if utils.IsSecretSource(&peerSecret) {
-		if err := utils.ValidateSourceSecret(&peerSecret); err != nil {
-			logger.Error("Source secret validation failed", "error", err, "Secret", peerSecret.Name)
-			return ctrl.Result{}, err
-		}
-		if !utils.HasHubRecoveryLabels(&peerSecret) {
-			err = updateSecretWithHubRecoveryLabel(ctx, rc, logger, peerSecret)
-			if err != nil {
-				logger.Error("Failed to add hub recovery labels", "error", err, "Secret", peerSecret.Name)
-				return ctrl.Result{}, err
-			}
-		}
-		err = createOrUpdateDestinationSecretsFromSource(ctx, rc, &peerSecret, logger)
-		if err != nil {
-			logger.Error("Failed to update destination secret", "error", err, "Secret", peerSecret.Name)
-			return ctrl.Result{}, err
-		}
-	} else if utils.IsSecretDestination(&peerSecret) {
-		err = processDestinationSecretUpdation(ctx, rc, &peerSecret, logger)
-		if err != nil {
-			logger.Error("Failed to restore destination secret", "error", err, "Secret", peerSecret.Name)
-			return ctrl.Result{}, err
-		}
-	} else if utils.IsSecretInternal(&peerSecret) {
+	if utils.IsSecretInternal(&peerSecret) {
 		err = createOrUpdateSecretsFromInternalSecret(ctx, rc, &peerSecret, nil, logger)
 		if err != nil {
 			logger.Error("Failed to update from internal secret", "error", err, "Secret", peerSecret.Name)

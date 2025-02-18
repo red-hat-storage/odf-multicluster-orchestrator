@@ -50,8 +50,8 @@ func GetEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-func GenerateBucketName(mirrorPeer multiclusterv1alpha1.MirrorPeer, hasStorageClientRef bool) string {
-	mirrorPeerId := GenerateUniqueIdForMirrorPeer(mirrorPeer, hasStorageClientRef)
+func GenerateBucketName(mirrorPeer multiclusterv1alpha1.MirrorPeer) string {
+	mirrorPeerId := GenerateUniqueIdForMirrorPeer(mirrorPeer)
 	bucketGenerateName := BucketGenerateName
 	return fmt.Sprintf("%s-%s", bucketGenerateName, mirrorPeerId)[0 : len(BucketGenerateName)+1+12]
 }

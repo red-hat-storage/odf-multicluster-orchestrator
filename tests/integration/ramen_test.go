@@ -20,6 +20,7 @@ package integration_test
 
 import (
 	"context"
+	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -27,7 +28,9 @@ import (
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -35,27 +38,91 @@ import (
 )
 
 var _ = Describe("Ramen Resource Tests", func() {
+	odfClientInfoConfigMap := v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "odf-client-info",
+			Namespace: "openshift-operators-ramen",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: viewv1beta1.GroupVersion.String(),
+					Kind:       "ManagedClusterView",
+					Name:       "mcv-1",
+					UID:        "mcv-uid",
+				},
+			},
+		},
+		Data: map[string]string{
+			"cluster1_test-storagecluster": `
+{
+    "clusterId": "cluster1",
+    "name": "cluster1",
+    "providerInfo": {
+        "version": "4.19.0",
+        "deploymentType": "internal",
+        "storageSystemName": "odf-storagesystem",
+        "providerManagedClusterName": "cluster1",
+        "namespacedName": {
+            "namespace": "test-namespace",
+            "name": "test-storagecluster"
+        },
+        "storageProviderEndpoint": "fake-endpoint.svc",
+        "cephClusterFSID": "fsid",
+        "storageProviderPublicEndpoint": "fake-endpoint.svc.cluster.local"
+    },
+    "clientManagedClusterName": "cluster1",
+    "clientId": "client-1"
+}
+`,
+			"cluster2_test-storagecluster": `
+{
+    "clusterId": "cluster2",
+    "name": "cluster2",
+    "providerInfo": {
+        "version": "4.19.0",
+        "deploymentType": "internal",
+        "storageSystemName": "odf-storagesystem",
+        "providerManagedClusterName": "cluster2",
+        "namespacedName": {
+            "namespace": "test-namespace",
+            "name": "test-storagecluster"
+        },
+        "storageProviderEndpoint": "fake-endpoint.svc",
+        "cephClusterFSID": "fsid",
+        "storageProviderPublicEndpoint": "fake-endpoint.svc.cluster.local"
+    },
+    "clientManagedClusterName": "cluter2",
+    "clientId": "client-2"
+}
+`,
+		},
+	}
 
 	namespace1 := corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "mc-1",
+			Name: "cluster1",
 		},
 	}
 	namespace2 := corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "mc-2",
+			Name: "cluster2",
+		},
+	}
+	namespace3 := corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "openshift-operators-ramen",
 		},
 	}
 	managedcluster1 := clusterv1.ManagedCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "mc-1",
+			Name: "cluster1",
 		},
 	}
 	managedcluster2 := clusterv1.ManagedCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "mc-2",
+			Name: "cluster2",
 		},
 	}
+
 	fakeMirrorPeer := &multiclusterv1alpha1.MirrorPeer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "fake-mirror-peer-3",
@@ -64,16 +131,16 @@ var _ = Describe("Ramen Resource Tests", func() {
 			Type: "async",
 			Items: []multiclusterv1alpha1.PeerRef{
 				{
-					ClusterName: "mc-1",
+					ClusterName: "cluster1",
 					StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
-						Name:      "test-storagecluster1",
+						Name:      "test-storagecluster",
 						Namespace: "test-ns",
 					},
 				},
 				{
-					ClusterName: "mc-2",
+					ClusterName: "cluster2",
 					StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
-						Name:      "test-storagecluster2",
+						Name:      "test-storagecluster",
 						Namespace: "test-ns",
 					},
 				},
@@ -81,39 +148,48 @@ var _ = Describe("Ramen Resource Tests", func() {
 		},
 	}
 
+	onboardingToken1 := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "cluster2",
+		},
+		StringData: map[string]string{
+			utils.SecretDataKey: `
+{
+    "id": "faketokenid",
+    "expirationDate": "",
+    "subjectRole": "client",
+    "storageCluster": "test-storagecluster"
+}
+`,
+		},
+	}
+
+	onboardingToken2 := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "cluster1",
+		},
+		StringData: map[string]string{
+			utils.SecretDataKey: `
+{
+    "id": "faketokenid",
+    "expirationDate": "",
+    "subjectRole": "client",
+    "storageCluster": "test-storagecluster"
+}
+`,
+		},
+	}
+
 	pr1 := fakeMirrorPeer.Spec.Items[0]
 	pr2 := fakeMirrorPeer.Spec.Items[1]
 
-	secretNN1 := types.NamespacedName{
-		Name:      utils.GetSecretNameByPeerRef(pr1),
-		Namespace: pr1.ClusterName,
-	}
-
-	storageClusterNN1 := types.NamespacedName{
-		Name:      pr1.StorageClusterRef.Name,
-		Namespace: pr1.StorageClusterRef.Namespace,
-	}
-
-	sec1 := utils.CreateSourceSecret(secretNN1, storageClusterNN1, []byte(`{"cluster":"b2NzLXN0b3JhZ2VjbHVzdGVyLWNlcGhjbHVzdGVy","token":"ZXlKbWMybGtJam9pWXpSak56SmpNRE10WXpCbFlpMDBZMlppTFRnME16RXRNekExTmpZME16UmxZV1ZqSWl3aVkyeHBaVzUwWDJsa0lqb2ljbUprTFcxcGNuSnZjaTF3WldWeUlpd2lhMlY1SWpvaVFWRkVkbGxyTldrM04xbG9TMEpCUVZZM2NFZHlVVXBrU1VvelJtZGpjVWxGVUZWS0wzYzlQU0lzSW0xdmJsOW9iM04wSWpvaU1UY3lMak13TGpFd01TNHlORGs2TmpjNE9Td3hOekl1TXpBdU1UZ3pMakU1TURvMk56ZzVMREUzTWk0ek1DNHlNak11TWpFd09qWTNPRGtpTENKdVlXMWxjM0JoWTJVaU9pSnZjR1Z1YzJocFpuUXRjM1J2Y21GblpTSjk="}`), utils.OriginMap["RookOrigin"], `{"cephfs":"f9708852fe4cf1f4d5de7e525f1b0aba","rbd":"dcd70114947d0bb1f6b96f0dd6a9aaca"}`)
-
-	secretNN2 := types.NamespacedName{
-		Name:      utils.GetSecretNameByPeerRef(pr2),
-		Namespace: pr2.ClusterName,
-	}
-
-	storageClusterNN2 := types.NamespacedName{
-		Name:      pr2.StorageClusterRef.Name,
-		Namespace: pr2.StorageClusterRef.Namespace,
-	}
-
-	sec2 := utils.CreateSourceSecret(secretNN2, storageClusterNN2, []byte(`{"cluster":"b2NzLXN0b3JhZ2VjbHVzdGVyLWNlcGhjbHVzdGVy","token":"ZXlKbWMybGtJam9pWXpSak56SmpNRE10WXpCbFlpMDBZMlppTFRnME16RXRNekExTmpZME16UmxZV1ZqSWl3aVkyeHBaVzUwWDJsa0lqb2ljbUprTFcxcGNuSnZjaTF3WldWeUlpd2lhMlY1SWpvaVFWRkVkbGxyTldrM04xbG9TMEpCUVZZM2NFZHlVVXBrU1VvelJtZGpjVWxGVUZWS0wzYzlQU0lzSW0xdmJsOW9iM04wSWpvaU1UY3lMak13TGpFd01TNHlORGs2TmpjNE9Td3hOekl1TXpBdU1UZ3pMakU1TURvMk56ZzVMREUzTWk0ek1DNHlNak11TWpFd09qWTNPRGtpTENKdVlXMWxjM0JoWTJVaU9pSnZjR1Z1YzJocFpuUXRjM1J2Y21GblpTSjk="}`), utils.OriginMap["RookOrigin"], `{"cephfs":"f9708852fe4cf1f4d5de7e525f1b0aba","rbd":"dcd70114947d0bb1f6b96f0dd6a9aaca"}`)
-
-	s3sec1 := GetFakeS3SecretForPeerRef(pr1)
-	s3sec2 := GetFakeS3SecretForPeerRef(pr2)
+	s3sec1 := GetFakeS3SecretForPeerRef(pr1, pr2, fakeMirrorPeer.Spec.Items[0].ClusterName)
+	s3sec2 := GetFakeS3SecretForPeerRef(pr1, pr2, fakeMirrorPeer.Spec.Items[1].ClusterName)
 
 	When("MirrorPeer is reconciled", func() {
 
 		BeforeEach(func() {
+			Expect(os.Setenv("POD_NAMESPACE", "openshift-operators-ramen")).To(BeNil())
 			err := k8sClient.Create(context.TODO(), &managedcluster1, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Create(context.TODO(), &managedcluster2, &client.CreateOptions{})
@@ -122,18 +198,30 @@ var _ = Describe("Ramen Resource Tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Create(context.TODO(), &namespace2, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Create(context.TODO(), &namespace3, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Create(context.TODO(), &odfClientInfoConfigMap, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
 
-			err = k8sClient.Create(context.TODO(), sec1, &client.CreateOptions{})
-			Expect(err).NotTo(HaveOccurred())
-			err = k8sClient.Create(context.TODO(), sec2, &client.CreateOptions{})
-			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Create(context.TODO(), s3sec1, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Create(context.TODO(), s3sec2, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Create(context.TODO(), fakeMirrorPeer, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
-			// giving time for the resources to be created
+
+			var found multiclusterv1alpha1.MirrorPeer
+			err = k8sClient.Get(context.TODO(), types.NamespacedName{Namespace: fakeMirrorPeer.Namespace, Name: fakeMirrorPeer.Name}, &found)
+			Expect(err).NotTo(HaveOccurred())
+
+			onboardingToken1.Name = string(found.DeepCopy().UID)
+			err = k8sClient.Create(context.TODO(), onboardingToken1, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			onboardingToken2.Name = string(found.DeepCopy().UID)
+			err = k8sClient.Create(context.TODO(), onboardingToken2, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
 			time.Sleep(1 * time.Second)
 		})
 
@@ -142,14 +230,7 @@ var _ = Describe("Ramen Resource Tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Delete(context.TODO(), &managedcluster2, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
-			err = k8sClient.Delete(context.TODO(), &namespace1, &client.DeleteOptions{})
-			Expect(err).NotTo(HaveOccurred())
-			err = k8sClient.Delete(context.TODO(), &namespace2, &client.DeleteOptions{})
-			Expect(err).NotTo(HaveOccurred())
-
-			err = k8sClient.Delete(context.TODO(), sec1, &client.DeleteOptions{})
-			Expect(err).NotTo(HaveOccurred())
-			err = k8sClient.Delete(context.TODO(), sec2, &client.DeleteOptions{})
+			err = k8sClient.Delete(context.TODO(), &odfClientInfoConfigMap, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Delete(context.TODO(), s3sec1, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
@@ -157,31 +238,33 @@ var _ = Describe("Ramen Resource Tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Delete(context.TODO(), fakeMirrorPeer, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
-			// giving time for the resources to be destroyed
-			time.Sleep(1 * time.Second)
+			err = k8sClient.Delete(context.TODO(), onboardingToken1, &client.DeleteOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Delete(context.TODO(), onboardingToken2, &client.DeleteOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Delete(context.TODO(), &namespace1, &client.DeleteOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Delete(context.TODO(), &namespace2, &client.DeleteOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Delete(context.TODO(), &namespace3, &client.DeleteOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(os.Unsetenv("POD_NAMESPACE")).To(BeNil())
 		})
 
 		It("should create DRClusters", func() {
-			hubClusterSecrets := []*corev1.Secret{sec1, sec2}
 			s3ClusterSecrets := []*corev1.Secret{s3sec1, s3sec2}
 			for i, pr := range fakeMirrorPeer.Spec.Items {
 				dc := &ramenv1alpha1.DRCluster{}
-				hsec := hubClusterSecrets[i]
-				ssec := s3ClusterSecrets[i]
 				err := k8sClient.Get(context.TODO(), types.NamespacedName{Name: pr.ClusterName}, dc)
 				Expect(err).NotTo(HaveOccurred())
-				var hubSecret corev1.Secret
-				err = k8sClient.Get(context.TODO(), types.NamespacedName{Name: hsec.Name, Namespace: hsec.Namespace}, &hubSecret)
-				Expect(err).NotTo(HaveOccurred())
+				ssec := s3ClusterSecrets[i]
 				var s3Secret corev1.Secret
 				err = k8sClient.Get(context.TODO(), types.NamespacedName{Name: ssec.Name, Namespace: ssec.Namespace}, &s3Secret)
-				Expect(err).NotTo(HaveOccurred())
-				rookToken, err := utils.UnmarshalHubSecret(&hubSecret)
 				Expect(err).NotTo(HaveOccurred())
 				s3Token, err := utils.UnmarshalS3Secret(&s3Secret)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(dc.Spec.S3ProfileName).To(Equal(s3Token.S3ProfileName))
-				Expect(string(dc.Spec.Region)).To(Equal(rookToken.FSID))
 			}
 		})
 	})

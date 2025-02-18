@@ -12,11 +12,5 @@ const (
 	StorageIDKey                  = "storageid"
 	CephFSProvisionerTemplate     = "%s.cephfs.csi.ceph.com"
 	SpokeMirrorPeerFinalizer      = "spoke.multicluster.odf.openshift.io"
-	OBCTypeAnnotationKey          = "multicluster.odf.openshift.io/obc-type"
 	OBCNameAnnotationKey          = "multicluster.odf.openshift.io/obc-name"
-)
-
-var (
-	CLIENT  OBCTypeValue = "client"
-	CLUSTER OBCTypeValue = "cluster"
 )
