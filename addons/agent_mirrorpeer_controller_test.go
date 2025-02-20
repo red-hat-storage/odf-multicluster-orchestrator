@@ -522,7 +522,7 @@ func TestDeleteGreenSecret(t *testing.T) {
 }
 
 func TestDeleteS3(t *testing.T) {
-	bucketName := utils.GenerateBucketName(mirrorPeer, false)
+	bucketName := utils.GenerateBucketName(mirrorPeer)
 	ctx := context.TODO()
 	scheme := mgrScheme
 	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer1).Build()
