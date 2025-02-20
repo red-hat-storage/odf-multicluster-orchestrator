@@ -40,6 +40,7 @@ func GetCurrentStorageClusterRef(mp *multiclusterv1alpha1.MirrorPeer, spokeClust
 			return &v.StorageClusterRef, nil
 		}
 	}
+
 	return nil, fmt.Errorf("StorageClusterRef for cluster %s under mirrorpeer %s not found", spokeClusterName, mp.Name)
 }
 
@@ -50,10 +51,9 @@ func GetEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-func GenerateBucketName(mirrorPeer multiclusterv1alpha1.MirrorPeer, hasStorageClientRef bool) string {
-	mirrorPeerId := GenerateUniqueIdForMirrorPeer(mirrorPeer, hasStorageClientRef)
-	bucketGenerateName := BucketGenerateName
-	return fmt.Sprintf("%s-%s", bucketGenerateName, mirrorPeerId)[0 : len(BucketGenerateName)+1+12]
+func GenerateBucketName(mirrorPeer multiclusterv1alpha1.MirrorPeer) string {
+	mirrorPeerId := GenerateUniqueIdForMirrorPeer(mirrorPeer)
+	return fmt.Sprintf("%s-%s", BucketGenerateName, mirrorPeerId)[0 : len(BucketGenerateName)+1+12]
 }
 
 func CreateOrUpdateObjectBucketClaim(ctx context.Context, c client.Client, bucketName, bucketNamespace string, annotations map[string]string) (controllerutil.OperationResult, error) {
