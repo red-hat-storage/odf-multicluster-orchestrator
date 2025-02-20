@@ -46,29 +46,38 @@ func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name strin
 		return err
 	}
 
+	var storagePeerRef *v1alpha1.PeerRef
 	var storageClusterRef *v1alpha1.StorageClusterRef
 	var s3ProfileName string
 
 	if obcType == string(CLUSTER) {
-		storageClusterRef, err = utils.GetCurrentStorageClusterRef(mirrorPeer, r.SpokeClusterName)
-		s3ProfileName = fmt.Sprintf("%s-%s-%s", utils.S3ProfilePrefix, r.SpokeClusterName, storageClusterRef.Name)
-	} else {
-		sc, err := utils.GetStorageClusterFromCurrentNamespace(ctx, r.SpokeClient, namespace)
+		storagePeerRef, err = utils.GetPeerRefForSpokeCluster(mirrorPeer, r.SpokeClusterName)
 		if err != nil {
-			return fmt.Errorf("failed to find StorageCluster for given provider cluster %s", r.SpokeClusterName)
+			return fmt.Errorf("failed to find storage cluster ref using spoke cluster name %s from mirrorpeers: %v", r.SpokeClusterName, err)
 		}
-
-		r.Logger.Info("Found StorageCluster for provider", "Provider", r.SpokeClusterName, "StorageClusterName", sc.Name, "StorageCluster Namespace", sc.Namespace)
-		storageClusterRef = &v1alpha1.StorageClusterRef{
-			Name:      sc.Name,
-			Namespace: sc.Namespace,
+		if storagePeerRef == nil {
+			r.Logger.Info("OBC references MirrorPeer which is not related to this spoke cluster.", "OBC Name", name, "OBC Namespace", namespace, "MirrorPeer", mirrorPeerName)
+			return nil
 		}
-		s3ProfileName = fmt.Sprintf("%s-%s", utils.S3ProfilePrefix, utils.CreateUniqueName(mirrorPeerName, r.SpokeClusterName, storageClusterRef.Name)[0:39])
+		r.Logger.Info("Found peerRef for spoke cluseter", "Spoke", r.SpokeClusterName, "PeerRef", storagePeerRef)
+	} else {
+		storagePeerRefList, err := utils.GetPeerRefForProviderCluster(ctx, r.SpokeClient, r.HubClient, mirrorPeer)
+		if err != nil {
+			return fmt.Errorf("failed to find client peerRef for current provider cluster %s. %w", r.SpokeClusterName, err)
+		}
+		if len(storagePeerRefList) > 1 {
+			return fmt.Errorf("MirrorPeer has multiple clients pointing to same provider which is unsupported")
+		}
+		if len(storagePeerRefList) < 1 {
+			r.Logger.Info("OBC references MirrorPeer which is not related to this provider.", "OBC Name", name, "OBC Namespace", namespace, "MirrorPeer", mirrorPeerName)
+			return nil
+		}
+		storagePeerRef = &storagePeerRefList[0]
+		r.Logger.Info("Found client peerRef for provider", "Provider", r.SpokeClusterName, "PeerRef", storagePeerRef)
 	}
 
-	if storageClusterRef == nil || err != nil {
-		return fmt.Errorf("failed to find storage cluster ref using spoke cluster name %s from mirrorpeers: %v", r.SpokeClusterName, err)
-	}
+	storageClusterRef = &storagePeerRef.StorageClusterRef
+	s3ProfileName = fmt.Sprintf("%s-%s-%s", utils.S3ProfilePrefix, storagePeerRef.ClusterName, storagePeerRef.StorageClusterRef.Name)
 
 	// fetch s3 endpoint
 	route := &routev1.Route{}

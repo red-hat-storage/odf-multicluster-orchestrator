@@ -381,7 +381,7 @@ func (r *MirrorPeerReconciler) getSecretNameByType(clusterType utils.ClusterType
 
 func (r *MirrorPeerReconciler) createS3(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, scNamespace string, hasStorageClientRef bool) error {
 	bucketNamespace := utils.GetEnv("ODR_NAMESPACE", scNamespace)
-	bucketName := utils.GenerateBucketName(mirrorPeer, hasStorageClientRef)
+	bucketName := utils.GenerateBucketName(mirrorPeer)
 	annotations := map[string]string{
 		utils.MirrorPeerNameAnnotationKey: mirrorPeer.Name,
 	}
@@ -587,7 +587,7 @@ func (r *MirrorPeerReconciler) deleteGreenSecret(ctx context.Context, spokeClust
 // deleteS3 deletes the S3 bucket in the storage cluster namespace, each new mirrorpeer generates
 // a new bucket, so we do not need to check if the bucket is being used by another mirrorpeer
 func (r *MirrorPeerReconciler) deleteS3(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, scNamespace string) error {
-	bucketName := utils.GenerateBucketName(mirrorPeer, false)
+	bucketName := utils.GenerateBucketName(mirrorPeer)
 	bucketNamespace := utils.GetEnv("ODR_NAMESPACE", scNamespace)
 	noobaaOBC, err := utils.GetObjectBucketClaim(ctx, r.SpokeClient, bucketName, bucketNamespace)
 	if err != nil {
