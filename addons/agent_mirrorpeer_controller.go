@@ -37,7 +37,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // MirrorPeerReconciler reconciles a MirrorPeer object
@@ -536,10 +538,31 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		},
 	}
 
+	tokenToMirrorPeerMapFunc := func(ctx context.Context, obj client.Object) []ctrl.Request {
+		reqs := []ctrl.Request{}
+		var mirrorPeerList multiclusterv1alpha1.MirrorPeerList
+		err := r.HubClient.List(ctx, &mirrorPeerList)
+		if err != nil {
+			r.Logger.Error("Unable to reconcile MirrorPeer based on token changes.", "error", err)
+			return reqs
+		}
+		for _, mirrorpeer := range mirrorPeerList.Items {
+			for _, peerRef := range mirrorpeer.Spec.Items {
+				name := utils.GetSecretNameByPeerRef(peerRef)
+				if name == obj.GetName() {
+					reqs = append(reqs, reconcile.Request{NamespacedName: types.NamespacedName{Name: mirrorpeer.Name}})
+					break
+				}
+			}
+		}
+		return reqs
+	}
+
 	r.Logger.Info("Setting up controller with manager")
 	mpPredicate := utils.ComposePredicates(predicate.GenerationChangedPredicate{}, mirrorPeerSpokeClusterPredicate)
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(mpPredicate)).
+		WatchesMetadata(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(tokenToMirrorPeerMapFunc), builder.WithPredicates(utils.SourceOrDestinationPredicate)).
 		Complete(r)
 }
 
