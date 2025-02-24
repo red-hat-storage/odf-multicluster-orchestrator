@@ -9,3 +9,6 @@ rules:
 - apiGroups: ["multicluster.odf.openshift.io"]
   resources: ["mirrorpeers"]
   verbs: ["get", "list", "watch", "update"]
+- apiGroups: ["cluster.open-cluster-management.io"]
+  resources: ["managedclusters"]
+  verbs: ["get"]
