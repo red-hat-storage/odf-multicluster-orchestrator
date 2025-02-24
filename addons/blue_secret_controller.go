@@ -51,7 +51,7 @@ func (r *BlueSecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("bluesecret_controller").
 		Watches(&corev1.Secret{}, &handler.EnqueueRequestForObject{},
-			builder.WithPredicates(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{}, blueSecretPredicate)).
+			builder.WithPredicates(predicate.LabelChangedPredicate{}, blueSecretPredicate)).
 		Complete(r)
 }
 
