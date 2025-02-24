@@ -8,11 +8,14 @@ import (
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	replicationv1alpha1 "github.com/csi-addons/kubernetes-csi-addons/apis/replication.storage/v1alpha1"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -55,8 +58,41 @@ func (r *DRPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	dpPredicate := utils.ComposePredicates(predicate.GenerationChangedPredicate{})
 
+	tokenToDRPolicyMapFunc := func(ctx context.Context, obj client.Object) []ctrl.Request {
+		reqs := []ctrl.Request{}
+		var mirrorPeerList multiclusterv1alpha1.MirrorPeerList
+		err := r.HubClient.List(ctx, &mirrorPeerList)
+		if err != nil {
+			r.Logger.Error("Unable to reconcile DRPolicy based on token changes. Failed to list MirrorPeers.", "error", err)
+			return reqs
+		}
+		for _, mirrorpeer := range mirrorPeerList.Items {
+			for _, peerRef := range mirrorpeer.Spec.Items {
+				name := utils.GetSecretNameByPeerRef(peerRef)
+				if name == obj.GetName() {
+					var drpolicyList ramenv1alpha1.DRPolicyList
+					err := r.HubClient.List(ctx, &drpolicyList)
+					if err != nil {
+						r.Logger.Error("Unable to reconcile DRPolicy based on token changes. Failed to list DRPolicies", "error", err)
+						return reqs
+					}
+					for _, drpolicy := range drpolicyList.Items {
+						for i := range drpolicy.Spec.DRClusters {
+							if drpolicy.Spec.DRClusters[i] == peerRef.ClusterName {
+								reqs = append(reqs, reconcile.Request{NamespacedName: types.NamespacedName{Name: drpolicy.Name}})
+							}
+						}
+					}
+					break
+				}
+			}
+		}
+		return reqs
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ramenv1alpha1.DRPolicy{}, builder.WithPredicates(dpPredicate)).
+		WatchesMetadata(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(tokenToDRPolicyMapFunc), builder.WithPredicates(utils.SourceOrDestinationPredicate)).
 		Complete(r)
 }
 
