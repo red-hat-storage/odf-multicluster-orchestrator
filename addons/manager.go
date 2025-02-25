@@ -21,9 +21,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -213,43 +211,6 @@ func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.
 		logger.Error("Problem running hub controller manager", "error", err)
 		os.Exit(1)
 	}
-}
-func isProviderModeEnabled(ctx context.Context, cl client.Reader, namespace string, logger *slog.Logger) bool {
-	storageClusterCRD := &metav1.PartialObjectMetadata{}
-	storageClusterCRD.SetGroupVersionKind(
-		extv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"),
-	)
-	storageClusterCRD.Name = "storageclusters.ocs.openshift.io"
-	if err := cl.Get(ctx, client.ObjectKeyFromObject(storageClusterCRD), storageClusterCRD); client.IgnoreNotFound(err) != nil {
-		logger.Error("Failed to find presence of StorageCluster CRD", "Error", err)
-		return false
-	}
-
-	if storageClusterCRD.UID != "" {
-		storageClusters := &metav1.PartialObjectMetadataList{}
-		storageClusters.SetGroupVersionKind(
-			schema.GroupVersionKind{
-				Group:   "ocs.openshift.io",
-				Version: "v1",
-				Kind:    "StorageCluster",
-			},
-		)
-		if err := cl.List(ctx, storageClusters, client.InNamespace(namespace), client.Limit(1)); err != nil {
-			logger.Error("Failed to list StorageCluster CR")
-			return false
-		}
-		if len(storageClusters.Items) < 1 {
-			logger.Error("StorageCluster CR does not exist")
-			return false
-		}
-		logger.Info("Checking if StorageCluster indicates ODF is deployed in provider mode")
-		if storageClusters.Items[0].GetAnnotations()["ocs.openshift.io/deployment-mode"] != "provider" {
-			return false
-		}
-	}
-
-	logger.Info("Conditions not met. Controllers will be skipped.")
-	return true
 }
 
 func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slog.Logger) {
