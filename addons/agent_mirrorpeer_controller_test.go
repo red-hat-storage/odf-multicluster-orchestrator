@@ -282,6 +282,7 @@ func TestMirrorPeerReconcile(t *testing.T) {
 				},
 			},
 		}
+		cephCluster := GetTestCephCluster()
 
 		rcm := corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
