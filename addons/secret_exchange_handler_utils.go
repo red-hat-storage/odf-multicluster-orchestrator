@@ -53,38 +53,6 @@ func generateBlueSecret(
 	return nSecret, nil
 }
 
-func generateBlueSecretForExternal(rookCephMon corev1.Secret, labelType utils.SecretLabelType, name string, sc string, managedClusterName string, customData map[string][]byte) (*corev1.Secret, error) {
-	secretData, err := json.Marshal(rookCephMon.Data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal data from Rook-Ceph monitor: error: %v, data source: %q", err, rookCephMon.Name)
-	}
-
-	data := make(map[string][]byte)
-	data[utils.NamespaceKey] = []byte(rookCephMon.Namespace)
-	data[utils.StorageClusterNameKey] = []byte(sc)
-	for key, value := range customData {
-		data[key] = value
-	}
-
-	data[utils.SecretDataKey] = secretData
-
-	nSecret := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: managedClusterName,
-			Labels: map[string]string{
-				utils.SecretLabelTypeKey: string(labelType),
-				utils.HubRecoveryLabel:   "",
-			},
-		},
-		Type: utils.SecretLabelTypeKey,
-		Data: data,
-	}
-
-	return &nSecret, nil
-
-}
-
 func validateGreenSecret(secret corev1.Secret) error {
 	// Validate the secret type label
 	if secret.GetLabels()[utils.SecretLabelTypeKey] != string(utils.DestinationLabel) {
