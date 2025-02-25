@@ -214,14 +214,6 @@ func TestDeleteResources(t *testing.T) {
 		t.Error("Failed to create fake secrets", err)
 	}
 
-	sourceSecrets, err := fetchAllSourceSecrets(ctx, r.Client, "")
-	if len(sourceSecrets) < 2 {
-		t.Error("Failed to delete SourceSecrets", sourceSecrets, err)
-	}
-	destinationSecrets, err := fetchAllDestinationSecrets(ctx, r.Client, "")
-	if len(destinationSecrets) < 2 {
-		t.Error("Failed to delete Destination Secrets", err)
-	}
 	internalSecrets, err := utils.FetchAllSecretsWithLabel(ctx, r.Client, "", utils.InternalLabel)
 	if len(internalSecrets) < 2 {
 		t.Error("Failed to delete Internal Secrets", err)
@@ -232,14 +224,6 @@ func TestDeleteResources(t *testing.T) {
 		t.Error("Failed to delete resources", err)
 	}
 	for i := range mirrorpeer.Spec.Items {
-		sourceSecrets, err := fetchAllSourceSecrets(ctx, r.Client, mirrorpeer.Spec.Items[i].ClusterName)
-		if len(sourceSecrets) > 0 {
-			t.Error("Failed to delete SourceSecrets", sourceSecrets, err)
-		}
-		destinationSecrets, err := fetchAllDestinationSecrets(ctx, r.Client, mirrorpeer.Spec.Items[i].ClusterName)
-		if len(destinationSecrets) > 0 {
-			t.Error("Failed to delete Destination Secrets", err)
-		}
 		internalSecrets, err := utils.FetchAllSecretsWithLabel(ctx, r.Client, mirrorpeer.Spec.Items[i].ClusterName, utils.InternalLabel)
 		if len(internalSecrets) > 0 {
 			t.Error("Failed to delete Internal Secrets", err)
@@ -250,32 +234,6 @@ func TestDeleteResources(t *testing.T) {
 
 func CreateFakeSecrets(mirrorPeer multiclusterv1alpha1.MirrorPeer, r MirrorPeerReconciler, ctx context.Context) error {
 	for i := range mirrorPeer.Spec.Items {
-		sourceSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "fake-source-secret",
-				Namespace: mirrorPeer.Spec.Items[i].ClusterName,
-				Labels: map[string]string{
-					utils.SecretLabelTypeKey: string(utils.SourceLabel),
-				},
-			},
-			Type: corev1.SecretTypeOpaque,
-		}
-		if err := r.Create(ctx, sourceSecret); err != nil {
-			return err
-		}
-		destinationSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "fake-destination-secret",
-				Namespace: mirrorPeer.Spec.Items[i].ClusterName,
-				Labels: map[string]string{
-					utils.SecretLabelTypeKey: string(utils.DestinationLabel),
-				},
-			},
-			Type: corev1.SecretTypeOpaque,
-		}
-		if err := r.Create(ctx, destinationSecret); err != nil {
-			return err
-		}
 		internalSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "fake-internal-secret",
