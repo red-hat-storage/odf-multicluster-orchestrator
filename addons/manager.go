@@ -195,17 +195,6 @@ func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.
 		os.Exit(1)
 	}
 
-	if err = (&GreenSecretReconciler{
-		Scheme:           mgr.GetScheme(),
-		HubClient:        mgr.GetClient(),
-		SpokeClient:      spokeClient,
-		SpokeClusterName: options.SpokeClusterName,
-		Logger:           logger.With("controller", "GreenSecretReconciler"),
-	}).SetupWithManager(mgr); err != nil {
-		logger.Error("Failed to create GreenSecret controller", "controller", "GreenSecret", "error", err)
-		os.Exit(1)
-	}
-
 	logger.Info("Starting hub controller manager")
 	if err := mgr.Start(ctx); err != nil {
 		logger.Error("Problem running hub controller manager", "error", err)
