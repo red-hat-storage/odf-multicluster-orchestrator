@@ -288,20 +288,6 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slo
 
 	currentNamespace := os.Getenv("POD_NAMESPACE")
 
-	if !isProviderModeEnabled(ctx, mgr.GetAPIReader(), currentNamespace, logger) {
-		logger.Info("Cluster is not running in provider mode. Setting up blue secret controller.")
-		if err = (&BlueSecretReconciler{
-			Scheme:           mgr.GetScheme(),
-			HubClient:        hubClient,
-			SpokeClient:      mgr.GetClient(),
-			SpokeClusterName: options.SpokeClusterName,
-			Logger:           logger.With("controller", "BlueSecretReconciler"),
-		}).SetupWithManager(mgr); err != nil {
-			logger.Error("Failed to create BlueSecret controller", "controller", "BlueSecret", "error", err)
-			os.Exit(1)
-		}
-	}
-
 	if err = mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		logger.Info("Starting lease updater")
 		leaseUpdater := lease.NewLeaseUpdater(
