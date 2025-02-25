@@ -73,91 +73,6 @@ func createOrUpdateDestinationSecretsFromSource(ctx context.Context, rc client.C
 	return anyErr
 }
 
-func processDestinationSecretUpdation(ctx context.Context, rc client.Client, destSecret *corev1.Secret, logger *slog.Logger) error {
-	logger.Info("Validating destination secret", "Secret", destSecret.Name, "Namespace", destSecret.Namespace)
-
-	err := utils.ValidateDestinationSecret(destSecret)
-	if err != nil {
-		logger.Error("Destination secret validation failed", "error", err, "Secret", destSecret.Name, "Namespace", destSecret.Namespace)
-		return err
-	}
-
-	logger.Info("Fetching all MirrorPeers for secret update", "Secret", destSecret.Name)
-	mirrorPeers, err := utils.FetchAllMirrorPeers(ctx, rc)
-	if err != nil {
-		logger.Error("Failed to get the list of MirrorPeer objects", "error", err)
-		return err
-	}
-
-	logger.Info("Determining peers connected to the destination secret", "Secret", destSecret.Name)
-	uniqueConnectedPeers, err := PeersConnectedToSecret(destSecret, mirrorPeers)
-	if err != nil {
-		logger.Error("Failed to get the peers connected to the secret", "error", err, "Secret", destSecret.Name, "Namespace", destSecret.Namespace)
-		return err
-	}
-
-	var connectedSource *corev1.Secret
-	for _, eachConnectedPeer := range uniqueConnectedPeers {
-		var connectedSecret corev1.Secret
-		nPeerRef := NewNamedPeerRefWithSecretData(destSecret, eachConnectedPeer)
-		err := nPeerRef.GetAssociatedSecret(ctx, rc, &connectedSecret)
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				logger.Info("Associated source secret not found, skipping", "PeerRef", eachConnectedPeer, "Secret", destSecret.Name)
-				continue
-			}
-			logger.Error("Unexpected error while finding the source secret", "error", err, "PeerRef", eachConnectedPeer, "Secret", destSecret.Name, "Namespace", destSecret.Namespace)
-			return err
-		}
-		if utils.IsSecretSource(&connectedSecret) {
-			connectedSource = connectedSecret.DeepCopy()
-			break
-		}
-	}
-
-	if connectedSource == nil {
-		logger.Info("No connected source found, potentially removing the dangling destination secret", "Secret", destSecret.Name, "Namespace", destSecret.Namespace)
-		err = rc.Delete(ctx, destSecret)
-		if err != nil {
-			logger.Error("Failed to delete the dangling destination secret", "error", err, "Secret", destSecret.Name, "Namespace", destSecret.Namespace)
-		}
-		return err
-	}
-
-	logger.Info("Updating destination secret from the connected source", "SourceSecret", connectedSource.Name, "DestinationSecret", destSecret.Name)
-	err = createOrUpdateDestinationSecretsFromSource(ctx, rc, connectedSource, logger, mirrorPeers...)
-	if err != nil {
-		logger.Error("Failed to update destination secret from the source", "error", err, "SourceSecret", connectedSource.Name, "DestinationSecret", destSecret.Name)
-	}
-
-	return err
-}
-
-func processDestinationSecretCleanup(ctx context.Context, rc client.Client, logger *slog.Logger) error {
-	allDestinationSecrets, err := fetchAllDestinationSecrets(ctx, rc, "")
-	if err != nil {
-		logger.Error("Unable to fetch all destination secrets", "error", err)
-		return err
-	}
-
-	var anyError error
-	for _, eachDSecret := range allDestinationSecrets {
-		logger.Info("Processing update for destination secret", "SecretName", eachDSecret.Name, "Namespace", eachDSecret.Namespace)
-		err = processDestinationSecretUpdation(ctx, rc, &eachDSecret, logger)
-		if err != nil {
-			anyError = err
-			logger.Error("Failed to update destination secret", "error", err, "SecretName", eachDSecret.Name, "Namespace", eachDSecret.Namespace)
-		}
-	}
-
-	if anyError != nil {
-		logger.Error("One or more errors occurred during the cleanup of destination secrets", "error", anyError)
-	} else {
-		logger.Info("All destination secrets processed successfully")
-	}
-	return anyError
-}
-
 func createOrUpdateRamenS3Secret(ctx context.Context, rc client.Client, secret *corev1.Secret, data map[string][]byte, ramenHubNamespace string, logger *slog.Logger) error {
 
 	expectedSecret := corev1.Secret{
@@ -211,59 +126,6 @@ func createOrUpdateRamenS3Secret(ctx context.Context, rc client.Client, secret *
 		logger.Info("No updates required for the S3 secret")
 	}
 
-	return nil
-}
-
-func createOrUpdateExternalSecret(ctx context.Context, rc client.Client, secret *corev1.Secret, data map[string][]byte, namespace string, logger *slog.Logger) error {
-	logger.Info("Processing external secret", "SecretName", secret.Name, "Namespace", namespace)
-
-	expectedSecret := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secret.Name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				utils.CreatedByLabelKey: utils.MirrorPeerSecret,
-			},
-		},
-		Type: corev1.SecretTypeOpaque,
-		Data: map[string][]byte{
-			"fsid": data["fsid"],
-		},
-	}
-
-	localSecret := corev1.Secret{}
-	namespacedName := types.NamespacedName{
-		Name:      secret.Name,
-		Namespace: namespace,
-	}
-
-	err := rc.Get(ctx, namespacedName, &localSecret)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			logger.Info("External secret not found, creating new one", "SecretName", expectedSecret.Name, "Namespace", namespace)
-			if createErr := rc.Create(ctx, &expectedSecret); createErr != nil {
-				logger.Error("Failed to create the external secret", "error", createErr, "SecretName", expectedSecret.Name, "Namespace", namespace)
-				return createErr
-			}
-			return nil
-		}
-		logger.Error("Failed to fetch the external secret", "error", err, "SecretName", secret.Name, "Namespace", namespace)
-		return err
-	}
-
-	if !reflect.DeepEqual(expectedSecret.Data, localSecret.Data) {
-		logger.Info("Data mismatch found, updating external secret", "SecretName", expectedSecret.Name, "Namespace", namespace)
-		_, updateErr := controllerutil.CreateOrUpdate(ctx, rc, &localSecret, func() error {
-			localSecret.Data = expectedSecret.Data
-			return nil
-		})
-		if updateErr != nil {
-			logger.Error("Failed to update the external secret", "error", updateErr, "SecretName", expectedSecret.Name, "Namespace", namespace)
-		}
-		return updateErr
-	}
-
-	logger.Info("No updates required for the external secret", "SecretName", expectedSecret.Name, "Namespace", namespace)
 	return nil
 }
 
@@ -439,12 +301,6 @@ func createOrUpdateSecretsFromInternalSecret(ctx context.Context, rc client.Clie
 			logger.Error("Failed to update Ramen Hub Operator config", "error", err, "SecretName", secret.Name, "Namespace", currentNamespace)
 			return err
 		}
-	} else if secretOrigin == utils.OriginMap["RookOrigin"] {
-		currentNamespace := os.Getenv("POD_NAMESPACE")
-		if err := createOrUpdateExternalSecret(ctx, rc, secret, data, currentNamespace, logger); err != nil {
-			logger.Error("Failed to create or update external secret", "error", err, "SecretName", secret.Name, "Namespace", currentNamespace)
-			return err
-		}
 	}
 
 	return nil
@@ -557,12 +413,4 @@ func PeersConnectedToSecret(secret *corev1.Secret, mirrorPeers []multiclusterv1a
 		return nil, err
 	}
 	return PeersConnectedToPeerRef(sourcePeerRef, mirrorPeers), nil
-}
-
-func fetchAllSourceSecrets(ctx context.Context, rc client.Client, namespace string) ([]corev1.Secret, error) {
-	return utils.FetchAllSecretsWithLabel(ctx, rc, namespace, utils.SourceLabel)
-}
-
-func fetchAllDestinationSecrets(ctx context.Context, rc client.Client, namespace string) ([]corev1.Secret, error) {
-	return utils.FetchAllSecretsWithLabel(ctx, rc, namespace, utils.DestinationLabel)
 }
