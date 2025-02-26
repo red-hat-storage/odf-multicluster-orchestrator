@@ -662,7 +662,7 @@ func (r *MirrorPeerReconciler) deleteSecrets(ctx context.Context, mirrorPeer mul
 		if !peerRefUsed {
 			logger.Info("PeerRef is not used by another MirrorPeer, proceeding to delete secrets", "PeerRef", peerRef.ClusterName)
 
-			secretLabels := []string{string(utils.SourceLabel), string(utils.DestinationLabel)}
+			secretLabels := []string{}
 			if mirrorPeer.Spec.ManageS3 {
 				secretLabels = append(secretLabels, string(utils.InternalLabel))
 			}

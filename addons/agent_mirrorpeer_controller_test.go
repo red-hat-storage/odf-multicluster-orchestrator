@@ -84,36 +84,6 @@ storageSystemName: test-storagecluster-storagesystem
 		},
 	}
 
-	secretData = map[string][]byte{
-		"token":      []byte("eyJmc2lkIjoiMzU2NjZlNGMtZTljMC00ZmE3LWE3MWEtMmIwNTJiZjUxOTFhIiwiY2xpZW50X2lkIjoicmJkLW1pcnJvci1wZWVyIiwia2V5IjoiQVFDZVkwNWlYUmtsTVJBQU95b3I3ZTZPL3MrcTlzRnZWcVpVaHc9PSIsIm1vbl9ob3N0IjoiMTcyLjMxLjE2NS4yMjg6Njc4OSwxNzIuMzEuMTkxLjE0MDo2Nzg5LDE3Mi4zMS44LjQ0OjY3ODkiLCJuYW1lc3BhY2UiOiJvcGVuc2hpZnQtc3RvcmFnZSJ9"),
-		"cluster":    []byte(fmt.Sprintf("%s-cephcluster", storageClusterName)),
-		"storage_id": []byte(`{"cephfs":"f9708852fe4cf1f4d5de7e525f1b0aba","rbd":"dcd70114947d0bb1f6b96f0dd6a9aaca"}`),
-	}
-	// Create secret cluster-peer-token
-	clusterPeerToken = corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("cluster-peer-token-%s-cephcluster", storageClusterName),
-			Namespace: odfNamespace,
-		},
-		Data: secretData,
-	}
-
-	exchangedSecret1 = corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "5feeb6c9ab835d7365ccec211f0756ede3a54f3",
-			Namespace: odfNamespace,
-		},
-		Data: secretData,
-	}
-
-	exchangedSecret2 = corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "c4bca1dacc9733952cc5a705761792867c4d3fb",
-			Namespace: odfNamespace,
-		},
-		Data: secretData,
-	}
-
 	rbdStorageClass        = GetTestCephRBDStorageClass()
 	rbdVolumeSnapshotClass = GetTestRBDVolumeSnapshotClass()
 	rbdVirtStorageClass    = GetTestCephRBDVirtStorageClass()
@@ -258,44 +228,18 @@ func TestMirrorPeerReconcile(t *testing.T) {
 	scheme := mgrScheme
 	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer1, &mirrorpeer2).Build()
 	os.Setenv("POD_NAMESPACE", odfNamespace)
-	oppositePeerRefsArray := make([][]multiclusterv1alpha1.PeerRef, 0)
-	// Quick iteration to get peer refs
-	for _, pr := range mirrorpeer1.Spec.Items {
-		peerRefs := getOppositePeerRefs(&mirrorpeer1, pr.ClusterName)
-		oppositePeerRefsArray = append(oppositePeerRefsArray, peerRefs)
-	}
 
-	for i, pr := range mirrorpeer1.Spec.Items {
-		secretNames := make([]string, 0)
-		for _, ref := range oppositePeerRefsArray[i] {
-			secretNames = append(secretNames, utils.GetSecretNameByPeerRef(ref))
-		}
+	for _, pr := range mirrorpeer1.Spec.Items {
 		storageCluster := ocsv1.StorageCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      pr.StorageClusterRef.Name,
 				Namespace: pr.StorageClusterRef.Namespace,
 			},
-			Spec: ocsv1.StorageClusterSpec{
-				Mirroring: &ocsv1.MirroringSpec{
-					Enabled:         false,
-					PeerSecretNames: secretNames,
-				},
-			},
+			Spec: ocsv1.StorageClusterSpec{},
 		}
 		cephCluster := GetTestCephCluster()
 
-		rcm := corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      RookConfigMapName,
-				Namespace: pr.StorageClusterRef.Namespace,
-			},
-		}
-
-		// Need to initialize this map otherwise it panics during reconcile
-		rcm.Data = make(map[string]string)
-		rcm.Data[RookCSIEnableKey] = "false"
-
-		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&storageCluster, &rcm, &clusterPeerToken, &exchangedSecret1, &exchangedSecret2, cephCluster, rbdVirtStorageClass, cephblockpool, rbdStorageClass, cephfsStorageClass, &odfInfoConfigMap, rbdVolumeSnapshotClass, cephfsVolumeSnapshotClass).Build()
+		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&storageCluster, cephCluster, rbdVirtStorageClass, cephblockpool, rbdStorageClass, cephfsStorageClass, &odfInfoConfigMap, rbdVolumeSnapshotClass, cephfsVolumeSnapshotClass).Build()
 
 		r := MirrorPeerReconciler{
 			HubClient:        fakeHubClient,
@@ -405,59 +349,6 @@ func TestMirrorPeerReconcile(t *testing.T) {
 		}
 	}
 
-}
-
-func TestDeleteGreenSecret(t *testing.T) {
-	ctx := context.TODO()
-	scheme := mgrScheme
-	secretData := map[string][]byte{
-		utils.StorageClusterNameKey: []byte("test-storagecluster"),
-		utils.NamespaceKey:          []byte("test-namespace"),
-		utils.SecretOriginKey:       []byte(""),
-		utils.SecretDataKey:         []byte(""),
-	}
-	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer1).Build()
-	for _, pr := range mirrorpeer1.Spec.Items {
-		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects().Build()
-		oppositePeerRefs := getOppositePeerRefs(&mirrorpeer1, pr.ClusterName)
-		for _, oppPeer := range oppositePeerRefs {
-			greenSecret := corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      utils.GetSecretNameByPeerRef(oppPeer),
-					Namespace: pr.StorageClusterRef.Namespace,
-				},
-				Data: secretData,
-			}
-			if err := fakeSpokeClient.Create(ctx, &greenSecret); err != nil {
-				t.Error("failed to create an exchanged secret", greenSecret.Name)
-			}
-		}
-
-		r := MirrorPeerReconciler{
-			HubClient:        fakeHubClient,
-			SpokeClient:      fakeSpokeClient,
-			Scheme:           scheme,
-			SpokeClusterName: pr.ClusterName,
-			Logger:           utils.GetLogger(utils.GetZapLogger(true)),
-		}
-
-		if err := r.deleteGreenSecret(ctx, pr.ClusterName, pr.StorageClusterRef.Namespace, &mirrorpeer1); err != nil {
-			t.Errorf("failed to delete green secret from namespace %s, err: %v", pr.StorageClusterRef.Namespace, err)
-		}
-		for _, oppPeer := range oppositePeerRefs {
-			var greenSecret corev1.Secret
-			if err := r.SpokeClient.Get(ctx, types.NamespacedName{
-				Name:      utils.GetSecretNameByPeerRef(oppPeer),
-				Namespace: pr.StorageClusterRef.Namespace,
-			}, &greenSecret); err != nil {
-				if !errors.IsNotFound(err) {
-					t.Error(err, "Green Secret did not get deleted")
-				}
-			} else {
-				t.Error("Green secret did not get deleted")
-			}
-		}
-	}
 }
 
 func TestDeleteS3(t *testing.T) {

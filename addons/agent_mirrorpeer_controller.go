@@ -27,7 +27,6 @@ import (
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -342,16 +341,6 @@ func (r *MirrorPeerReconciler) createS3(ctx context.Context, mirrorPeer multiclu
 	return nil
 }
 
-func getOppositePeerRefs(mp *multiclusterv1alpha1.MirrorPeer, spokeClusterName string) []multiclusterv1alpha1.PeerRef {
-	peerRefs := make([]multiclusterv1alpha1.PeerRef, 0)
-	for _, v := range mp.Spec.Items {
-		if v.ClusterName != spokeClusterName {
-			peerRefs = append(peerRefs, v)
-		}
-	}
-	return peerRefs
-}
-
 func (r *MirrorPeerReconciler) hasSpokeCluster(obj client.Object) bool {
 	mp, ok := obj.(*multiclusterv1alpha1.MirrorPeer)
 	if !ok {
@@ -410,32 +399,6 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// deleteGreenSecret deletes the exchanged secret present in the namespace of the storage cluster
-func (r *MirrorPeerReconciler) deleteGreenSecret(ctx context.Context, spokeClusterName string, scrNamespace string, mirrorPeer *multiclusterv1alpha1.MirrorPeer) error {
-	for _, peerRef := range mirrorPeer.Spec.Items {
-		if peerRef.ClusterName != spokeClusterName {
-			secretName := utils.GetSecretNameByPeerRef(peerRef)
-			secret := corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      secretName,
-					Namespace: scrNamespace,
-				},
-			}
-			err := r.SpokeClient.Delete(ctx, &secret)
-			if err != nil {
-				if errors.IsNotFound(err) {
-					r.Logger.Info("Green secret not found, no action needed", "secretName", secretName, "namespace", scrNamespace)
-					return nil
-				}
-				r.Logger.Error("Failed to delete green secret", "secretName", secretName, "namespace", scrNamespace, "error", err)
-				return err
-			}
-			r.Logger.Info("Successfully deleted green secret", "secretName", secretName, "namespace", scrNamespace)
-		}
-	}
-	return nil
-}
-
 // deleteS3 deletes the S3 bucket in the storage cluster namespace, each new mirrorpeer generates
 // a new bucket, so we do not need to check if the bucket is being used by another mirrorpeer
 func (r *MirrorPeerReconciler) deleteS3(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, scNamespace string) error {
@@ -462,11 +425,6 @@ func (r *MirrorPeerReconciler) deleteS3(ctx context.Context, mirrorPeer multiclu
 
 func (r *MirrorPeerReconciler) deleteMirrorPeer(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, scr *multiclusterv1alpha1.StorageClusterRef) (ctrl.Result, error) {
 	r.Logger.Info("MirrorPeer is being deleted", "MirrorPeer", mirrorPeer.Name)
-
-	if err := r.deleteGreenSecret(ctx, r.SpokeClusterName, scr.Namespace, &mirrorPeer); err != nil {
-		r.Logger.Error("Failed to delete green secrets", "namespace", scr.Namespace, "error", err)
-		return ctrl.Result{}, fmt.Errorf("failed to delete green secrets: %v", err)
-	}
 
 	if err := r.deleteS3(ctx, mirrorPeer, scr.Namespace); err != nil {
 		r.Logger.Error("Failed to delete S3 buckets", "namespace", scr.Namespace, "error", err)
