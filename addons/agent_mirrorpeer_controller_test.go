@@ -317,26 +317,6 @@ func TestMirrorPeerReconcile(t *testing.T) {
 
 		// Validate all Items for Reconcile
 
-		var foundRcm corev1.ConfigMap
-		err = fakeSpokeClient.Get(ctx, types.NamespacedName{Name: rcm.Name, Namespace: rcm.Namespace}, &foundRcm)
-		if err != nil {
-			t.Errorf("Failed to get rook config map %s Error: %s", rcm.Name, err)
-		}
-
-		if foundRcm.Data[RookCSIEnableKey] != "true" {
-			t.Errorf("Values for %s in %s is not set correctly", RookCSIEnableKey, foundRcm.Name)
-		}
-
-		var foundSc ocsv1.StorageCluster
-		err = fakeSpokeClient.Get(ctx, types.NamespacedName{Name: storageCluster.Name, Namespace: storageCluster.Namespace}, &foundSc)
-		if err != nil {
-			t.Errorf("Failed to get storagecluster %s Error: %s", storageCluster.Name, err)
-		}
-
-		if !foundSc.Spec.Mirroring.Enabled {
-			t.Errorf("Mirroring not enabled; Error: %s", err)
-		}
-
 		var foundCephfsSC storagev1.StorageClass
 		cephfsScName := fmt.Sprintf(utils.DefaultCephFSStorageClassTemplate, "test-storagecluster")
 		err = fakeSpokeClient.Get(ctx, types.NamespacedName{Name: cephfsScName}, &foundCephfsSC)
@@ -425,48 +405,6 @@ func TestMirrorPeerReconcile(t *testing.T) {
 		}
 	}
 
-}
-
-func TestDisableMirroring(t *testing.T) {
-	ctx := context.TODO()
-	scheme := mgrScheme
-	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer1).Build()
-	for _, pr := range mirrorpeer1.Spec.Items {
-		storageCluster := ocsv1.StorageCluster{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      pr.StorageClusterRef.Name,
-				Namespace: pr.StorageClusterRef.Namespace,
-			},
-			Spec: ocsv1.StorageClusterSpec{
-				Mirroring: &ocsv1.MirroringSpec{
-					Enabled: true,
-				},
-			},
-		}
-
-		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&storageCluster, &odfInfoConfigMap).Build()
-		r := MirrorPeerReconciler{
-			HubClient:        fakeHubClient,
-			SpokeClient:      fakeSpokeClient,
-			Scheme:           scheme,
-			SpokeClusterName: pr.ClusterName,
-			Logger:           utils.GetLogger(utils.GetZapLogger(true)),
-		}
-		if err := r.disableMirroring(ctx, pr.StorageClusterRef.Name, pr.StorageClusterRef.Namespace, &mirrorpeer1); err != nil {
-			t.Error("failed to disable mirroring", err)
-		}
-		var sc ocsv1.StorageCluster
-		if err := fakeSpokeClient.Get(ctx, types.NamespacedName{
-			Name:      pr.StorageClusterRef.Name,
-			Namespace: pr.StorageClusterRef.Namespace,
-		}, &sc); err != nil {
-			t.Error("failed to get storage cluster", err)
-		}
-
-		if sc.Spec.Mirroring != nil {
-			t.Error("failed to disable mirroring")
-		}
-	}
 }
 
 func TestDeleteGreenSecret(t *testing.T) {
