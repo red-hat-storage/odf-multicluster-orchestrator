@@ -800,19 +800,6 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multicl
 			}
 			logger.Info("Found FSID for client", "Client", utils.GetKey(pr.ClusterName, pr.StorageClusterRef.Name), "FSID", ci.ProviderInfo.CephClusterFSID)
 			fsid = ci.ProviderInfo.CephClusterFSID
-		} else {
-			logger.Info("Fetching rook secret ", "Secret Name:", rookSecretName)
-			hs, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: rookSecretName, Namespace: clusterName})
-			if err != nil {
-				return err
-			}
-			logger.Info("Unmarshalling rook secret ", "Secret Name:", rookSecretName)
-			rt, err := utils.UnmarshalHubSecret(hs)
-			if err != nil {
-				logger.Error("Failed to unmarshal Hub secret", "error", err, "SecretName", rookSecretName)
-				return err
-			}
-			fsid = rt.FSID
 		}
 
 		dc.Spec.Region = ramenv1alpha1.Region(fsid)
