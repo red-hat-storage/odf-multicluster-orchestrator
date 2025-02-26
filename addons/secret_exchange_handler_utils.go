@@ -52,35 +52,3 @@ func generateBlueSecret(
 
 	return nSecret, nil
 }
-
-func validateGreenSecret(secret corev1.Secret) error {
-	// Validate the secret type label
-	if secret.GetLabels()[utils.SecretLabelTypeKey] != string(utils.DestinationLabel) {
-		return fmt.Errorf("validation failed: expected label '%s' with value '%s' for GreenSecret, but found '%s' or no label. Secret '%s' in namespace '%s' will be skipped for syncing",
-			utils.SecretLabelTypeKey, utils.DestinationLabel, secret.GetLabels()[utils.SecretLabelTypeKey], secret.Name, secret.Namespace)
-	}
-
-	// Validate the presence of secret data
-	if secret.Data == nil {
-		return fmt.Errorf("validation failed: no data found in the secret '%s' in namespace '%s'. A non-empty data field is required",
-			secret.Name, secret.Namespace)
-	}
-
-	// Validate specific data fields for completeness
-	if namespace, ok := secret.Data["namespace"]; !ok || string(namespace) == "" {
-		return fmt.Errorf("validation failed: missing or empty 'namespace' key in the data of the secret '%s' in namespace '%s'. This key is required for proper functionality",
-			secret.Name, secret.Namespace)
-	}
-
-	if clusterName, ok := secret.Data[utils.StorageClusterNameKey]; !ok || string(clusterName) == "" {
-		return fmt.Errorf("validation failed: missing or empty '%s' key in the data of the secret '%s' in namespace '%s'. This key is required for identifying the storage cluster",
-			utils.StorageClusterNameKey, secret.Name, secret.Namespace)
-	}
-
-	if secretData, ok := secret.Data[utils.SecretDataKey]; !ok || string(secretData) == "" {
-		return fmt.Errorf("validation failed: missing or empty '%s' key in the data of the secret '%s' in namespace '%s'. This key is essential for the operation",
-			utils.SecretDataKey, secret.Name, secret.Namespace)
-	}
-
-	return nil
-}
