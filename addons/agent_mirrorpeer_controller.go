@@ -25,7 +25,6 @@ import (
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
-	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -177,17 +176,6 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 
 		logger.Info("Labeled the default VolumeSnapshotClasses successfully")
-
-		if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
-			logger.Info("Enabling async mode dependencies")
-			storageId1 := clusterStorageIds[mirrorPeer.Spec.Items[0].ClusterName]["rbd"]
-			storageId2 := clusterStorageIds[mirrorPeer.Spec.Items[1].ClusterName]["rbd"]
-			err = r.labelCephClusters(ctx, scr, storageId1, storageId2)
-			if err != nil {
-				logger.Error("Failed to label cephcluster", "error", err)
-				return ctrl.Result{}, err
-			}
-		}
 	}
 
 	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async && hasStorageClientRef {
@@ -301,14 +289,6 @@ func (r *MirrorPeerReconciler) fetchClusterStorageIds(ctx context.Context, mp *m
 		logger := r.Logger.With("clusterName", pr.ClusterName,
 			"namespace", pr.StorageClusterRef.Namespace)
 
-		// Get cluster type (converged/external)
-		clusterType, err := utils.GetClusterType(pr.StorageClusterRef.Name,
-			pr.StorageClusterRef.Namespace, r.SpokeClient)
-		if err != nil {
-			logger.Error("Failed to get cluster type", "error", err)
-			return nil, fmt.Errorf("failed to get cluster type for %s: %v", pr.ClusterName, err)
-		}
-
 		var currentPeerStorageIds = make(map[string]string)
 
 		// Handle local cluster vs remote cluster
@@ -327,29 +307,6 @@ func (r *MirrorPeerReconciler) fetchClusterStorageIds(ctx context.Context, mp *m
 			for k, v := range storageIds {
 				currentPeerStorageIds[string(k)] = v
 			}
-		} else {
-			// For remote cluster, get storage IDs from secret
-			secretName := r.getSecretNameByType(clusterType, pr)
-			logger.Info("Checking secret",
-				"secretName", secretName,
-				"mode", clusterType)
-
-			secret, err := utils.FetchSecretWithName(ctx, r.SpokeClient,
-				types.NamespacedName{
-					Name:      secretName,
-					Namespace: pr.StorageClusterRef.Namespace,
-				})
-			if err != nil {
-				logger.Error("Failed to fetch secret", "error", err)
-				return nil, fmt.Errorf("failed to fetch secret %s: %v", secretName, err)
-			}
-
-			currentPeerStorageIds, err = utils.GetStorageIdsFromGreenSecret(secret)
-			if err != nil {
-				logger.Error("Failed to extract storage IDs from secret", "error", err)
-				return nil, fmt.Errorf("failed to get storage IDs from secret %s: %v",
-					secretName, err)
-			}
 		}
 
 		clusterStorageIds[pr.ClusterName] = currentPeerStorageIds
@@ -361,16 +318,6 @@ func (r *MirrorPeerReconciler) fetchClusterStorageIds(ctx context.Context, mp *m
 		"mirrorPeer", mp.Name,
 		"clusterCount", len(clusterStorageIds))
 	return clusterStorageIds, nil
-}
-
-func (r *MirrorPeerReconciler) getSecretNameByType(clusterType utils.ClusterType, pr multiclusterv1alpha1.PeerRef) string {
-	var secretName string
-	if clusterType == utils.CONVERGED {
-		secretName = utils.GetSecretNameByPeerRef(pr)
-	} else if clusterType == utils.EXTERNAL {
-		secretName = DefaultExternalSecretName
-	}
-	return secretName
 }
 
 func (r *MirrorPeerReconciler) createS3(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, scNamespace string, hasStorageClientRef bool) error {
@@ -528,60 +475,4 @@ func (r *MirrorPeerReconciler) deleteMirrorPeer(ctx context.Context, mirrorPeer 
 
 	r.Logger.Info("Successfully completed the deletion of MirrorPeer resources", "MirrorPeer", mirrorPeer.Name)
 	return ctrl.Result{}, nil
-}
-
-func (r *MirrorPeerReconciler) labelCephClusters(ctx context.Context, scr *multiclusterv1alpha1.StorageClusterRef, storageId1, storageId2 string) error {
-	r.Logger.Info("Labelling CephClusters with replication ID")
-	cephClusters, err := utils.FetchAllCephClusters(ctx, r.SpokeClient)
-	if err != nil {
-		r.Logger.Error("Failed to fetch all CephClusters", "error", err)
-		return err
-	}
-	if cephClusters == nil || len(cephClusters.Items) == 0 {
-		r.Logger.Info("No CephClusters found to label")
-		return nil
-	}
-
-	var found rookv1.CephCluster
-	foundFlag := false
-	for _, cc := range cephClusters.Items {
-		for _, ref := range cc.OwnerReferences {
-			if ref.Kind == "StorageCluster" && ref.Name == scr.Name {
-				found = cc
-				foundFlag = true
-				break
-			}
-		}
-		if foundFlag {
-			break
-		}
-	}
-	if !foundFlag {
-		r.Logger.Info("No CephCluster matched the StorageCluster reference", "StorageClusterRef", scr.Name)
-		return nil
-	}
-
-	if found.Labels == nil {
-		found.Labels = make(map[string]string)
-	}
-
-	replicationId, err := utils.CreateUniqueReplicationId(storageId1, storageId2)
-	if err != nil {
-		r.Logger.Error("Failed to create unique replication ID", "error", err)
-		return err
-	}
-
-	if found.Labels[utils.CephClusterReplicationIdLabel] != replicationId {
-		r.Logger.Info("Adding label to CephCluster", "label", utils.CephClusterReplicationIdLabel, "replicationId", replicationId, "CephCluster", found.Name)
-		found.Labels[utils.CephClusterReplicationIdLabel] = replicationId
-		err = r.SpokeClient.Update(ctx, &found)
-		if err != nil {
-			r.Logger.Error("Failed to update CephCluster with new label", "CephCluster", found.Name, "label", utils.CephClusterReplicationIdLabel, "error", err)
-			return err
-		}
-	} else {
-		r.Logger.Info("CephCluster already labeled with replication ID", "CephCluster", found.Name, "replicationId", replicationId)
-	}
-
-	return nil
 }
