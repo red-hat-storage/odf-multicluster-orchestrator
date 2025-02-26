@@ -252,11 +252,6 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	if err = r.processMirrorPeerSecretChanges(ctx, r.Client, mirrorPeer); err != nil {
-		logger.Error("Error processing MirrorPeer secret changes", "error", err)
-		return ctrl.Result{}, err
-	}
-
 	err = r.createDRClusters(ctx, &mirrorPeer, hasStorageClientRef)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -699,47 +694,6 @@ func (r *MirrorPeerReconciler) deleteSecrets(ctx context.Context, mirrorPeer mul
 
 	logger.Info("Completed deletion of secrets for MirrorPeer", "MirrorPeer", mirrorPeer.Name)
 	return nil
-}
-
-func (r *MirrorPeerReconciler) processMirrorPeerSecretChanges(ctx context.Context, rc client.Client, mirrorPeerObj multiclusterv1alpha1.MirrorPeer) error {
-	logger := r.Logger
-	logger.Info("Processing mirror peer secret changes", "MirrorPeer", mirrorPeerObj.Name)
-
-	var anyErr error
-
-	for _, eachPeerRef := range mirrorPeerObj.Spec.Items {
-		logger.Info("Fetching all source secrets", "ClusterName", eachPeerRef.ClusterName)
-		sourceSecrets, err := fetchAllSourceSecrets(ctx, rc, eachPeerRef.ClusterName)
-		if err != nil {
-			logger.Error("Unable to get a list of source secrets", "error", err, "namespace", eachPeerRef.ClusterName)
-			anyErr = err
-			continue
-		}
-
-		// get the source secret associated with the PeerRef
-		matchingSourceSecret := utils.FindMatchingSecretWithPeerRef(eachPeerRef, sourceSecrets)
-		if matchingSourceSecret == nil {
-			logger.Info("No matching source secret found for peer ref", "PeerRef", eachPeerRef.ClusterName)
-			continue
-		}
-		err = createOrUpdateDestinationSecretsFromSource(ctx, rc, matchingSourceSecret, logger, mirrorPeerObj)
-		if err != nil {
-			logger.Error("Error while updating destination secrets", "source-secret", matchingSourceSecret.Name, "namespace", matchingSourceSecret.Namespace, "error", err)
-			anyErr = err
-		}
-	}
-
-	if anyErr == nil {
-		logger.Info("Cleaning up any orphan destination secrets")
-		anyErr = processDestinationSecretCleanup(ctx, rc, logger)
-		if anyErr != nil {
-			logger.Error("Error cleaning up orphan destination secrets", "error", anyErr)
-		}
-	} else {
-		logger.Info("Errors encountered in updating secrets; skipping cleanup")
-	}
-
-	return anyErr
 }
 
 func (r *MirrorPeerReconciler) checkTokenExchangeStatus(ctx context.Context, mp multiclusterv1alpha1.MirrorPeer) (bool, error) {
