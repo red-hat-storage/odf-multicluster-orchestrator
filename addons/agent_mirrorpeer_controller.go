@@ -21,10 +21,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strconv"
 	"time"
 
-	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
@@ -189,16 +187,6 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				logger.Error("Failed to label cephcluster", "error", err)
 				return ctrl.Result{}, err
 			}
-			err = r.enableCSIAddons(ctx, scr.Namespace)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to start CSI Addons for rook: %v", err)
-			}
-
-			err = r.enableMirroring(ctx, scr.Name, scr.Namespace, &mirrorPeer)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to enable mirroring the storagecluster %q in namespace %q in managed cluster: %v", scr.Name, scr.Namespace, err)
-			}
-
 		}
 	}
 
@@ -407,54 +395,6 @@ func (r *MirrorPeerReconciler) createS3(ctx context.Context, mirrorPeer multiclu
 	return nil
 }
 
-// enableMirroring is a wrapper function around toggleMirroring to enable mirroring in a storage cluster
-func (r *MirrorPeerReconciler) enableMirroring(ctx context.Context, storageClusterName string, namespace string, mp *multiclusterv1alpha1.MirrorPeer) error {
-	r.Logger.Info("Enabling mirroring on StorageCluster", "storageClusterName", storageClusterName, "namespace", namespace)
-	return r.toggleMirroring(ctx, storageClusterName, namespace, true, mp)
-}
-
-// toggleMirroring changes the state of mirroring in the storage cluster
-func (r *MirrorPeerReconciler) toggleMirroring(ctx context.Context, storageClusterName string, namespace string, enabled bool, mp *multiclusterv1alpha1.MirrorPeer) error {
-	var sc ocsv1.StorageCluster
-	err := r.SpokeClient.Get(ctx, types.NamespacedName{
-		Name:      storageClusterName,
-		Namespace: namespace,
-	}, &sc)
-
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return fmt.Errorf("could not find StorageCluster %q in namespace %v: %v", storageClusterName, namespace, err)
-		}
-		r.Logger.Error("Failed to retrieve StorageCluster", "storageClusterName", storageClusterName, "namespace", namespace, "error", err)
-		return err
-	}
-
-	// Determine if mirroring should be enabled or disabled
-	if enabled {
-		if sc.Spec.Mirroring == nil {
-			sc.Spec.Mirroring = &ocsv1.MirroringSpec{}
-		}
-		oppPeers := getOppositePeerRefs(mp, r.SpokeClusterName)
-		if hasRequiredSecret(sc.Spec.Mirroring.PeerSecretNames, oppPeers) {
-			sc.Spec.Mirroring.Enabled = true
-			r.Logger.Info("Mirroring enabled on StorageCluster", "storageClusterName", storageClusterName)
-		} else {
-			return fmt.Errorf("StorageCluster %q does not have required PeerSecrets", storageClusterName)
-		}
-	} else {
-		sc.Spec.Mirroring = nil
-		r.Logger.Info("Mirroring disabled on StorageCluster", "storageClusterName", storageClusterName)
-	}
-
-	err = r.SpokeClient.Update(ctx, &sc)
-	if err != nil {
-		r.Logger.Error("Failed to update StorageCluster mirroring settings", "storageClusterName", storageClusterName, "enabled", sc.Spec.Mirroring.Enabled, "error", err)
-		return err
-	}
-
-	return nil
-}
-
 func getOppositePeerRefs(mp *multiclusterv1alpha1.MirrorPeer, spokeClusterName string) []multiclusterv1alpha1.PeerRef {
 	peerRefs := make([]multiclusterv1alpha1.PeerRef, 0)
 	for _, v := range mp.Spec.Items {
@@ -463,53 +403,6 @@ func getOppositePeerRefs(mp *multiclusterv1alpha1.MirrorPeer, spokeClusterName s
 		}
 	}
 	return peerRefs
-}
-func hasRequiredSecret(peerSecrets []string, oppositePeerRef []multiclusterv1alpha1.PeerRef) bool {
-	for _, pr := range oppositePeerRef {
-		sec := utils.GetSecretNameByPeerRef(pr)
-		if !utils.ContainsString(peerSecrets, sec) {
-			return false
-		}
-	}
-	return true
-}
-func (r *MirrorPeerReconciler) enableCSIAddons(ctx context.Context, namespace string) error {
-	err := r.toggleCSIAddons(ctx, namespace, true)
-	if err != nil {
-		r.Logger.Error("Failed to enable CSI addons", "namespace", namespace, "error", err)
-		return err
-	}
-	r.Logger.Info("CSI addons enabled successfully", "namespace", namespace)
-	return nil
-}
-
-func (r *MirrorPeerReconciler) toggleCSIAddons(ctx context.Context, namespace string, enabled bool) error {
-	var rcm corev1.ConfigMap
-	err := r.SpokeClient.Get(ctx, types.NamespacedName{
-		Name:      RookConfigMapName,
-		Namespace: namespace,
-	}, &rcm)
-
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return fmt.Errorf("could not find rook-ceph-config-map in namespace %q: %v", namespace, err)
-		}
-		r.Logger.Error("Failed to retrieve rook-ceph-config-map", "namespace", namespace, "error", err)
-		return err
-	}
-
-	if rcm.Data == nil {
-		rcm.Data = make(map[string]string)
-	}
-	rcm.Data[RookCSIEnableKey] = strconv.FormatBool(enabled)
-	err = r.SpokeClient.Update(ctx, &rcm)
-	if err != nil {
-		r.Logger.Error("Failed to update rook-ceph-config-map with CSI addon settings", "namespace", namespace, "enabled", enabled, "error", err)
-		return err
-	}
-
-	r.Logger.Info("Rook-Ceph ConfigMap updated with new CSI addons setting", "namespace", namespace, "CSIEnabled", enabled)
-	return nil
 }
 
 func (r *MirrorPeerReconciler) hasSpokeCluster(obj client.Object) bool {
@@ -570,21 +463,6 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *MirrorPeerReconciler) disableMirroring(ctx context.Context, storageClusterName string, namespace string, mp *multiclusterv1alpha1.MirrorPeer) error {
-	r.Logger.Info("Disabling mirroring on StorageCluster", "storageClusterName", storageClusterName, "namespace", namespace)
-	return r.toggleMirroring(ctx, storageClusterName, namespace, false, mp)
-}
-
-func (r *MirrorPeerReconciler) disableCSIAddons(ctx context.Context, namespace string) error {
-	err := r.toggleCSIAddons(ctx, namespace, false)
-	if err != nil {
-		r.Logger.Error("Failed to disable CSI addons", "namespace", namespace, "error", err)
-		return err
-	}
-	r.Logger.Info("CSI addons disabled successfully", "namespace", namespace)
-	return nil
-}
-
 // deleteGreenSecret deletes the exchanged secret present in the namespace of the storage cluster
 func (r *MirrorPeerReconciler) deleteGreenSecret(ctx context.Context, spokeClusterName string, scrNamespace string, mirrorPeer *multiclusterv1alpha1.MirrorPeer) error {
 	for _, peerRef := range mirrorPeer.Spec.Items {
@@ -637,29 +515,6 @@ func (r *MirrorPeerReconciler) deleteS3(ctx context.Context, mirrorPeer multiclu
 
 func (r *MirrorPeerReconciler) deleteMirrorPeer(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, scr *multiclusterv1alpha1.StorageClusterRef) (ctrl.Result, error) {
 	r.Logger.Info("MirrorPeer is being deleted", "MirrorPeer", mirrorPeer.Name)
-
-	peerRef, err := utils.GetPeerRefForSpokeCluster(&mirrorPeer, r.SpokeClusterName)
-	if err != nil {
-		r.Logger.Error("Failed to get current PeerRef", "MirrorPeer", mirrorPeer.Name, "error", err)
-		return ctrl.Result{}, err
-	}
-
-	peerRefUsed, err := utils.DoesAnotherMirrorPeerPointToPeerRef(ctx, r.HubClient, peerRef)
-	if err != nil {
-		r.Logger.Error("Failed to check if another MirrorPeer uses PeerRef", "error", err)
-		return ctrl.Result{}, err
-	}
-
-	if !peerRefUsed {
-		if err := r.disableMirroring(ctx, scr.Name, scr.Namespace, &mirrorPeer); err != nil {
-			r.Logger.Error("Failed to disable mirroring for the StorageCluster", "StorageCluster", scr.Name, "namespace", scr.Namespace, "error", err)
-			return ctrl.Result{}, fmt.Errorf("failed to disable mirroring for the StorageCluster %q in namespace %q. Error %v", scr.Name, scr.Namespace, err)
-		}
-		if err := r.disableCSIAddons(ctx, scr.Namespace); err != nil {
-			r.Logger.Error("Failed to disable CSI Addons for Rook", "namespace", scr.Namespace, "error", err)
-			return ctrl.Result{}, fmt.Errorf("failed to disable CSI Addons for rook: %v", err)
-		}
-	}
 
 	if err := r.deleteGreenSecret(ctx, r.SpokeClusterName, scr.Namespace, &mirrorPeer); err != nil {
 		r.Logger.Error("Failed to delete green secrets", "namespace", scr.Namespace, "error", err)
