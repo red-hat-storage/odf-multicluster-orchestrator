@@ -747,7 +747,6 @@ func GetNamespacedNameForClientS3Secret(ctx context.Context, client client.Clien
 
 func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer, hasStorageClientRef bool) error {
 	logger := r.Logger
-	currentNamespace := os.Getenv("POD_NAMESPACE")
 
 	for _, pr := range mp.Spec.Items {
 		clusterName := pr.ClusterName
@@ -768,41 +767,6 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multicl
 			ObjectMeta: metav1.ObjectMeta{Name: clusterName},
 		}
 
-		rookSecretName := utils.GetSecretNameByPeerRef(pr)
-
-		var fsid string
-		if mp.Spec.Type == multiclusterv1alpha1.Sync {
-			logger.Info("Fetching rook secret ", "Secret", rookSecretName)
-			hs, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: rookSecretName, Namespace: currentNamespace})
-			if err != nil {
-				logger.Error("Failed to fetch Rook secret", "error", err, "SecretName", rookSecretName, "Namespace", currentNamespace)
-				return err
-			}
-			logger.Info("Unmarshalling rook secret ", "Secret Name:", rookSecretName)
-			rt, err := utils.UnmarshalRookSecretExternal(hs)
-			if err != nil {
-				logger.Error("Failed to unmarshal Rook secret", "error", err, "SecretName", rookSecretName)
-				return err
-			}
-			fsid = rt.FSID
-		} else if mp.Spec.Type == multiclusterv1alpha1.Async && hasStorageClientRef {
-			logger.Info("Fetching client info and then FSID for creating DRClusters", "Client", utils.GetKey(pr.ClusterName, pr.StorageClusterRef.Name))
-			clientInfoMap, err := fetchClientInfoConfigMap(ctx, r.Client)
-			if err != nil {
-				if k8serrors.IsNotFound(err) {
-					return fmt.Errorf("client info config map not found. Retrying request another time")
-				}
-				return err
-			}
-			ci, err := getClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(pr.ClusterName, pr.StorageClusterRef.Name))
-			if err != nil {
-				return err
-			}
-			logger.Info("Found FSID for client", "Client", utils.GetKey(pr.ClusterName, pr.StorageClusterRef.Name), "FSID", ci.ProviderInfo.CephClusterFSID)
-			fsid = ci.ProviderInfo.CephClusterFSID
-		}
-
-		dc.Spec.Region = ramenv1alpha1.Region(fsid)
 		logger.Info("Fetching s3 secret ", "Secret Name:", s3SecretName)
 		ss, err := utils.FetchSecretWithName(ctx, r.Client, types.NamespacedName{Name: s3SecretName, Namespace: s3SecretNamespace})
 		if err != nil {
