@@ -84,30 +84,6 @@ var _ = Describe("Ramen Resource Tests", func() {
 	pr1 := fakeMirrorPeer.Spec.Items[0]
 	pr2 := fakeMirrorPeer.Spec.Items[1]
 
-	secretNN1 := types.NamespacedName{
-		Name:      utils.GetSecretNameByPeerRef(pr1),
-		Namespace: pr1.ClusterName,
-	}
-
-	storageClusterNN1 := types.NamespacedName{
-		Name:      pr1.StorageClusterRef.Name,
-		Namespace: pr1.StorageClusterRef.Namespace,
-	}
-
-	sec1 := utils.CreateSourceSecret(secretNN1, storageClusterNN1, []byte(`{"cluster":"b2NzLXN0b3JhZ2VjbHVzdGVyLWNlcGhjbHVzdGVy","token":"ZXlKbWMybGtJam9pWXpSak56SmpNRE10WXpCbFlpMDBZMlppTFRnME16RXRNekExTmpZME16UmxZV1ZqSWl3aVkyeHBaVzUwWDJsa0lqb2ljbUprTFcxcGNuSnZjaTF3WldWeUlpd2lhMlY1SWpvaVFWRkVkbGxyTldrM04xbG9TMEpCUVZZM2NFZHlVVXBrU1VvelJtZGpjVWxGVUZWS0wzYzlQU0lzSW0xdmJsOW9iM04wSWpvaU1UY3lMak13TGpFd01TNHlORGs2TmpjNE9Td3hOekl1TXpBdU1UZ3pMakU1TURvMk56ZzVMREUzTWk0ek1DNHlNak11TWpFd09qWTNPRGtpTENKdVlXMWxjM0JoWTJVaU9pSnZjR1Z1YzJocFpuUXRjM1J2Y21GblpTSjk="}`), utils.OriginMap["RookOrigin"], `{"cephfs":"f9708852fe4cf1f4d5de7e525f1b0aba","rbd":"dcd70114947d0bb1f6b96f0dd6a9aaca"}`)
-
-	secretNN2 := types.NamespacedName{
-		Name:      utils.GetSecretNameByPeerRef(pr2),
-		Namespace: pr2.ClusterName,
-	}
-
-	storageClusterNN2 := types.NamespacedName{
-		Name:      pr2.StorageClusterRef.Name,
-		Namespace: pr2.StorageClusterRef.Namespace,
-	}
-
-	sec2 := utils.CreateSourceSecret(secretNN2, storageClusterNN2, []byte(`{"cluster":"b2NzLXN0b3JhZ2VjbHVzdGVyLWNlcGhjbHVzdGVy","token":"ZXlKbWMybGtJam9pWXpSak56SmpNRE10WXpCbFlpMDBZMlppTFRnME16RXRNekExTmpZME16UmxZV1ZqSWl3aVkyeHBaVzUwWDJsa0lqb2ljbUprTFcxcGNuSnZjaTF3WldWeUlpd2lhMlY1SWpvaVFWRkVkbGxyTldrM04xbG9TMEpCUVZZM2NFZHlVVXBrU1VvelJtZGpjVWxGVUZWS0wzYzlQU0lzSW0xdmJsOW9iM04wSWpvaU1UY3lMak13TGpFd01TNHlORGs2TmpjNE9Td3hOekl1TXpBdU1UZ3pMakU1TURvMk56ZzVMREUzTWk0ek1DNHlNak11TWpFd09qWTNPRGtpTENKdVlXMWxjM0JoWTJVaU9pSnZjR1Z1YzJocFpuUXRjM1J2Y21GblpTSjk="}`), utils.OriginMap["RookOrigin"], `{"cephfs":"f9708852fe4cf1f4d5de7e525f1b0aba","rbd":"dcd70114947d0bb1f6b96f0dd6a9aaca"}`)
-
 	s3sec1 := GetFakeS3SecretForPeerRef(pr1)
 	s3sec2 := GetFakeS3SecretForPeerRef(pr2)
 
@@ -123,10 +99,6 @@ var _ = Describe("Ramen Resource Tests", func() {
 			err = k8sClient.Create(context.TODO(), &namespace2, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = k8sClient.Create(context.TODO(), sec1, &client.CreateOptions{})
-			Expect(err).NotTo(HaveOccurred())
-			err = k8sClient.Create(context.TODO(), sec2, &client.CreateOptions{})
-			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Create(context.TODO(), s3sec1, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Create(context.TODO(), s3sec2, &client.CreateOptions{})
@@ -147,10 +119,6 @@ var _ = Describe("Ramen Resource Tests", func() {
 			err = k8sClient.Delete(context.TODO(), &namespace2, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = k8sClient.Delete(context.TODO(), sec1, &client.DeleteOptions{})
-			Expect(err).NotTo(HaveOccurred())
-			err = k8sClient.Delete(context.TODO(), sec2, &client.DeleteOptions{})
-			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Delete(context.TODO(), s3sec1, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Delete(context.TODO(), s3sec2, &client.DeleteOptions{})
@@ -162,26 +130,18 @@ var _ = Describe("Ramen Resource Tests", func() {
 		})
 
 		It("should create DRClusters", func() {
-			hubClusterSecrets := []*corev1.Secret{sec1, sec2}
 			s3ClusterSecrets := []*corev1.Secret{s3sec1, s3sec2}
 			for i, pr := range fakeMirrorPeer.Spec.Items {
 				dc := &ramenv1alpha1.DRCluster{}
-				hsec := hubClusterSecrets[i]
 				ssec := s3ClusterSecrets[i]
 				err := k8sClient.Get(context.TODO(), types.NamespacedName{Name: pr.ClusterName}, dc)
-				Expect(err).NotTo(HaveOccurred())
-				var hubSecret corev1.Secret
-				err = k8sClient.Get(context.TODO(), types.NamespacedName{Name: hsec.Name, Namespace: hsec.Namespace}, &hubSecret)
 				Expect(err).NotTo(HaveOccurred())
 				var s3Secret corev1.Secret
 				err = k8sClient.Get(context.TODO(), types.NamespacedName{Name: ssec.Name, Namespace: ssec.Namespace}, &s3Secret)
 				Expect(err).NotTo(HaveOccurred())
-				rookToken, err := utils.UnmarshalHubSecret(&hubSecret)
-				Expect(err).NotTo(HaveOccurred())
 				s3Token, err := utils.UnmarshalS3Secret(&s3Secret)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(dc.Spec.S3ProfileName).To(Equal(s3Token.S3ProfileName))
-				Expect(string(dc.Spec.Region)).To(Equal(rookToken.FSID))
 			}
 		})
 	})

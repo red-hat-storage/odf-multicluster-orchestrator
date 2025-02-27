@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"testing"
 
@@ -13,7 +12,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -83,21 +81,6 @@ func TestDRPolicyReconcile(t *testing.T) {
 		t.Errorf("DRPolicyReconciler Reconcile() failed. Error: %s", err)
 	}
 
-	for _, clusterName := range drpolicy.Spec.DRClusters {
-		name := fmt.Sprintf("vrc-%v", utils.FnvHash(drpolicy.Name))
-		var found workv1.ManifestWork
-		err := r.HubClient.Get(ctx, types.NamespacedName{
-			Namespace: clusterName,
-			Name:      name,
-		}, &found)
-
-		if err != nil {
-			t.Errorf("Failed to get ManifestWork. Error: %s", err)
-		}
-		if len(found.Spec.Workload.Manifests) < 2 {
-			t.Errorf("Expected at least 2 VRC")
-		}
-	}
 }
 
 func getFakeDRPolicyReconciler(drpolicy *ramenv1alpha1.DRPolicy, mp *multiclusterv1alpha1.MirrorPeer) DRPolicyReconciler {
