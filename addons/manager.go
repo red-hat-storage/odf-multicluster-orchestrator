@@ -63,8 +63,7 @@ func NewAddonAgentCommand() *cobra.Command {
 		Use:   "addons",
 		Short: "Start the addon agents",
 		Run: func(cmd *cobra.Command, args []string) {
-			ctx := ctrl.SetupSignalHandler()
-			o.RunAgent(ctx)
+			o.RunAgent(cmd.Context())
 		},
 	}
 

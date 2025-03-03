@@ -92,7 +92,7 @@ func NewManagerCommand() *cobra.Command {
 		Use:   "manager",
 		Short: "Multicluster Orchestrator for ODF",
 		Run: func(cmd *cobra.Command, args []string) {
-			mgrOpts.runManager()
+			mgrOpts.runManager(cmd.Context())
 		},
 	}
 	mgrOpts.AddFlags(cmd)
@@ -134,7 +134,7 @@ func preRunGarbageCollection(cl client.Client, logger *slog.Logger) error {
 	return nil
 }
 
-func (o *ManagerOptions) runManager() {
+func (o *ManagerOptions) runManager(ctx context.Context) {
 	zapLogger := utils.GetZapLogger(o.DevMode)
 	defer func() {
 		if err := zapLogger.Sync(); err != nil {
@@ -298,7 +298,7 @@ func (o *ManagerOptions) runManager() {
 		os.Exit(1)
 	}
 
-	g, ctx := errgroup.WithContext(ctrl.SetupSignalHandler())
+	g, ctx := errgroup.WithContext(ctx)
 
 	logger.Info("Starting manager")
 	g.Go(func() error {
