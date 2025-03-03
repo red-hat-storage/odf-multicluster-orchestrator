@@ -83,6 +83,8 @@ type AddonAgentOptions struct {
 	OdfOperatorNamespace string
 	DRMode               string
 	DevMode              bool
+
+	testEnvFile string
 }
 
 func (o *AddonAgentOptions) AddFlags(cmd *cobra.Command) {
@@ -98,6 +100,7 @@ func (o *AddonAgentOptions) AddFlags(cmd *cobra.Command) {
 	flags.StringVar(&o.OdfOperatorNamespace, "odf-operator-namespace", o.OdfOperatorNamespace, "Namespace of ODF operator on the spoke cluster.")
 	flags.StringVar(&o.DRMode, "mode", o.DRMode, "The DR mode of token exchange addon. Valid values are: 'sync', 'async'")
 	flags.BoolVar(&o.DevMode, "dev", false, "Set to true for dev environment (Text logging)")
+	flags.StringVar(&o.testEnvFile, "test-dotenv", "", "Path to a dotenv file for testing purpose only.")
 }
 
 // RunAgent starts the controllers on agent to process work from hub.
@@ -175,6 +178,7 @@ func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.
 		SpokeClusterName:     options.SpokeClusterName,
 		OdfOperatorNamespace: options.OdfOperatorNamespace,
 		Logger:               logger.With("controller", "MirrorPeerReconciler"),
+		testEnvFile:          options.testEnvFile,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create MirrorPeer controller", "controller", "MirrorPeer", "error", err)
 		os.Exit(1)
@@ -208,7 +212,7 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slo
 		os.Exit(1)
 	}
 
-	currentNamespace := os.Getenv("POD_NAMESPACE")
+	currentNamespace := utils.GetEnv("POD_NAMESPACE", options.testEnvFile)
 
 	spokeKubeClient, err := kubernetes.NewForConfig(spokeKubeConfig)
 	if err != nil {
@@ -249,6 +253,7 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slo
 		SpokeClient:      mgr.GetClient(),
 		SpokeClusterName: options.SpokeClusterName,
 		Logger:           logger.With("controller", "S3SecretReconciler"),
+		testEnvFile:      options.testEnvFile,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create S3Secret controller", "controller", "S3Secret", "error", err)
 		os.Exit(1)

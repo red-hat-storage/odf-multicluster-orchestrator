@@ -45,6 +45,8 @@ type DRPolicyReconciler struct {
 	HubClient client.Client
 	Scheme    *runtime.Scheme
 	Logger    *slog.Logger
+
+	testEnvFile string
 }
 
 // SetupWithManager sets up the controller with the Manager.

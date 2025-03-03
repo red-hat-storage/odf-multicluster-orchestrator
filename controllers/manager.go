@@ -68,6 +68,8 @@ type ManagerOptions struct {
 	MulticlusterConsolePort int
 	DevMode                 bool
 	KubeconfigFile          string
+
+	testEnvFile string
 }
 
 func NewManagerOptions() *ManagerOptions {
@@ -84,6 +86,7 @@ func (o *ManagerOptions) AddFlags(cmd *cobra.Command) {
 			"Enabling this will ensure there is only one active controller manager.")
 	flags.BoolVar(&o.DevMode, "dev", false, "Set to true for dev environment (Text logging)")
 	flags.StringVar(&o.KubeconfigFile, "kubeconfig", "", "Paths to a kubeconfig. Only required if out-of-cluster.")
+	flags.StringVar(&o.testEnvFile, "test-dotenv", "", "Path to a dotenv file for testing purpose only.")
 }
 
 func NewManagerCommand() *cobra.Command {
@@ -188,12 +191,13 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		os.Exit(1)
 	}
 
-	namespace := os.Getenv("POD_NAMESPACE")
+	namespace := utils.GetEnv("POD_NAMESPACE", o.testEnvFile)
 
 	if err = (&MirrorPeerReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Logger: logger.With("controller", "MirrorPeerReconciler"),
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		Logger:      logger.With("controller", "MirrorPeerReconciler"),
+		testEnvFile: o.testEnvFile,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create MirrorPeer controller", "error", err)
 		os.Exit(1)
@@ -201,25 +205,28 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 	//+kubebuilder:scaffold:builder
 
 	if err = (&MirrorPeerSecretReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Logger: logger.With("controller", "MirrorPeerSecretReconciler"),
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		Logger:      logger.With("controller", "MirrorPeerSecretReconciler"),
+		testEnvFile: o.testEnvFile,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create MirrorPeer controller", "error", err)
 		os.Exit(1)
 	}
 
 	if err = (&ManagedClusterReconciler{
-		Client: mgr.GetClient(),
-		Logger: logger.With("controller", "ManagedClusterReconciler"),
+		Client:      mgr.GetClient(),
+		Logger:      logger.With("controller", "ManagedClusterReconciler"),
+		testEnvFile: o.testEnvFile,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create ManagedCluster controller", "error", err)
 		os.Exit(1)
 	}
 
 	if err = (&ManagedClusterViewReconciler{
-		Client: mgr.GetClient(),
-		Logger: logger.With("controller", "ManagedClusterViewReconciler"),
+		Client:      mgr.GetClient(),
+		Logger:      logger.With("controller", "ManagedClusterViewReconciler"),
+		testEnvFile: o.testEnvFile,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create ManagedClusterView controller", "error", err)
 		os.Exit(1)
@@ -258,7 +265,7 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 	}
 	teEventRecorder := events.NewKubeRecorder(kubeClient.CoreV1().Events(namespace), setup.TokenExchangeName, controllerRef)
 
-	agentImage := os.Getenv("TOKEN_EXCHANGE_IMAGE")
+	agentImage := utils.GetEnv("TOKEN_EXCHANGE_IMAGE", o.testEnvFile)
 
 	tokenExchangeAddon := setup.TokenExchangeAddon{
 		Addons: struct {
@@ -290,9 +297,10 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 	}
 
 	if err = (&DRPolicyReconciler{
-		HubClient: mgr.GetClient(),
-		Scheme:    mgr.GetScheme(),
-		Logger:    logger.With("controller", "DRPolicyReconciler"),
+		HubClient:   mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		Logger:      logger.With("controller", "DRPolicyReconciler"),
+		testEnvFile: o.testEnvFile,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create DRPolicy controller", "error", err)
 		os.Exit(1)

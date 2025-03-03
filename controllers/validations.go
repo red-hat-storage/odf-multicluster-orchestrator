@@ -68,11 +68,11 @@ func isManagedCluster(ctx context.Context, client client.Client, clusterName str
 
 // checkStorageClusterPeerStatus checks if the ManifestWorks for StorageClusterPeer resources
 // have been created and reached the Applied status.
-func checkStorageClusterPeerStatus(ctx context.Context, client client.Client, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer) (bool, error) {
+func checkStorageClusterPeerStatus(ctx context.Context, client client.Client, logger *slog.Logger, currentNamespace string, mirrorPeer *multiclusterv1alpha1.MirrorPeer) (bool, error) {
 	logger.Info("Checking if StorageClusterPeer ManifestWorks have been created and reached Applied status")
 
 	// Fetch the client info ConfigMap
-	clientInfoMap, err := fetchClientInfoConfigMap(ctx, client)
+	clientInfoMap, err := fetchClientInfoConfigMap(ctx, client, currentNamespace)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.Info("Client info ConfigMap not found; requeuing for later retry")
@@ -135,11 +135,11 @@ func checkStorageClusterPeerStatus(ctx context.Context, client client.Client, lo
 
 // checkClientPairingConfigMapStatus checks if the ManifestWorks for client pairing ConfigMaps
 // have been created and reached the Applied status.
-func checkClientPairingConfigMapStatus(ctx context.Context, client client.Client, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer) (bool, error) {
+func checkClientPairingConfigMapStatus(ctx context.Context, client client.Client, logger *slog.Logger, currentNamespace string, mirrorPeer *multiclusterv1alpha1.MirrorPeer) (bool, error) {
 	logger.Info("Checking if client pairing ConfigMap ManifestWorks have been created and reached Applied status")
 
 	// Fetch the client info ConfigMap
-	clientInfoMap, err := fetchClientInfoConfigMap(ctx, client)
+	clientInfoMap, err := fetchClientInfoConfigMap(ctx, client, currentNamespace)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.Info("Client info ConfigMap not found; requeuing for later retry")

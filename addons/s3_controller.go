@@ -3,7 +3,6 @@ package addons
 import (
 	"context"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 
@@ -27,12 +26,13 @@ type S3SecretReconciler struct {
 	SpokeClient      client.Client
 	SpokeClusterName string
 	Logger           *slog.Logger
+	testEnvFile      string
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *S3SecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	isOurOBC := func(obj interface{}) bool {
-		s3MatchString := os.Getenv("S3_EXCHANGE_SOURCE_SECRET_STRING_MATCH")
+		s3MatchString := utils.GetEnv("S3_EXCHANGE_SOURCE_SECRET_STRING_MATCH", r.testEnvFile)
 		if s3MatchString == "" {
 			s3MatchString = utils.BucketGenerateName
 		}

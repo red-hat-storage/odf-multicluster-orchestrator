@@ -130,7 +130,7 @@ func getFakeDRPolicyReconciler(drpolicy *ramenv1alpha1.DRPolicy, mp *multicluste
 	odfClientInfoConfigMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "odf-client-info",
-			Namespace: os.Getenv("POD_NAMESPACE"),
+			Namespace: utils.GetEnv("POD_NAMESPACE"),
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion: viewv1beta1.GroupVersion.String(),

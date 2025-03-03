@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"reflect"
 
 	rmn "github.com/ramendr/ramen/api/v1alpha1"
@@ -268,7 +267,7 @@ func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret 
 	return nil
 }
 
-func createOrUpdateSecretsFromInternalSecret(ctx context.Context, rc client.Client, secret *corev1.Secret, mirrorPeers []multiclusterv1alpha1.MirrorPeer, logger *slog.Logger) error {
+func createOrUpdateSecretsFromInternalSecret(ctx context.Context, rc client.Client, currentNamespace string, secret *corev1.Secret, mirrorPeers []multiclusterv1alpha1.MirrorPeer, logger *slog.Logger) error {
 	logger.Info("Validating internal secret", "SecretName", secret.Name, "Namespace", secret.Namespace)
 
 	if err := utils.ValidateInternalSecret(secret, utils.InternalLabel); err != nil {
@@ -292,7 +291,6 @@ func createOrUpdateSecretsFromInternalSecret(ctx context.Context, rc client.Clie
 			return err
 		}
 
-		currentNamespace := os.Getenv("POD_NAMESPACE")
 		if err := createOrUpdateRamenS3Secret(ctx, rc, secret, data, currentNamespace, logger); err != nil {
 			logger.Error("Failed to create or update Ramen S3 secret", "error", err, "SecretName", secret.Name, "Namespace", currentNamespace)
 			return err

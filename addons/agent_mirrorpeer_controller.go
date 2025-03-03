@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"time"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
@@ -50,6 +49,8 @@ type MirrorPeerReconciler struct {
 	SpokeClusterName     string
 	OdfOperatorNamespace string
 	Logger               *slog.Logger
+
+	testEnvFile string
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -82,7 +83,8 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	var scr *multiclusterv1alpha1.StorageClusterRef
 	if hasStorageClientRef {
-		currentNamespace := os.Getenv("POD_NAMESPACE")
+		currentNamespace := utils.GetEnv("POD_NAMESPACE", r.testEnvFile)
+
 		sc, err := utils.GetStorageClusterFromCurrentNamespace(ctx, r.SpokeClient, currentNamespace)
 		if err != nil {
 			logger.Error("Failed to fetch StorageCluster for given namespace", "Namespace", currentNamespace)
@@ -320,7 +322,7 @@ func (r *MirrorPeerReconciler) fetchClusterStorageIds(ctx context.Context, mp *m
 }
 
 func (r *MirrorPeerReconciler) createS3(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, scNamespace string, hasStorageClientRef bool) error {
-	bucketNamespace := utils.GetEnv("ODR_NAMESPACE", scNamespace)
+	bucketNamespace := utils.GetEnvOrDefault("ODR_NAMESPACE", scNamespace, r.testEnvFile)
 	bucketName := utils.GenerateBucketName(mirrorPeer)
 	annotations := map[string]string{
 		utils.MirrorPeerNameAnnotationKey: mirrorPeer.Name,
@@ -404,7 +406,7 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // a new bucket, so we do not need to check if the bucket is being used by another mirrorpeer
 func (r *MirrorPeerReconciler) deleteS3(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, scNamespace string) error {
 	bucketName := utils.GenerateBucketName(mirrorPeer)
-	bucketNamespace := utils.GetEnv("ODR_NAMESPACE", scNamespace)
+	bucketNamespace := utils.GetEnvOrDefault("ODR_NAMESPACE", scNamespace, r.testEnvFile)
 	noobaaOBC, err := utils.GetObjectBucketClaim(ctx, r.SpokeClient, bucketName, bucketNamespace)
 	if err != nil {
 		if errors.IsNotFound(err) {
