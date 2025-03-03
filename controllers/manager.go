@@ -67,6 +67,7 @@ type ManagerOptions struct {
 	ProbeAddr               string
 	MulticlusterConsolePort int
 	DevMode                 bool
+	KubeconfigFile          string
 }
 
 func NewManagerOptions() *ManagerOptions {
@@ -82,6 +83,7 @@ func (o *ManagerOptions) AddFlags(cmd *cobra.Command) {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flags.BoolVar(&o.DevMode, "dev", false, "Set to true for dev environment (Text logging)")
+	flags.StringVar(&o.KubeconfigFile, "kubeconfig", "", "Paths to a kubeconfig. Only required if out-of-cluster.")
 }
 
 func NewManagerCommand() *cobra.Command {
@@ -142,7 +144,13 @@ func (o *ManagerOptions) runManager() {
 	ctrl.SetLogger(zapr.NewLogger(zapLogger))
 	logger := utils.GetLogger(zapLogger)
 
-	preRunClient, err := client.New(ctrl.GetConfigOrDie(), client.Options{
+	config, err := utils.GetClientConfig(o.KubeconfigFile)
+	if err != nil {
+		logger.Error("Failed to get kubeconfig", "error", err)
+		os.Exit(1)
+	}
+
+	preRunClient, err := client.New(config, client.Options{
 		Scheme: mgrScheme,
 		Cache:  nil,
 	})
@@ -165,7 +173,7 @@ func (o *ManagerOptions) runManager() {
 		KeyName:  WebhookKeyName,
 	})
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	mgr, err := ctrl.NewManager(config, ctrl.Options{
 		Scheme: mgrScheme,
 		Metrics: server.Options{
 			BindAddress: o.MetricsAddr,
@@ -239,7 +247,7 @@ func (o *ManagerOptions) runManager() {
 	}
 
 	logger.Info("Initializing token exchange addon")
-	kubeClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	kubeClient, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		logger.Error("Failed to get kubeclient", "error", err)
 	}
@@ -266,14 +274,13 @@ func (o *ManagerOptions) runManager() {
 	}
 
 	err = (&multiclusterv1alpha1.MirrorPeer{}).SetupWebhookWithManager(mgr)
-
 	if err != nil {
 		logger.Error("Unable to create MirrorPeer webhook", "error", err)
 		os.Exit(1)
 	}
 
 	logger.Info("Creating addon manager")
-	addonMgr, err := addonmanager.New(mgr.GetConfig())
+	addonMgr, err := addonmanager.New(config)
 	if err != nil {
 		logger.Error("Failed to create addon manager", "error", err)
 	}
