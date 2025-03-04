@@ -26,7 +26,9 @@ type S3SecretReconciler struct {
 	SpokeClient      client.Client
 	SpokeClusterName string
 	Logger           *slog.Logger
+
 	testEnvFile      string
+	currentNamespace string
 }
 
 // SetupWithManager sets up the controller with the Manager.

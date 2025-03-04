@@ -46,7 +46,8 @@ type DRPolicyReconciler struct {
 	Scheme    *runtime.Scheme
 	Logger    *slog.Logger
 
-	testEnvFile string
+	testEnvFile      string
+	currentNamespace string
 }
 
 // SetupWithManager sets up the controller with the Manager.

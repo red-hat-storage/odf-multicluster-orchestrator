@@ -25,9 +25,10 @@ import (
 )
 
 type ManagedClusterViewReconciler struct {
-	Client      client.Client
-	Logger      *slog.Logger
-	testEnvFile string
+	Client           client.Client
+	Logger           *slog.Logger
+	testEnvFile      string
+	currentNamespace string
 }
 
 const (
@@ -98,9 +99,7 @@ func (r *ManagedClusterViewReconciler) Reconcile(ctx context.Context, req reconc
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	operatorNamespace := utils.GetEnv("POD_NAMESPACE", r.testEnvFile)
-
-	if err := createOrUpdateConfigMap(ctx, r.Client, operatorNamespace, managedClusterView, r.Logger); err != nil {
+	if err := createOrUpdateConfigMap(ctx, r.Client, r.currentNamespace, managedClusterView, r.Logger); err != nil {
 		logger.Error("Failed to create or update ConfigMap for ManagedClusterView", "error", err)
 		return ctrl.Result{}, err
 	}

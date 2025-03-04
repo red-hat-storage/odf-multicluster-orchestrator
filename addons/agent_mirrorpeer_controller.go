@@ -50,7 +50,8 @@ type MirrorPeerReconciler struct {
 	OdfOperatorNamespace string
 	Logger               *slog.Logger
 
-	testEnvFile string
+	testEnvFile      string
+	currentNamespace string
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -83,11 +84,9 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	var scr *multiclusterv1alpha1.StorageClusterRef
 	if hasStorageClientRef {
-		currentNamespace := utils.GetEnv("POD_NAMESPACE", r.testEnvFile)
-
-		sc, err := utils.GetStorageClusterFromCurrentNamespace(ctx, r.SpokeClient, currentNamespace)
+		sc, err := utils.GetStorageClusterFromCurrentNamespace(ctx, r.SpokeClient, r.currentNamespace)
 		if err != nil {
-			logger.Error("Failed to fetch StorageCluster for given namespace", "Namespace", currentNamespace)
+			logger.Error("Failed to fetch StorageCluster for given namespace", "Namespace", r.currentNamespace)
 			return ctrl.Result{}, err
 		}
 		scr = &multiclusterv1alpha1.StorageClusterRef{

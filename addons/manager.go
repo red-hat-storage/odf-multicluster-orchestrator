@@ -135,6 +135,8 @@ func (o *AddonAgentOptions) RunAgent(ctx context.Context) {
 }
 
 func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.Logger) {
+	currentNamespace := utils.GetEnv("POD_NAMESPACE", options.testEnvFile)
+
 	hubConfig, err := utils.GetClientConfig(options.HubKubeconfigFile)
 	if err != nil {
 		logger.Error("Failed to get kubeconfig", "error", err)
@@ -179,6 +181,7 @@ func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.
 		OdfOperatorNamespace: options.OdfOperatorNamespace,
 		Logger:               logger.With("controller", "MirrorPeerReconciler"),
 		testEnvFile:          options.testEnvFile,
+		currentNamespace:     currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create MirrorPeer controller", "controller", "MirrorPeer", "error", err)
 		os.Exit(1)
@@ -192,6 +195,8 @@ func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.
 }
 
 func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slog.Logger) {
+	currentNamespace := utils.GetEnv("POD_NAMESPACE", options.testEnvFile)
+
 	spokeKubeConfig, err := utils.GetClientConfig(options.KubeconfigFile)
 	if err != nil {
 		logger.Error("Failed to get kubeconfig", "error", err)
@@ -211,8 +216,6 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slo
 		logger.Error("Failed to start manager", "error", err)
 		os.Exit(1)
 	}
-
-	currentNamespace := utils.GetEnv("POD_NAMESPACE", options.testEnvFile)
 
 	spokeKubeClient, err := kubernetes.NewForConfig(spokeKubeConfig)
 	if err != nil {
@@ -254,6 +257,7 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slo
 		SpokeClusterName: options.SpokeClusterName,
 		Logger:           logger.With("controller", "S3SecretReconciler"),
 		testEnvFile:      options.testEnvFile,
+		currentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create S3Secret controller", "controller", "S3Secret", "error", err)
 		os.Exit(1)

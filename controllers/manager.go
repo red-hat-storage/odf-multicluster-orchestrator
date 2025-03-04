@@ -147,6 +147,8 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 	ctrl.SetLogger(zapr.NewLogger(zapLogger))
 	logger := utils.GetLogger(zapLogger)
 
+	currentNamespace := utils.GetEnv("POD_NAMESPACE", o.testEnvFile)
+
 	config, err := utils.GetClientConfig(o.KubeconfigFile)
 	if err != nil {
 		logger.Error("Failed to get kubeconfig", "error", err)
@@ -191,13 +193,12 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		os.Exit(1)
 	}
 
-	namespace := utils.GetEnv("POD_NAMESPACE", o.testEnvFile)
-
 	if err = (&MirrorPeerReconciler{
-		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
-		Logger:      logger.With("controller", "MirrorPeerReconciler"),
-		testEnvFile: o.testEnvFile,
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		Logger:           logger.With("controller", "MirrorPeerReconciler"),
+		testEnvFile:      o.testEnvFile,
+		currentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create MirrorPeer controller", "error", err)
 		os.Exit(1)
@@ -205,35 +206,38 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 	//+kubebuilder:scaffold:builder
 
 	if err = (&MirrorPeerSecretReconciler{
-		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
-		Logger:      logger.With("controller", "MirrorPeerSecretReconciler"),
-		testEnvFile: o.testEnvFile,
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		Logger:           logger.With("controller", "MirrorPeerSecretReconciler"),
+		testEnvFile:      o.testEnvFile,
+		currentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create MirrorPeer controller", "error", err)
 		os.Exit(1)
 	}
 
 	if err = (&ManagedClusterReconciler{
-		Client:      mgr.GetClient(),
-		Logger:      logger.With("controller", "ManagedClusterReconciler"),
-		testEnvFile: o.testEnvFile,
+		Client:           mgr.GetClient(),
+		Logger:           logger.With("controller", "ManagedClusterReconciler"),
+		testEnvFile:      o.testEnvFile,
+		currentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create ManagedCluster controller", "error", err)
 		os.Exit(1)
 	}
 
 	if err = (&ManagedClusterViewReconciler{
-		Client:      mgr.GetClient(),
-		Logger:      logger.With("controller", "ManagedClusterViewReconciler"),
-		testEnvFile: o.testEnvFile,
+		Client:           mgr.GetClient(),
+		Logger:           logger.With("controller", "ManagedClusterViewReconciler"),
+		testEnvFile:      o.testEnvFile,
+		currentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create ManagedClusterView controller", "error", err)
 		os.Exit(1)
 	}
 
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-		err = console.InitConsole(ctx, mgr.GetClient(), o.MulticlusterConsolePort, namespace)
+		err = console.InitConsole(ctx, mgr.GetClient(), o.MulticlusterConsolePort, currentNamespace)
 		if err != nil {
 			logger.Error("Failed to initialize multicluster console to manager", "error", err)
 			return err
@@ -259,11 +263,11 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		logger.Error("Failed to get kubeclient", "error", err)
 	}
 
-	controllerRef, err := events.GetControllerReferenceForCurrentPod(context.TODO(), kubeClient, namespace, nil)
+	controllerRef, err := events.GetControllerReferenceForCurrentPod(context.TODO(), kubeClient, currentNamespace, nil)
 	if err != nil {
 		logger.Info("Failed to get owner reference (falling back to namespace)", "error", err)
 	}
-	teEventRecorder := events.NewKubeRecorder(kubeClient.CoreV1().Events(namespace), setup.TokenExchangeName, controllerRef)
+	teEventRecorder := events.NewKubeRecorder(kubeClient.CoreV1().Events(currentNamespace), setup.TokenExchangeName, controllerRef)
 
 	agentImage := utils.GetEnv("TOKEN_EXCHANGE_IMAGE", o.testEnvFile)
 
@@ -297,10 +301,11 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 	}
 
 	if err = (&DRPolicyReconciler{
-		HubClient:   mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
-		Logger:      logger.With("controller", "DRPolicyReconciler"),
-		testEnvFile: o.testEnvFile,
+		HubClient:        mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		Logger:           logger.With("controller", "DRPolicyReconciler"),
+		testEnvFile:      o.testEnvFile,
+		currentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create DRPolicy controller", "error", err)
 		os.Exit(1)

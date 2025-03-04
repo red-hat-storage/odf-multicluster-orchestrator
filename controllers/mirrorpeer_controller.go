@@ -54,7 +54,8 @@ type MirrorPeerReconciler struct {
 	Scheme *runtime.Scheme
 	Logger *slog.Logger
 
-	testEnvFile string
+	testEnvFile      string
+	currentNamespace string
 }
 
 const (
@@ -216,14 +217,13 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// update s3 profile when MirrorPeer changes
 	if mirrorPeer.Spec.ManageS3 {
-		currentNamespace := utils.GetEnv("POD_NAMESPACE", r.testEnvFile)
 		for _, peerRef := range mirrorPeer.Spec.Items {
 			var s3Secret corev1.Secret
 			var secretName string
 
 			var namespace string
 			if hasStorageClientRef {
-				s3SecretName, s3SecretNamespace, err := GetNamespacedNameForClientS3Secret(ctx, r.Client, currentNamespace, peerRef, &mirrorPeer)
+				s3SecretName, s3SecretNamespace, err := GetNamespacedNameForClientS3Secret(ctx, r.Client, r.currentNamespace, peerRef, &mirrorPeer)
 				if err != nil {
 					return ctrl.Result{}, fmt.Errorf("failed to get namespace for s3 secret %w", err)
 				}
@@ -246,7 +246,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				logger.Error("Error in fetching s3 internal secret", "Cluster", peerRef.ClusterName, "error", err)
 				return ctrl.Result{}, err
 			}
-			err = createOrUpdateSecretsFromInternalSecret(ctx, r.Client, currentNamespace, &s3Secret, []multiclusterv1alpha1.MirrorPeer{mirrorPeer}, logger)
+			err = createOrUpdateSecretsFromInternalSecret(ctx, r.Client, r.currentNamespace, &s3Secret, []multiclusterv1alpha1.MirrorPeer{mirrorPeer}, logger)
 			if err != nil {
 				logger.Error("Error in updating S3 profile", "Cluster", peerRef.ClusterName, "error", err)
 				return ctrl.Result{}, err
@@ -265,14 +265,13 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if hasStorageClientRef {
-		currentNamespace := utils.GetEnv("POD_NAMESPACE", r.testEnvFile)
-		result, err := createStorageClusterPeer(ctx, r.Client, logger, currentNamespace, mirrorPeer)
+		result, err := createStorageClusterPeer(ctx, r.Client, logger, r.currentNamespace, mirrorPeer)
 		if err != nil {
 			logger.Error("Failed to create StorageClusterPeer", "error", err)
 			return result, err
 		}
 
-		result, err = createManifestWorkForClusterPairingConfigMap(ctx, r.Client, logger, currentNamespace, mirrorPeer)
+		result, err = createManifestWorkForClusterPairingConfigMap(ctx, r.Client, logger, r.currentNamespace, mirrorPeer)
 		if err != nil {
 			logger.Error("Failed to create ManifestWork for ClusterPairingConfigMap", "error", err)
 			return result, err
@@ -589,8 +588,7 @@ func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, m
 	logger := r.Logger.With("MirrorPeer", mirrorPeer.Name)
 	logger.Info("Processing ManagedClusterAddons for MirrorPeer")
 
-	currentNamespace := utils.GetEnv("POD_NAMESPACE", r.testEnvFile)
-	addonConfigs, err := getConfig(ctx, r.Client, currentNamespace, mirrorPeer)
+	addonConfigs, err := getConfig(ctx, r.Client, r.currentNamespace, mirrorPeer)
 	if err != nil {
 		return fmt.Errorf("failed to get managedclusteraddon config %w", err)
 	}
@@ -747,14 +745,13 @@ func GetNamespacedNameForClientS3Secret(ctx context.Context, client client.Clien
 
 func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer, hasStorageClientRef bool) error {
 	logger := r.Logger
-	currentNamespace := utils.GetEnv("POD_NAMESPACE", r.testEnvFile)
 
 	for _, pr := range mp.Spec.Items {
 		clusterName := pr.ClusterName
 		var s3SecretName string
 		var s3SecretNamespace string
 		if hasStorageClientRef {
-			name, namespace, err := GetNamespacedNameForClientS3Secret(ctx, r.Client, currentNamespace, pr, mp)
+			name, namespace, err := GetNamespacedNameForClientS3Secret(ctx, r.Client, r.currentNamespace, pr, mp)
 			if err != nil {
 				return fmt.Errorf("failed to get namespace for s3 secret %w", err)
 			}
@@ -861,10 +858,9 @@ func (r *MirrorPeerReconciler) createClusterRoleBindingsForSpoke(ctx context.Con
 
 func (r *MirrorPeerReconciler) updateMirrorPeerStatus(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, hasStorageClientRef bool) (ctrl.Result, error) {
 	logger := r.Logger
-	currentNamespace := utils.GetEnv("POD_NAMESPACE", r.testEnvFile)
 	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
 		if hasStorageClientRef {
-			providerModePeeringDone, err := isProviderModePeeringDone(ctx, r.Client, r.Logger, currentNamespace, &mirrorPeer)
+			providerModePeeringDone, err := isProviderModePeeringDone(ctx, r.Client, r.Logger, r.currentNamespace, &mirrorPeer)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to check if provider mode peering is correctly done %w", err)
 			}
@@ -891,7 +887,7 @@ func (r *MirrorPeerReconciler) updateMirrorPeerStatus(ctx context.Context, mirro
 		}
 	} else {
 		// Sync mode status update, same flow as async but for s3 profile
-		s3ProfileSynced, err := checkS3ProfileStatus(ctx, r.Client, logger, currentNamespace, mirrorPeer, hasStorageClientRef)
+		s3ProfileSynced, err := checkS3ProfileStatus(ctx, r.Client, logger, r.currentNamespace, mirrorPeer, hasStorageClientRef)
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
 				logger.Info("S3 secrets not found; Attempting to reconcile again", "MirrorPeer", mirrorPeer.Name)
