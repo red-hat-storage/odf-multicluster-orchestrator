@@ -36,7 +36,7 @@ metadata:
       ]
     capabilities: Seamless Upgrades
     console.openshift.io/plugins: '["odf-multicluster-console"]'
-    createdAt: "2024-09-06T06:15:59Z"
+    createdAt: "2025-03-05T07:48:42Z"
     olm.skipRange: ""
     operators.openshift.io/infrastructure-features: '["disconnected"]'
     operators.operatorframework.io/builder: operator-sdk-v1.34.2
@@ -282,9 +282,6 @@ spec:
                   periodSeconds: 20
                 name: manager
                 ports:
-                - containerPort: 9443
-                  name: webhook-server
-                  protocol: TCP
                 - containerPort: 8081
                   protocol: TCP
                 readinessProbe:
@@ -398,47 +395,3 @@ spec:
   provider:
     name: Red Hat
   version: 0.0.1
-  webhookdefinitions:
-  - admissionReviewVersions:
-    - v1
-    - v1beta1
-    containerPort: 443
-    deploymentName: odfmo-controller-manager
-    failurePolicy: Fail
-    generateName: mmirrorpeer.kb.io
-    rules:
-    - apiGroups:
-      - multicluster.odf.openshift.io
-      apiVersions:
-      - v1alpha1
-      operations:
-      - CREATE
-      - UPDATE
-      resources:
-      - mirrorpeers
-    sideEffects: None
-    targetPort: 9443
-    type: MutatingAdmissionWebhook
-    webhookPath: /mutate-multicluster-odf-openshift-io-v1alpha1-mirrorpeer
-  - admissionReviewVersions:
-    - v1
-    - v1beta1
-    containerPort: 443
-    deploymentName: odfmo-controller-manager
-    failurePolicy: Fail
-    generateName: vmirrorpeer.kb.io
-    rules:
-    - apiGroups:
-      - multicluster.odf.openshift.io
-      apiVersions:
-      - v1alpha1
-      operations:
-      - CREATE
-      - UPDATE
-      - DELETE
-      resources:
-      - mirrorpeers
-    sideEffects: None
-    targetPort: 9443
-    type: ValidatingAdmissionWebhook
-    webhookPath: /validate-multicluster-odf-openshift-io-v1alpha1-mirrorpeer
