@@ -56,11 +56,15 @@ type MirrorPeerSpec struct {
 	// Type represents the mode of DR operation (sync or async)
 	// +kubebuilder:default=async
 	// +kubebuilder:validation:Enum=async;sync
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec.type is immutable."
 	Type DRType `json:"type"`
 
 	// Items is a list of PeerRef.
 	// +kubebuilder:validation:MaxItems=2
 	// +kubebuilder:validation:MinItems=2
+	// +kubebuilder:validation:XValidation:rule="self.all(e, (size(oldSelf.filter(x, (x.clusterName == e.clusterName) && (x.storageClusterRef.name == e.storageClusterRef.name) )) == 1))",message="items.clusterName and items.storageClusterRef.name fields are immutable."
+	// +listType=map
+	// +listMapKey=clusterName
 	Items []PeerRef `json:"items"`
 
 	// SchedulingIntervals is a list of intervals at which mirroring snapshots are taken.
