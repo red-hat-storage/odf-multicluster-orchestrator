@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 
 	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v4/v1alpha1"
@@ -26,8 +25,10 @@ import (
 )
 
 type ManagedClusterViewReconciler struct {
-	Client client.Client
-	Logger *slog.Logger
+	Client           client.Client
+	Logger           *slog.Logger
+	testEnvFile      string
+	currentNamespace string
 }
 
 const (
@@ -98,7 +99,7 @@ func (r *ManagedClusterViewReconciler) Reconcile(ctx context.Context, req reconc
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if err := createOrUpdateConfigMap(ctx, r.Client, managedClusterView, r.Logger); err != nil {
+	if err := createOrUpdateConfigMap(ctx, r.Client, r.currentNamespace, managedClusterView, r.Logger); err != nil {
 		logger.Error("Failed to create or update ConfigMap for ManagedClusterView", "error", err)
 		return ctrl.Result{}, err
 	}
@@ -108,7 +109,7 @@ func (r *ManagedClusterViewReconciler) Reconcile(ctx context.Context, req reconc
 	return ctrl.Result{}, nil
 }
 
-func createOrUpdateConfigMap(ctx context.Context, c client.Client, managedClusterView viewv1beta1.ManagedClusterView, logger *slog.Logger) error {
+func createOrUpdateConfigMap(ctx context.Context, c client.Client, operatorNamespace string, managedClusterView viewv1beta1.ManagedClusterView, logger *slog.Logger) error {
 	logger = logger.With("ManagedClusterView", managedClusterView.Name, "Namespace", managedClusterView.Namespace)
 
 	// Initialize an empty map to hold the result data.
@@ -176,7 +177,6 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, managedCluste
 		}
 	}
 
-	operatorNamespace := os.Getenv("POD_NAMESPACE")
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ClientInfoConfigMapName,

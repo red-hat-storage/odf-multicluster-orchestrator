@@ -2,7 +2,6 @@ package addons
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 
@@ -25,15 +24,12 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	"open-cluster-management.io/addon-framework/pkg/lease"
 	addonutils "open-cluster-management.io/addon-framework/pkg/utils"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
@@ -67,8 +63,7 @@ func NewAddonAgentCommand() *cobra.Command {
 		Use:   "addons",
 		Short: "Start the addon agents",
 		Run: func(cmd *cobra.Command, args []string) {
-			ctx := ctrl.SetupSignalHandler()
-			o.RunAgent(ctx)
+			o.RunAgent(cmd.Context())
 		},
 	}
 
@@ -83,10 +78,13 @@ type AddonAgentOptions struct {
 	EnableLeaderElection bool
 	ProbeAddr            string
 	HubKubeconfigFile    string
+	KubeconfigFile       string
 	SpokeClusterName     string
 	OdfOperatorNamespace string
 	DRMode               string
 	DevMode              bool
+
+	testEnvFile string
 }
 
 func (o *AddonAgentOptions) AddFlags(cmd *cobra.Command) {
@@ -97,10 +95,12 @@ func (o *AddonAgentOptions) AddFlags(cmd *cobra.Command) {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flags.StringVar(&o.HubKubeconfigFile, "hub-kubeconfig", o.HubKubeconfigFile, "Location of kubeconfig file to connect to hub cluster.")
+	flags.StringVar(&o.KubeconfigFile, "kubeconfig", "", "Paths to a kubeconfig. Only required if out-of-cluster.")
 	flags.StringVar(&o.SpokeClusterName, "cluster-name", o.SpokeClusterName, "Name of spoke cluster.")
 	flags.StringVar(&o.OdfOperatorNamespace, "odf-operator-namespace", o.OdfOperatorNamespace, "Namespace of ODF operator on the spoke cluster.")
 	flags.StringVar(&o.DRMode, "mode", o.DRMode, "The DR mode of token exchange addon. Valid values are: 'sync', 'async'")
 	flags.BoolVar(&o.DevMode, "dev", false, "Set to true for dev environment (Text logging)")
+	flags.StringVar(&o.testEnvFile, "test-dotenv", "", "Path to a dotenv file for testing purpose only.")
 }
 
 // RunAgent starts the controllers on agent to process work from hub.
@@ -134,34 +134,12 @@ func (o *AddonAgentOptions) RunAgent(ctx context.Context) {
 	logger.Info("Addon agent has stopped")
 }
 
-// GetClientFromConfig returns a controller-runtime Client for a rest.Config
-func GetClientFromConfig(config *rest.Config) (client.Client, error) {
-	cl, err := client.New(config, client.Options{Scheme: mgrScheme})
-	if err != nil {
-		return nil, err
-	}
-	return cl, nil
-}
-
-// GetClientConfig returns the rest.Config for a kubeconfig file
-func GetClientConfig(kubeConfigFile string) (*rest.Config, error) {
-	clientconfig, err := clientcmd.BuildConfigFromFlags("", kubeConfigFile)
-	if err != nil {
-		return nil, fmt.Errorf("get clientconfig failed: %w", err)
-	}
-	return clientconfig, nil
-}
-
 func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.Logger) {
-	hubConfig, err := GetClientConfig(options.HubKubeconfigFile)
+	currentNamespace := utils.GetEnv("POD_NAMESPACE", options.testEnvFile)
+
+	hubConfig, err := utils.GetClientConfig(options.HubKubeconfigFile)
 	if err != nil {
 		logger.Error("Failed to get kubeconfig", "error", err)
-		os.Exit(1)
-	}
-
-	spokeClient, err := GetClientFromConfig(ctrl.GetConfigOrDie())
-	if err != nil {
-		logger.Error("Failed to get spoke client", "error", err)
 		os.Exit(1)
 	}
 
@@ -183,6 +161,18 @@ func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.
 		os.Exit(1)
 	}
 
+	spokeKubeConfig, err := utils.GetClientConfig(options.KubeconfigFile)
+	if err != nil {
+		logger.Error("Failed to get kubeconfig", "error", err)
+		os.Exit(1)
+	}
+
+	spokeClient, err := utils.GetClientFromConfig(spokeKubeConfig, mgr.GetScheme())
+	if err != nil {
+		logger.Error("Failed to get spoke client", "error", err)
+		os.Exit(1)
+	}
+
 	if err = (&MirrorPeerReconciler{
 		Scheme:               mgr.GetScheme(),
 		HubClient:            mgr.GetClient(),
@@ -190,6 +180,8 @@ func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.
 		SpokeClusterName:     options.SpokeClusterName,
 		OdfOperatorNamespace: options.OdfOperatorNamespace,
 		Logger:               logger.With("controller", "MirrorPeerReconciler"),
+		testEnvFile:          options.testEnvFile,
+		currentNamespace:     currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create MirrorPeer controller", "controller", "MirrorPeer", "error", err)
 		os.Exit(1)
@@ -203,19 +195,15 @@ func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.
 }
 
 func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slog.Logger) {
-	hubConfig, err := GetClientConfig(options.HubKubeconfigFile)
+	currentNamespace := utils.GetEnv("POD_NAMESPACE", options.testEnvFile)
+
+	spokeKubeConfig, err := utils.GetClientConfig(options.KubeconfigFile)
 	if err != nil {
 		logger.Error("Failed to get kubeconfig", "error", err)
 		os.Exit(1)
 	}
 
-	hubClient, err := GetClientFromConfig(hubConfig)
-	if err != nil {
-		logger.Error("Failed to get spoke client", "error", err)
-		os.Exit(1)
-	}
-
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	mgr, err := ctrl.NewManager(spokeKubeConfig, ctrl.Options{
 		Scheme: mgrScheme,
 		Metrics: server.Options{
 			BindAddress: "0", // disable metrics
@@ -229,14 +217,11 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slo
 		os.Exit(1)
 	}
 
-	spokeKubeConfig := mgr.GetConfig()
 	spokeKubeClient, err := kubernetes.NewForConfig(spokeKubeConfig)
 	if err != nil {
 		logger.Error("Failed to get spoke kube client", "error", err)
 		os.Exit(1)
 	}
-
-	currentNamespace := os.Getenv("POD_NAMESPACE")
 
 	if err = mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		logger.Info("Starting lease updater")
@@ -253,12 +238,26 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slo
 		os.Exit(1)
 	}
 
+	hubConfig, err := utils.GetClientConfig(options.HubKubeconfigFile)
+	if err != nil {
+		logger.Error("Failed to get kubeconfig", "error", err)
+		os.Exit(1)
+	}
+
+	hubClient, err := utils.GetClientFromConfig(hubConfig, mgr.GetScheme())
+	if err != nil {
+		logger.Error("Failed to get hub client", "error", err)
+		os.Exit(1)
+	}
+
 	if err = (&S3SecretReconciler{
 		Scheme:           mgr.GetScheme(),
 		HubClient:        hubClient,
 		SpokeClient:      mgr.GetClient(),
 		SpokeClusterName: options.SpokeClusterName,
 		Logger:           logger.With("controller", "S3SecretReconciler"),
+		testEnvFile:      options.testEnvFile,
+		currentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create S3Secret controller", "controller", "S3Secret", "error", err)
 		os.Exit(1)

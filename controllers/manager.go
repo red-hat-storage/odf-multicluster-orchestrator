@@ -67,6 +67,9 @@ type ManagerOptions struct {
 	ProbeAddr               string
 	MulticlusterConsolePort int
 	DevMode                 bool
+	KubeconfigFile          string
+
+	testEnvFile string
 }
 
 func NewManagerOptions() *ManagerOptions {
@@ -82,6 +85,8 @@ func (o *ManagerOptions) AddFlags(cmd *cobra.Command) {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flags.BoolVar(&o.DevMode, "dev", false, "Set to true for dev environment (Text logging)")
+	flags.StringVar(&o.KubeconfigFile, "kubeconfig", "", "Paths to a kubeconfig. Only required if out-of-cluster.")
+	flags.StringVar(&o.testEnvFile, "test-dotenv", "", "Path to a dotenv file for testing purpose only.")
 }
 
 func NewManagerCommand() *cobra.Command {
@@ -90,7 +95,7 @@ func NewManagerCommand() *cobra.Command {
 		Use:   "manager",
 		Short: "Multicluster Orchestrator for ODF",
 		Run: func(cmd *cobra.Command, args []string) {
-			mgrOpts.runManager()
+			mgrOpts.runManager(cmd.Context())
 		},
 	}
 	mgrOpts.AddFlags(cmd)
@@ -132,7 +137,7 @@ func preRunGarbageCollection(cl client.Client, logger *slog.Logger) error {
 	return nil
 }
 
-func (o *ManagerOptions) runManager() {
+func (o *ManagerOptions) runManager(ctx context.Context) {
 	zapLogger := utils.GetZapLogger(o.DevMode)
 	defer func() {
 		if err := zapLogger.Sync(); err != nil {
@@ -142,7 +147,15 @@ func (o *ManagerOptions) runManager() {
 	ctrl.SetLogger(zapr.NewLogger(zapLogger))
 	logger := utils.GetLogger(zapLogger)
 
-	preRunClient, err := client.New(ctrl.GetConfigOrDie(), client.Options{
+	currentNamespace := utils.GetEnv("POD_NAMESPACE", o.testEnvFile)
+
+	config, err := utils.GetClientConfig(o.KubeconfigFile)
+	if err != nil {
+		logger.Error("Failed to get kubeconfig", "error", err)
+		os.Exit(1)
+	}
+
+	preRunClient, err := client.New(config, client.Options{
 		Scheme: mgrScheme,
 		Cache:  nil,
 	})
@@ -165,7 +178,7 @@ func (o *ManagerOptions) runManager() {
 		KeyName:  WebhookKeyName,
 	})
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	mgr, err := ctrl.NewManager(config, ctrl.Options{
 		Scheme: mgrScheme,
 		Metrics: server.Options{
 			BindAddress: o.MetricsAddr,
@@ -180,12 +193,12 @@ func (o *ManagerOptions) runManager() {
 		os.Exit(1)
 	}
 
-	namespace := os.Getenv("POD_NAMESPACE")
-
 	if err = (&MirrorPeerReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Logger: logger.With("controller", "MirrorPeerReconciler"),
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		Logger:           logger.With("controller", "MirrorPeerReconciler"),
+		testEnvFile:      o.testEnvFile,
+		currentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create MirrorPeer controller", "error", err)
 		os.Exit(1)
@@ -193,32 +206,38 @@ func (o *ManagerOptions) runManager() {
 	//+kubebuilder:scaffold:builder
 
 	if err = (&MirrorPeerSecretReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Logger: logger.With("controller", "MirrorPeerSecretReconciler"),
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		Logger:           logger.With("controller", "MirrorPeerSecretReconciler"),
+		testEnvFile:      o.testEnvFile,
+		currentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create MirrorPeer controller", "error", err)
 		os.Exit(1)
 	}
 
 	if err = (&ManagedClusterReconciler{
-		Client: mgr.GetClient(),
-		Logger: logger.With("controller", "ManagedClusterReconciler"),
+		Client:           mgr.GetClient(),
+		Logger:           logger.With("controller", "ManagedClusterReconciler"),
+		testEnvFile:      o.testEnvFile,
+		currentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create ManagedCluster controller", "error", err)
 		os.Exit(1)
 	}
 
 	if err = (&ManagedClusterViewReconciler{
-		Client: mgr.GetClient(),
-		Logger: logger.With("controller", "ManagedClusterViewReconciler"),
+		Client:           mgr.GetClient(),
+		Logger:           logger.With("controller", "ManagedClusterViewReconciler"),
+		testEnvFile:      o.testEnvFile,
+		currentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create ManagedClusterView controller", "error", err)
 		os.Exit(1)
 	}
 
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-		err = console.InitConsole(ctx, mgr.GetClient(), o.MulticlusterConsolePort, namespace)
+		err = console.InitConsole(ctx, mgr.GetClient(), o.MulticlusterConsolePort, currentNamespace)
 		if err != nil {
 			logger.Error("Failed to initialize multicluster console to manager", "error", err)
 			return err
@@ -239,18 +258,18 @@ func (o *ManagerOptions) runManager() {
 	}
 
 	logger.Info("Initializing token exchange addon")
-	kubeClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	kubeClient, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		logger.Error("Failed to get kubeclient", "error", err)
 	}
 
-	controllerRef, err := events.GetControllerReferenceForCurrentPod(context.TODO(), kubeClient, namespace, nil)
+	controllerRef, err := events.GetControllerReferenceForCurrentPod(context.TODO(), kubeClient, currentNamespace, nil)
 	if err != nil {
 		logger.Info("Failed to get owner reference (falling back to namespace)", "error", err)
 	}
-	teEventRecorder := events.NewKubeRecorder(kubeClient.CoreV1().Events(namespace), setup.TokenExchangeName, controllerRef)
+	teEventRecorder := events.NewKubeRecorder(kubeClient.CoreV1().Events(currentNamespace), setup.TokenExchangeName, controllerRef)
 
-	agentImage := os.Getenv("TOKEN_EXCHANGE_IMAGE")
+	agentImage := utils.GetEnv("TOKEN_EXCHANGE_IMAGE", o.testEnvFile)
 
 	tokenExchangeAddon := setup.TokenExchangeAddon{
 		Addons: struct {
@@ -266,14 +285,13 @@ func (o *ManagerOptions) runManager() {
 	}
 
 	err = (&multiclusterv1alpha1.MirrorPeer{}).SetupWebhookWithManager(mgr)
-
 	if err != nil {
 		logger.Error("Unable to create MirrorPeer webhook", "error", err)
 		os.Exit(1)
 	}
 
 	logger.Info("Creating addon manager")
-	addonMgr, err := addonmanager.New(mgr.GetConfig())
+	addonMgr, err := addonmanager.New(config)
 	if err != nil {
 		logger.Error("Failed to create addon manager", "error", err)
 	}
@@ -283,15 +301,17 @@ func (o *ManagerOptions) runManager() {
 	}
 
 	if err = (&DRPolicyReconciler{
-		HubClient: mgr.GetClient(),
-		Scheme:    mgr.GetScheme(),
-		Logger:    logger.With("controller", "DRPolicyReconciler"),
+		HubClient:        mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		Logger:           logger.With("controller", "DRPolicyReconciler"),
+		testEnvFile:      o.testEnvFile,
+		currentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create DRPolicy controller", "error", err)
 		os.Exit(1)
 	}
 
-	g, ctx := errgroup.WithContext(ctrl.SetupSignalHandler())
+	g, ctx := errgroup.WithContext(ctx)
 
 	logger.Info("Starting manager")
 	g.Go(func() error {

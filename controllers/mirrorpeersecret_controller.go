@@ -42,6 +42,9 @@ type MirrorPeerSecretReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 	Logger *slog.Logger
+
+	testEnvFile      string
+	currentNamespace string
 }
 
 //+kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers,verbs=get;list;watch;create;update;patch;delete
@@ -86,7 +89,7 @@ func (r *MirrorPeerSecretReconciler) mirrorPeerSecretReconcile(ctx context.Conte
 	}
 
 	if utils.IsSecretInternal(&peerSecret) {
-		err = createOrUpdateSecretsFromInternalSecret(ctx, rc, &peerSecret, nil, logger)
+		err = createOrUpdateSecretsFromInternalSecret(ctx, rc, r.currentNamespace, &peerSecret, nil, logger)
 		if err != nil {
 			logger.Error("Failed to update from internal secret", "error", err, "Secret", peerSecret.Name)
 			return ctrl.Result{}, err

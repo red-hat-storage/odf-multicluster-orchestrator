@@ -98,11 +98,11 @@ storageSystemName: "ocs-storagecluster-storagesystem"
 		err = c.Create(ctx, mcv)
 		assert.NoError(t, err)
 
-		err = createOrUpdateConfigMap(ctx, c, *mcv, logger)
+		err = createOrUpdateConfigMap(ctx, c, "openshift-operators", *mcv, logger)
 		assert.NoError(t, err)
 
 		cm := &corev1.ConfigMap{}
-		err = c.Get(ctx, types.NamespacedName{Name: ClientInfoConfigMapName, Namespace: os.Getenv("POD_NAMESPACE")}, cm)
+		err = c.Get(ctx, types.NamespacedName{Name: ClientInfoConfigMapName, Namespace: utils.GetEnv("POD_NAMESPACE")}, cm)
 		assert.NoError(t, err)
 		assert.NotNil(t, cm)
 
@@ -147,11 +147,11 @@ storageSystemName: "ocs-storagecluster-storagesystem"
 		err := c.Create(ctx, mcv)
 		assert.NoError(t, err)
 
-		err = createOrUpdateConfigMap(ctx, c, *mcv, logger)
+		err = createOrUpdateConfigMap(ctx, c, "openshift-operators", *mcv, logger)
 		assert.NoError(t, err)
 
 		cm := &corev1.ConfigMap{}
-		err = c.Get(ctx, types.NamespacedName{Name: ClientInfoConfigMapName, Namespace: os.Getenv("POD_NAMESPACE")}, cm)
+		err = c.Get(ctx, types.NamespacedName{Name: ClientInfoConfigMapName, Namespace: utils.GetEnv("POD_NAMESPACE")}, cm)
 		assert.NoError(t, err)
 		assert.NotNil(t, cm)
 

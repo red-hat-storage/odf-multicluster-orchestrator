@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
+	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 )
 
 var rootCmd = &cobra.Command{
@@ -19,8 +22,18 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
+	ctx := signals.SetupSignalHandler()
+	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func ExecuteCommandForTest(ctx context.Context, args []string) (string, error) {
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs(args)
+	err := rootCmd.ExecuteContext(ctx)
+	return buf.String(), err
 }

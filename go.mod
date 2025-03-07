@@ -8,6 +8,7 @@ require (
 	github.com/csi-addons/kubernetes-csi-addons v0.8.0
 	github.com/go-logr/zapr v1.3.0
 	github.com/google/uuid v1.6.0
+	github.com/joho/godotenv v1.5.1
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
 	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.0.0
 	github.com/onsi/ginkgo v1.16.5

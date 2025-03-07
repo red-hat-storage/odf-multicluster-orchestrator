@@ -3,7 +3,6 @@ package utils
 import (
 	"context"
 	"fmt"
-	"os"
 
 	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v4/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
@@ -56,7 +55,7 @@ func GetPeerRefForSpokeCluster(mp *multiclusterv1alpha1.MirrorPeer, spokeCluster
 // GetPeerRefForProviderCluster returns the client peer ref for the current provider cluster
 func GetPeerRefForProviderCluster(ctx context.Context, spokeClient, hubClient client.Client, mp *multiclusterv1alpha1.MirrorPeer) ([]multiclusterv1alpha1.PeerRef, error) {
 	var peerRefList []multiclusterv1alpha1.PeerRef
-	operatorNamespace := os.Getenv("POD_NAMESPACE")
+	operatorNamespace := GetEnv("POD_NAMESPACE")
 	cm, err := GetODFInfoConfigMap(ctx, spokeClient, operatorNamespace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ODF Info ConfigMap for namespace %s: %w", operatorNamespace, err)
@@ -94,7 +93,7 @@ func GetClusterID(ctx context.Context, client client.Client, clusterName string)
 
 func getPeerRefType(ctx context.Context, c client.Client, peerRef multiclusterv1alpha1.PeerRef, isManagedCluster bool) (PeerRefType, error) {
 	if isManagedCluster {
-		operatorNamespace := os.Getenv("POD_NAMESPACE")
+		operatorNamespace := GetEnv("POD_NAMESPACE")
 		cm, err := GetODFInfoConfigMap(ctx, c, operatorNamespace)
 		if err != nil {
 			return PeerRefTypeUnknown, fmt.Errorf("failed to get ODF Info ConfigMap for namespace %s: %w", peerRef.StorageClusterRef.Namespace, err)
@@ -116,7 +115,7 @@ func getPeerRefType(ctx context.Context, c client.Client, peerRef multiclusterv1
 		}
 		return PeerRefTypeStorageCluster, nil
 	} else {
-		operatorNamespace := os.Getenv("POD_NAMESPACE")
+		operatorNamespace := GetEnv("POD_NAMESPACE")
 		cm, err := FetchConfigMap(ctx, c, ClientInfoConfigMapName, operatorNamespace)
 		if k8serrors.IsNotFound(err) {
 			return PeerRefTypeStorageCluster, nil

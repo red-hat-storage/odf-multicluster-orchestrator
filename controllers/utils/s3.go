@@ -3,7 +3,6 @@ package utils
 import (
 	"context"
 	"fmt"
-	"os"
 
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
@@ -42,13 +41,6 @@ func GetCurrentStorageClusterRef(mp *multiclusterv1alpha1.MirrorPeer, spokeClust
 	}
 
 	return nil, fmt.Errorf("StorageClusterRef for cluster %s under mirrorpeer %s not found", spokeClusterName, mp.Name)
-}
-
-func GetEnv(key, defaultValue string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		return value
-	}
-	return defaultValue
 }
 
 func GenerateBucketName(mirrorPeer multiclusterv1alpha1.MirrorPeer) string {
