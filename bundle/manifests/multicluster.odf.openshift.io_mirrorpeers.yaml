@@ -68,6 +68,15 @@ spec:
                 maxItems: 2
                 minItems: 2
                 type: array
+                x-kubernetes-list-map-keys:
+                - clusterName
+                x-kubernetes-list-type: map
+                x-kubernetes-validations:
+                - message: items.clusterName and items.storageClusterRef.name fields
+                    are immutable.
+                  rule: self.all(e, (size(oldSelf.filter(x, (x.clusterName == e.clusterName)
+                    && (x.storageClusterRef.name == e.storageClusterRef.name) )) ==
+                    1))
               manageS3:
                 default: false
                 type: boolean
@@ -85,6 +94,9 @@ spec:
                 - async
                 - sync
                 type: string
+                x-kubernetes-validations:
+                - message: spec.type is immutable.
+                  rule: self == oldSelf
             required:
             - items
             - type

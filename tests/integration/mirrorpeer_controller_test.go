@@ -111,6 +111,7 @@ var _ = Describe("MirrorPeer Validations", func() {
 							},
 						},
 						{
+							ClusterName: "some-other-cluster",
 							StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
 								Name:      "test-storagecluster-2",
 								Namespace: "test-storagecluster-ns2",
