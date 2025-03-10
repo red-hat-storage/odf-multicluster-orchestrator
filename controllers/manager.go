@@ -14,6 +14,7 @@ import (
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/console"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
 	"github.com/spf13/cobra"
 	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	"golang.org/x/sync/errgroup"
@@ -139,6 +140,8 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 	}()
 	ctrl.SetLogger(zapr.NewLogger(zapLogger))
 	logger := utils.GetLogger(zapLogger)
+
+	logger.Info("Starting manager on hub", "version", version.Version)
 
 	currentNamespace := utils.GetEnv("POD_NAMESPACE", o.testEnvFile)
 

@@ -15,6 +15,7 @@ import (
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	"github.com/spf13/cobra"
 	appsv1 "k8s.io/api/apps/v1"
@@ -113,7 +114,7 @@ func (o *AddonAgentOptions) RunAgent(ctx context.Context) {
 	}()
 	ctrl.SetLogger(zapr.NewLogger(zapLogger))
 	logger := utils.GetLogger(zapLogger)
-	logger.Info("Starting addon agents.")
+	logger.Info("Starting addon agents.", "Version", version.Version)
 	cc, err := addonutils.NewConfigChecker("agent kubeconfig checker", o.HubKubeconfigFile)
 	if err != nil {
 		logger.Error("ConfigChecker could not be created", "error", err)

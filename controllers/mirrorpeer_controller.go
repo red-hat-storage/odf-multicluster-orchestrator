@@ -23,6 +23,7 @@ import (
 	"log/slog"
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
 
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
@@ -61,6 +62,7 @@ type MirrorPeerReconciler struct {
 const (
 	mirrorPeerFinalizer         = "hub.multicluster.odf.openshift.io"
 	spokeClusterRoleBindingName = "spoke-clusterrole-bindings"
+	AddonVersionAnnotationKey   = "multicluster.odf.openshift.io/version"
 )
 
 //+kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers,verbs=get;list;watch;create;update;patch;delete
@@ -107,6 +109,15 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	clientInfoMap, err := fetchClientInfoConfigMap(ctx, r.Client, r.currentNamespace)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			logger.Info("ConfigMap 'odf-client-info' not found. Requeueing.")
+			return ctrl.Result{Requeue: true}, nil
+		}
+		return ctrl.Result{}, err
+	}
+
 	logger.Info("Validating MirrorPeer")
 	// Validate MirrorPeer
 	// MirrorPeer.Spec must be defined
@@ -129,6 +140,23 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if err := isManagedCluster(ctx, r.Client, mirrorPeer.Spec.Items[i].ClusterName); err != nil {
 			logger.Error("Invalid ManagedCluster", "ClusterName", mirrorPeer.Spec.Items[i].ClusterName, "error", err)
 			return ctrl.Result{}, err
+		}
+		// MirrorPeer.Spec.Items[*].StorageClusterRef must have a compatible version
+		if err := isVersionCompatible(mirrorPeer.Spec.Items[i], clientInfoMap.Data); err != nil {
+			logger.Error("Can not reconcile MirrorPeer", "error", err)
+			mirrorPeer.Status.Phase = multiclusterv1alpha1.IncompatibleVersion
+			mirrorPeer.Status.Message = err.Error()
+			statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
+			if statusErr != nil {
+				logger.Error("Error occurred while updating the status of mirrorpeer. Requeing request.", "Error ", statusErr)
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{}, err
+		} else {
+			if mirrorPeer.Status.Phase == multiclusterv1alpha1.IncompatibleVersion {
+				mirrorPeer.Status.Phase = ""
+				mirrorPeer.Status.Message = ""
+			}
 		}
 	}
 	logger.Info("All validations for MirrorPeer passed")
@@ -191,7 +219,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
 		if statusErr != nil {
-			logger.Error("Error occurred while updating the status of mirrorpeer. Requeing request...", "Error ", statusErr)
+			logger.Error("Error occurred while updating the status of mirrorpeer. Requeing request.", "Error ", statusErr)
 			// Requeue, but don't throw
 			return ctrl.Result{Requeue: true}, nil
 		}
@@ -608,6 +636,7 @@ func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, m
 
 				annotations := make(map[string]string)
 				annotations[utils.DRModeAnnotationKey] = string(mirrorPeer.Spec.Type)
+				annotations[AddonVersionAnnotationKey] = version.Version
 				managedClusterAddOn = addonapiv1alpha1.ManagedClusterAddOn{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:        setup.TokenExchangeName,
@@ -632,10 +661,30 @@ func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, m
 			logger.Error("Failed to reconcile ManagedClusterAddOn", "ManagedClusterAddOn", klog.KRef(managedClusterAddOn.Namespace, managedClusterAddOn.Name), "error", err)
 			return err
 		}
-
-		logger.Info("Successfully reconciled ManagedClusterAddOn", "ClusterName", config.Namespace)
 	}
 
+	// Wait for ManagedClusterAddon to be available
+	for _, config := range addonConfigs {
+		var managedClusterAddOn addonapiv1alpha1.ManagedClusterAddOn
+		namespacedName := types.NamespacedName{
+			Name:      config.Name,
+			Namespace: config.Namespace,
+		}
+
+		err := r.Client.Get(ctx, namespacedName, &managedClusterAddOn)
+		if err != nil {
+			return err
+		}
+
+		for _, condition := range managedClusterAddOn.Status.Conditions {
+			if condition.Type == addonapiv1alpha1.ManagedClusterAddOnConditionAvailable {
+				if condition.Status != metav1.ConditionTrue {
+					return fmt.Errorf("failed while waiting for ManagedClusterAddon %q to be available: not available yet", managedClusterAddOn.Name)
+				}
+				break
+			}
+		}
+	}
 	logger.Info("Successfully processed all ManagedClusterAddons for MirrorPeer")
 	return nil
 }

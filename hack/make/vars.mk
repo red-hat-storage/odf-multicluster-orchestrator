@@ -6,6 +6,7 @@
 VERSION ?= 0.0.1
 RAMEN_VERSION ?= 0.0.1
 FUSION ?= false
+LDFLAGS ?= "-X github.com/red-hat-storage/odf-multicluster-orchestrator/version.Version=${VERSION}"
 
 IMAGE_REGISTRY ?= quay.io
 REGISTRY_NAMESPACE ?= ocs-dev
