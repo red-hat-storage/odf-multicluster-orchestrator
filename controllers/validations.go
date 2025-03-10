@@ -22,8 +22,10 @@ import (
 	"log/slog"
 	"reflect"
 
+	"github.com/blang/semver/v4"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
 	"k8s.io/apimachinery/pkg/api/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -62,6 +64,29 @@ func isManagedCluster(ctx context.Context, client client.Client, clusterName str
 			return fmt.Errorf("validation: ManagedCluster %q not found : %q is not a managed cluster", clusterName, clusterName)
 		}
 		return fmt.Errorf("validation: unable to get ManagedCluster %q: error: %v", clusterName, err)
+	}
+	return nil
+}
+
+func isVersionCompatible(peerRef multiclusterv1alpha1.PeerRef, clientInfoMap map[string]string) error {
+	clientInfo, err := getClientInfoFromConfigMap(clientInfoMap, utils.GetKey(peerRef.ClusterName, peerRef.StorageClusterRef.Name))
+	if err != nil {
+		return fmt.Errorf("validation: unable to get client info: error: %v", err)
+	}
+	spokeVersion, err := semver.Parse(clientInfo.ProviderInfo.Version)
+	if err != nil {
+		return fmt.Errorf("validation: unable to parse spoke version: error: %v", err)
+	}
+	spokeVersion.Pre = nil
+	spokeVersion.Build = nil
+	hubVersion, err := semver.Parse(version.Version)
+	if err != nil {
+		return fmt.Errorf("validation: unable to parse hub version: error: %v", err)
+	}
+	hubVersion.Pre = nil
+	hubVersion.Build = nil
+	if !spokeVersion.Equals(hubVersion) {
+		return fmt.Errorf("storage cluster version %q on ManagedCluster %q is incompatible with Multicluster Orchestrator version %q", spokeVersion, peerRef.ClusterName, hubVersion)
 	}
 	return nil
 }
