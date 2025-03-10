@@ -56,6 +56,7 @@ type MirrorPeerReconciler struct {
 
 	testEnvFile      string
 	currentNamespace string
+	clientInfoMap    map[string]string
 }
 
 const (
@@ -107,6 +108,17 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	clientInfoMap, err := fetchClientInfoConfigMap(ctx, r.Client, r.currentNamespace)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			logger.Info("ConfigMap 'odf-client-info' not found. Requeueing.")
+			return ctrl.Result{Requeue: true}, nil
+		}
+		return ctrl.Result{}, err
+	}
+	r.clientInfoMap = clientInfoMap.Data
+	logger.Info("ConfigMap 'odf-client-info' cached successfully.")
+
 	logger.Info("Validating MirrorPeer")
 	// Validate MirrorPeer
 	// MirrorPeer.Spec must be defined
@@ -130,6 +142,18 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			logger.Error("Invalid ManagedCluster", "ClusterName", mirrorPeer.Spec.Items[i].ClusterName, "error", err)
 			return ctrl.Result{}, err
 		}
+		// MirrorPeer.Spec.Items[*].StorageClusterRef must have a compatible version
+		if err := isVersionCompatible(mirrorPeer.Spec.Items[i], r.clientInfoMap); err != nil {
+			logger.Error("Can not reconcile MirrorPeer", "error", err)
+			mirrorPeer.Status.Phase = multiclusterv1alpha1.IncompatibleVersion
+			mirrorPeer.Status.Message = err.Error()
+			statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
+			if statusErr != nil {
+				logger.Error("Error occurred while updating the status of mirrorpeer. Requeing request.", "Error ", statusErr)
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{Requeue: false}, nil
+		}
 	}
 	logger.Info("All validations for MirrorPeer passed")
 
@@ -137,6 +161,19 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if !utils.ContainsString(mirrorPeer.GetFinalizers(), mirrorPeerFinalizer) {
 			logger.Info("Finalizer not found on MirrorPeer. Adding Finalizer")
 			mirrorPeer.Finalizers = append(mirrorPeer.Finalizers, mirrorPeerFinalizer)
+		}
+		if mirrorPeer.Status.Phase == "" || mirrorPeer.Status.Phase == multiclusterv1alpha1.IncompatibleVersion {
+			if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
+				mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangingSecret
+			} else {
+				mirrorPeer.Status.Phase = multiclusterv1alpha1.S3ProfileSyncing
+			}
+			statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
+			if statusErr != nil {
+				logger.Error("Error occurred while updating the status of mirrorpeer. Re-queing request.", "Error ", statusErr)
+				// Requeue, but don't throw
+				return ctrl.Result{Requeue: true}, nil
+			}
 		}
 	} else {
 		logger.Info("Deleting MirrorPeer")
@@ -181,20 +218,6 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		logger.Info("Successfully added label to mirrorpeer for disaster recovery. Requeing request...")
 		return ctrl.Result{Requeue: true}, nil
-	}
-
-	if mirrorPeer.Status.Phase == "" {
-		if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
-			mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangingSecret
-		} else {
-			mirrorPeer.Status.Phase = multiclusterv1alpha1.S3ProfileSyncing
-		}
-		statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
-		if statusErr != nil {
-			logger.Error("Error occurred while updating the status of mirrorpeer. Requeing request...", "Error ", statusErr)
-			// Requeue, but don't throw
-			return ctrl.Result{Requeue: true}, nil
-		}
 	}
 
 	// Check if the MirrorPeer contains StorageClient reference
