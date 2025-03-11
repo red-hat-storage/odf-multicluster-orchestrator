@@ -187,7 +187,7 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		Scheme:           mgr.GetScheme(),
 		Logger:           logger.With("controller", "MirrorPeerReconciler"),
 		testEnvFile:      o.testEnvFile,
-		currentNamespace: currentNamespace,
+		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create MirrorPeer controller", "error", err)
 		os.Exit(1)
@@ -199,7 +199,7 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		Scheme:           mgr.GetScheme(),
 		Logger:           logger.With("controller", "MirrorPeerSecretReconciler"),
 		testEnvFile:      o.testEnvFile,
-		currentNamespace: currentNamespace,
+		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create MirrorPeer controller", "error", err)
 		os.Exit(1)
@@ -209,7 +209,7 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		Client:           mgr.GetClient(),
 		Logger:           logger.With("controller", "ManagedClusterReconciler"),
 		testEnvFile:      o.testEnvFile,
-		currentNamespace: currentNamespace,
+		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create ManagedCluster controller", "error", err)
 		os.Exit(1)
@@ -219,7 +219,7 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		Client:           mgr.GetClient(),
 		Logger:           logger.With("controller", "ManagedClusterViewReconciler"),
 		testEnvFile:      o.testEnvFile,
-		currentNamespace: currentNamespace,
+		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create ManagedClusterView controller", "error", err)
 		os.Exit(1)
@@ -288,7 +288,7 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		Scheme:           mgr.GetScheme(),
 		Logger:           logger.With("controller", "DRPolicyReconciler"),
 		testEnvFile:      o.testEnvFile,
-		currentNamespace: currentNamespace,
+		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create DRPolicy controller", "error", err)
 		os.Exit(1)

@@ -136,7 +136,7 @@ func getFakeMirrorPeerReconciler(mirrorpeer multiclusterv1alpha1.MirrorPeer) Mir
 		Client:           fakeClient,
 		Scheme:           scheme,
 		Logger:           utils.GetLogger(utils.GetZapLogger(true)),
-		currentNamespace: utils.GetEnv("POD_NAMESPACE"),
+		CurrentNamespace: utils.GetEnv("POD_NAMESPACE"),
 	}
 	return r
 }
