@@ -20,16 +20,20 @@ limitations under the License.
 package integration_test
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
+	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
@@ -101,9 +105,10 @@ var _ = BeforeSuite(func() {
 
 	fakeLogger := utils.GetLogger(utils.GetZapLogger(true))
 	err = (&controllers.MirrorPeerReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Logger: fakeLogger,
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		Logger:           fakeLogger,
+		CurrentNamespace: "openshift-operators",
 	}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
@@ -118,6 +123,39 @@ var _ = BeforeSuite(func() {
 		err = mgr.Start(ctrl.SetupSignalHandler())
 		Expect(err).ToNot(HaveOccurred())
 	}()
+
+	nsOpenshiftOperators := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "openshift-operators",
+		},
+	}
+	err = k8sClient.Create(context.TODO(), nsOpenshiftOperators, &client.CreateOptions{})
+	Expect(err).NotTo(HaveOccurred())
+
+	odfClientInfoConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "odf-client-info",
+			Namespace: "openshift-operators",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: viewv1beta1.GroupVersion.String(),
+					Kind:       "ManagedClusterView",
+					Name:       "mcv-1",
+					UID:        "mcv-uid",
+				},
+			},
+		},
+		Data: map[string]string{
+			"mc-1_test-storagecluster1":                    "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
+			"mc-2_test-storagecluster2":                    "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
+			"test-provider-cluster1_test-storagecluster-1": "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
+			"test-provider-cluster2_test-storagecluster-2": "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
+			"cluster1_test-storagecluster":                 "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
+			"cluster2_test-storagecluster":                 "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
+		},
+	}
+	err = k8sClient.Create(context.TODO(), odfClientInfoConfigMap, &client.CreateOptions{})
+	Expect(err).NotTo(HaveOccurred())
 
 }, 60)
 
