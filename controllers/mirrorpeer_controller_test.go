@@ -121,15 +121,22 @@ func getFakeMirrorPeerReconciler(mirrorpeer multiclusterv1alpha1.MirrorPeer) Mir
 				},
 			},
 		},
-		Data: map[string]string{},
+		Data: map[string]string{
+			"cluster1_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
+			"cluster2_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
+		},
 	}
 
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer, &managedcluster1, &managedcluster2, odfClientInfoConfigMap).Build()
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(&mirrorpeer, &managedcluster1, &managedcluster2, odfClientInfoConfigMap).
+		WithStatusSubresource(&mirrorpeer).
+		Build()
 
 	r := MirrorPeerReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
-		Logger: utils.GetLogger(utils.GetZapLogger(true)),
+		Client:           fakeClient,
+		Scheme:           scheme,
+		Logger:           utils.GetLogger(utils.GetZapLogger(true)),
+		currentNamespace: utils.GetEnv("POD_NAMESPACE"),
 	}
 	return r
 }
@@ -143,14 +150,14 @@ func TestProcessManagedClusterAddons(t *testing.T) {
 		Spec: multiclusterv1alpha1.MirrorPeerSpec{
 			Items: []multiclusterv1alpha1.PeerRef{
 				{
-					ClusterName: "cluster1",
+					ClusterName: "cluster3",
 					StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
 						Name:      "test-storagecluster",
 						Namespace: "test-namespace",
 					},
 				},
 				{
-					ClusterName: "cluster2",
+					ClusterName: "cluster4",
 					StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
 						Name:      "test-storagecluster",
 						Namespace: "test-namespace",
