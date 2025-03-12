@@ -59,6 +59,7 @@ func (r *DRPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	dpPredicate := utils.ComposePredicates(predicate.GenerationChangedPredicate{})
 
 	tokenToDRPolicyMapFunc := func(ctx context.Context, obj client.Object) []ctrl.Request {
+		r.Logger.Debug("Mapping secret to DRPolicy", "SecretName", obj.GetName(), "SecretNamespace", obj.GetNamespace())
 		reqs := []ctrl.Request{}
 		var mirrorPeerList multiclusterv1alpha1.MirrorPeerList
 		err := r.HubClient.List(ctx, &mirrorPeerList)
@@ -66,33 +67,40 @@ func (r *DRPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			r.Logger.Error("Unable to reconcile DRPolicy based on token changes. Failed to list MirrorPeers.", "error", err)
 			return reqs
 		}
+		r.Logger.Debug("Fetched MirrorPeers", "count", len(mirrorPeerList.Items))
 		for _, mirrorpeer := range mirrorPeerList.Items {
 			for _, peerRef := range mirrorpeer.Spec.Items {
 				name := utils.GetSecretNameByPeerRef(peerRef)
+				r.Logger.Debug("GetSecretNameByPeerRef()", "MirrorPeer", mirrorpeer.GetName(), "peerRef", peerRef, "SecretName", name)
 				if name == obj.GetName() {
+					r.Logger.Debug("GetSecretNameByPeerRef() == obj.GetName()", "MirrorPeer", mirrorpeer.GetName(), "peerRef", peerRef, "SecretName", name, "ObjectName", obj.GetName())
 					var drpolicyList ramenv1alpha1.DRPolicyList
 					err := r.HubClient.List(ctx, &drpolicyList)
 					if err != nil {
 						r.Logger.Error("Unable to reconcile DRPolicy based on token changes. Failed to list DRPolicies", "error", err)
 						return reqs
 					}
+					r.Logger.Debug("Fetched DRPolicies", "count", len(drpolicyList.Items))
 					for _, drpolicy := range drpolicyList.Items {
 						for i := range drpolicy.Spec.DRClusters {
 							if drpolicy.Spec.DRClusters[i] == peerRef.ClusterName {
+								r.Logger.Debug("drpolicy.Spec.DRClusters == peerRef.ClusterName", "DRPolicy", drpolicy.GetName(), "DRCluster", drpolicy.Spec.DRClusters[i], "peerRef.ClusterName", peerRef.ClusterName)
 								reqs = append(reqs, reconcile.Request{NamespacedName: types.NamespacedName{Name: drpolicy.Name}})
 							}
 						}
 					}
 					break
 				}
+				r.Logger.Debug("GetSecretNameByPeerRef() != obj.GetName()", "MirrorPeer", mirrorpeer.GetName(), "peerRef", peerRef, "SecretName", name, "ObjectName", obj.GetName())
 			}
 		}
+		r.Logger.Info("DRPolicy reconcile requests generated based on token change.", "RequestCount", len(reqs), "Requests", reqs, "TokenName", obj.GetName())
 		return reqs
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ramenv1alpha1.DRPolicy{}, builder.WithPredicates(dpPredicate)).
-		WatchesMetadata(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(tokenToDRPolicyMapFunc), builder.WithPredicates(utils.SourceOrDestinationPredicate)).
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(tokenToDRPolicyMapFunc), builder.WithPredicates(utils.SourcePredicate)).
 		Complete(r)
 }
 

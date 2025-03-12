@@ -23,6 +23,21 @@ var SourceOrDestinationPredicate = predicate.Funcs{
 	},
 }
 
+var SourcePredicate = predicate.Funcs{
+	CreateFunc: func(e event.CreateEvent) bool {
+		return IsSecretSource(e.Object)
+	},
+	DeleteFunc: func(e event.DeleteEvent) bool {
+		return IsSecretSource(e.Object)
+	},
+	UpdateFunc: func(e event.UpdateEvent) bool {
+		return (IsSecretSource(e.ObjectOld) && IsSecretSource(e.ObjectNew))
+	},
+	GenericFunc: func(_ event.GenericEvent) bool {
+		return false
+	},
+}
+
 // ComposePredicates will compose a variable number of predicates and return a predicate that
 // will allow events that are allowed by any of the given predicates.
 func ComposePredicates(predicates ...predicate.Predicate) predicate.Predicate {
