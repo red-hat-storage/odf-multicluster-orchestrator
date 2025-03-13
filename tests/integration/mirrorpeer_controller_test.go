@@ -338,9 +338,10 @@ var _ = Describe("MirrorPeerReconciler Reconcile", func() {
 			By("providing valid ManagedCluster names", func() {
 
 				r := controllers.MirrorPeerReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-					Logger: utils.GetLogger(utils.GetZapLogger(true)),
+					Client:           k8sClient,
+					Scheme:           k8sClient.Scheme(),
+					Logger:           utils.GetLogger(utils.GetZapLogger(true)),
+					CurrentNamespace: "openshift-operators",
 				}
 
 				req := ctrl.Request{

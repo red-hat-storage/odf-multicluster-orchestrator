@@ -28,7 +28,7 @@ type S3SecretReconciler struct {
 	Logger           *slog.Logger
 
 	testEnvFile      string
-	currentNamespace string
+	CurrentNamespace string
 }
 
 // SetupWithManager sets up the controller with the Manager.

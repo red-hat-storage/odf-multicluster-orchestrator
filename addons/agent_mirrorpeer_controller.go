@@ -51,7 +51,7 @@ type MirrorPeerReconciler struct {
 	Logger               *slog.Logger
 
 	testEnvFile      string
-	currentNamespace string
+	CurrentNamespace string
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -84,9 +84,9 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	var scr *multiclusterv1alpha1.StorageClusterRef
 	if hasStorageClientRef {
-		sc, err := utils.GetStorageClusterFromCurrentNamespace(ctx, r.SpokeClient, r.currentNamespace)
+		sc, err := utils.GetStorageClusterFromCurrentNamespace(ctx, r.SpokeClient, r.CurrentNamespace)
 		if err != nil {
-			logger.Error("Failed to fetch StorageCluster for given namespace", "Namespace", r.currentNamespace)
+			logger.Error("Failed to fetch StorageCluster for given namespace", "Namespace", r.CurrentNamespace)
 			return ctrl.Result{}, err
 		}
 		scr = &multiclusterv1alpha1.StorageClusterRef{
@@ -347,6 +347,9 @@ func (r *MirrorPeerReconciler) hasSpokeCluster(obj client.Object) bool {
 	if !ok {
 		return false
 	}
+	if mp.Status.Phase == multiclusterv1alpha1.IncompatibleVersion {
+		return false
+	}
 	for _, v := range mp.Spec.Items {
 		if v.ClusterName == r.SpokeClusterName {
 			return true
@@ -381,6 +384,9 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return reqs
 		}
 		for _, mirrorpeer := range mirrorPeerList.Items {
+			if mirrorpeer.Status.Phase == multiclusterv1alpha1.IncompatibleVersion {
+				continue
+			}
 			for _, peerRef := range mirrorpeer.Spec.Items {
 				name := utils.GetSecretNameByPeerRef(peerRef)
 				if name == obj.GetName() {
