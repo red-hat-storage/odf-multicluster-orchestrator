@@ -37,25 +37,6 @@ const (
 	ClientInfoConfigMapName = "odf-client-info"
 )
 
-type ProviderInfo struct {
-	Version                       string               `json:"version"`
-	DeploymentType                string               `json:"deploymentType"`
-	StorageSystemName             string               `json:"storageSystemName"`
-	ProviderManagedClusterName    string               `json:"providerManagedClusterName"`
-	NamespacedName                types.NamespacedName `json:"namespacedName"`
-	StorageProviderEndpoint       string               `json:"storageProviderEndpoint"`
-	CephClusterFSID               string               `json:"cephClusterFSID"`
-	StorageProviderPublicEndpoint string               `json:"storageProviderPublicEndpoint"`
-}
-
-type ClientInfo struct {
-	ClusterID                string       `json:"clusterId"`
-	Name                     string       `json:"name"`
-	ProviderInfo             ProviderInfo `json:"providerInfo,omitempty"`
-	ClientManagedClusterName string       `json:"clientManagedClusterName,omitempty"`
-	ClientID                 string       `json:"clientId"`
-}
-
 func (r *ManagedClusterViewReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Logger.Info("Setting up ManagedClusterViewReconciler with manager")
 	managedClusterViewPredicate := predicate.Funcs{
@@ -145,7 +126,7 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, operatorNames
 		if providerPublicEndpoint == "" {
 			logger.Info("StorageProviderPublicEndpoint is not available.")
 		}
-		providerInfo := ProviderInfo{
+		providerInfo := utils.ProviderInfo{
 			Version:                       odfInfo.Version,
 			DeploymentType:                odfInfo.DeploymentType,
 			CephClusterFSID:               odfInfo.StorageCluster.CephClusterFSID,
@@ -156,24 +137,40 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, operatorNames
 			StorageProviderPublicEndpoint: providerPublicEndpoint,
 		}
 
-		for _, client := range odfInfo.Clients {
-			managedCluster, err := utils.GetManagedClusterById(ctx, c, client.ClusterID)
-			if err != nil {
-				return err
-			}
-			clientInfo := ClientInfo{
-				ClusterID:                client.ClusterID,
-				Name:                     client.Name,
+		if len(odfInfo.Clients) == 0 {
+			clientInfo := utils.ClientInfo{
+				ClusterID:                "",
+				Name:                     "",
 				ProviderInfo:             providerInfo,
-				ClientManagedClusterName: managedCluster.Name,
-				ClientID:                 client.ClientID,
+				ClientManagedClusterName: "",
+				ClientID:                 "",
 			}
 			clientInfoJSON, err := json.Marshal(clientInfo)
 			if err != nil {
 				return fmt.Errorf("failed to marshal client info for key %s: %w", key, err)
 			}
 
-			clientInfoMap[utils.GetKey(managedCluster.Name, client.Name)] = string(clientInfoJSON)
+			clientInfoMap[utils.GetKey(managedClusterView.Namespace, odfInfo.StorageCluster.NamespacedName.Name)] = string(clientInfoJSON)
+		} else {
+			for _, client := range odfInfo.Clients {
+				managedCluster, err := utils.GetManagedClusterById(ctx, c, client.ClusterID)
+				if err != nil {
+					return err
+				}
+				clientInfo := utils.ClientInfo{
+					ClusterID:                client.ClusterID,
+					Name:                     client.Name,
+					ProviderInfo:             providerInfo,
+					ClientManagedClusterName: managedCluster.Name,
+					ClientID:                 client.ClientID,
+				}
+				clientInfoJSON, err := json.Marshal(clientInfo)
+				if err != nil {
+					return fmt.Errorf("failed to marshal client info for key %s: %w", key, err)
+				}
+
+				clientInfoMap[utils.GetKey(managedCluster.Name, client.Name)] = string(clientInfoJSON)
+			}
 		}
 	}
 

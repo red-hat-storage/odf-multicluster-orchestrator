@@ -109,7 +109,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	clientInfoMap, err := fetchClientInfoConfigMap(ctx, r.Client, r.CurrentNamespace)
+	clientInfoMap, err := utils.FetchClientInfoConfigMap(ctx, r.Client, r.CurrentNamespace)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.Info("ConfigMap 'odf-client-info' not found. Requeueing.")
@@ -311,7 +311,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 func createManifestWorkForClusterPairingConfigMap(ctx context.Context, client client.Client, logger *slog.Logger, currentNamespace string, mirrorPeer multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
 	logger.Info("Starting to create ManifestWork for cluster pairing ConfigMap")
 
-	clientInfoMap, err := fetchClientInfoConfigMap(ctx, client, currentNamespace)
+	clientInfoMap, err := utils.FetchClientInfoConfigMap(ctx, client, currentNamespace)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.Info("Client info ConfigMap not found; requeuing for later retry")
@@ -323,7 +323,7 @@ func createManifestWorkForClusterPairingConfigMap(ctx context.Context, client cl
 	logger.Info("Fetched client info ConfigMap successfully")
 	items := mirrorPeer.Spec.Items
 
-	ci1, err := getClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(items[0].ClusterName, items[0].StorageClusterRef.Name))
+	ci1, err := utils.GetClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(items[0].ClusterName, items[0].StorageClusterRef.Name))
 	if err != nil {
 		logger.Error("Failed to get client info from ConfigMap for the first cluster")
 		return ctrl.Result{}, err
@@ -331,7 +331,7 @@ func createManifestWorkForClusterPairingConfigMap(ctx context.Context, client cl
 
 	logger.Info("Fetched client info for the first cluster", "ClientInfo", ci1)
 
-	ci2, err := getClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(items[1].ClusterName, items[1].StorageClusterRef.Name))
+	ci2, err := utils.GetClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(items[1].ClusterName, items[1].StorageClusterRef.Name))
 	if err != nil {
 		logger.Error("Failed to get client info from ConfigMap for the second cluster")
 		return ctrl.Result{}, err
@@ -353,7 +353,7 @@ func createManifestWorkForClusterPairingConfigMap(ctx context.Context, client cl
 }
 
 // updateProviderConfigMap updates the ConfigMap on the provider with the new client pairing
-func updateProviderConfigMap(logger *slog.Logger, ctx context.Context, client client.Client, mirrorPeer multiclusterv1alpha1.MirrorPeer, providerClientInfo ClientInfo, pairedClientInfo ClientInfo) error {
+func updateProviderConfigMap(logger *slog.Logger, ctx context.Context, client client.Client, mirrorPeer multiclusterv1alpha1.MirrorPeer, providerClientInfo utils.ClientInfo, pairedClientInfo utils.ClientInfo) error {
 	providerName := providerClientInfo.ProviderInfo.ProviderManagedClusterName
 	manifestWorkName := "storage-client-mapping"
 	manifestWorkNamespace := providerName
@@ -421,7 +421,7 @@ func updateProviderConfigMap(logger *slog.Logger, ctx context.Context, client cl
 
 func createStorageClusterPeer(ctx context.Context, client client.Client, logger *slog.Logger, currentNamespace string, mirrorPeer multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
 	logger = logger.With("MirrorPeer", mirrorPeer.Name)
-	clientInfoMap, err := fetchClientInfoConfigMap(ctx, client, currentNamespace)
+	clientInfoMap, err := utils.FetchClientInfoConfigMap(ctx, client, currentNamespace)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.Info("Client info config map not found. Retrying request another time...")
@@ -430,11 +430,11 @@ func createStorageClusterPeer(ctx context.Context, client client.Client, logger 
 		return ctrl.Result{}, err
 	}
 	items := mirrorPeer.Spec.Items
-	clientInfo := make([]ClientInfo, 0)
+	clientInfo := make([]utils.ClientInfo, 0)
 
 	for _, item := range items {
 		logger.Info("Fetching info for client", "ClientKey", utils.GetKey(item.ClusterName, item.StorageClusterRef.Name))
-		ci, err := getClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(item.ClusterName, item.StorageClusterRef.Name))
+		ci, err := utils.GetClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(item.ClusterName, item.StorageClusterRef.Name))
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -444,7 +444,7 @@ func createStorageClusterPeer(ctx context.Context, client client.Client, logger 
 
 	for i := range items {
 		var storageClusterPeerName string
-		var oppositeClient ClientInfo
+		var oppositeClient utils.ClientInfo
 		currentClient := clientInfo[i]
 		// Provider A StorageClusterPeer contains info of Provider B endpoint and ticket, hence this
 		if i == 0 {
@@ -514,7 +514,7 @@ func createStorageClusterPeer(ctx context.Context, client client.Client, logger 
 	return ctrl.Result{}, nil
 }
 
-func fetchOnboardingTicket(ctx context.Context, client client.Client, clientInfo ClientInfo, mirrorPeer multiclusterv1alpha1.MirrorPeer) (string, error) {
+func fetchOnboardingTicket(ctx context.Context, client client.Client, clientInfo utils.ClientInfo, mirrorPeer multiclusterv1alpha1.MirrorPeer) (string, error) {
 	secretName := string(mirrorPeer.GetUID())
 	secretNamespace := clientInfo.ProviderInfo.ProviderManagedClusterName
 	tokenSecret, err := utils.FetchSecretWithName(ctx, client, types.NamespacedName{Name: secretName, Namespace: secretNamespace})
@@ -537,14 +537,6 @@ func getStorageClusterPeerName(providerClusterName string) string {
 	return fmt.Sprintf("%s-peer", providerClusterName)
 }
 
-func fetchClientInfoConfigMap(ctx context.Context, c client.Client, currentNamespace string) (*corev1.ConfigMap, error) {
-	clientInfoMap, err := utils.FetchConfigMap(ctx, c, utils.ClientInfoConfigMapName, currentNamespace)
-	if err != nil {
-		return nil, err
-	}
-	return clientInfoMap, nil
-}
-
 type ManagedClusterAddonConfig struct {
 	// Namespace on the managedCluster where it will be deployed
 	InstallNamespace string
@@ -554,21 +546,6 @@ type ManagedClusterAddonConfig struct {
 
 	// Namespace on the hub where MCA will be created, it represents the Managed cluster where the addons will be deployed
 	Namespace string
-}
-
-// Helper function to extract and unmarshal ClientInfo from ConfigMap
-func getClientInfoFromConfigMap(clientInfoMap map[string]string, key string) (ClientInfo, error) {
-	clientInfoJSON, ok := clientInfoMap[key]
-	if !ok {
-		return ClientInfo{}, fmt.Errorf("client info for %s not found in ConfigMap", key)
-	}
-
-	var clientInfo ClientInfo
-	if err := json.Unmarshal([]byte(clientInfoJSON), &clientInfo); err != nil {
-		return ClientInfo{}, fmt.Errorf("failed to unmarshal client info for %s: %v", key, err)
-	}
-
-	return clientInfo, nil
 }
 
 func getConfig(ctx context.Context, c client.Client, currentNamespace string, mp multiclusterv1alpha1.MirrorPeer) ([]ManagedClusterAddonConfig, error) {
@@ -581,13 +558,13 @@ func getConfig(ctx context.Context, c client.Client, currentNamespace string, mp
 	}
 
 	if hasStorageClientRef {
-		clientInfoMap, err := fetchClientInfoConfigMap(ctx, c, currentNamespace)
+		clientInfoMap, err := utils.FetchClientInfoConfigMap(ctx, c, currentNamespace)
 		if err != nil {
 			return []ManagedClusterAddonConfig{}, err
 		}
 		for _, item := range mp.Spec.Items {
 			clientName := item.StorageClusterRef.Name
-			clientInfo, err := getClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(item.ClusterName, clientName))
+			clientInfo, err := utils.GetClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(item.ClusterName, clientName))
 			if err != nil {
 				return []ManagedClusterAddonConfig{}, err
 			}
@@ -772,14 +749,14 @@ func checkK8sUpdateErrors(err error, obj client.Object, logger *slog.Logger) (ct
 }
 
 func GetNamespacedNameForClientS3Secret(ctx context.Context, client client.Client, currentNamespace string, pr multiclusterv1alpha1.PeerRef, mp *multiclusterv1alpha1.MirrorPeer) (string, string, error) {
-	clientInfoMap, err := fetchClientInfoConfigMap(ctx, client, currentNamespace)
+	clientInfoMap, err := utils.FetchClientInfoConfigMap(ctx, client, currentNamespace)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return "", "", fmt.Errorf("client info ConfigMap not found; requeuing for later retry %w", err)
 		}
 		return "", "", err
 	}
-	ci, err := getClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(pr.ClusterName, pr.StorageClusterRef.Name))
+	ci, err := utils.GetClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(pr.ClusterName, pr.StorageClusterRef.Name))
 	if err != nil {
 		return "", "", err
 	}
@@ -1008,7 +985,7 @@ func isProviderModePeeringDone(ctx context.Context, client client.Client, logger
 
 func checkOnboardingTicketStatus(ctx context.Context, client client.Client, logger *slog.Logger, currentNamespace string, mirrorPeer *multiclusterv1alpha1.MirrorPeer) (bool, error) {
 	logger = logger.With("MirrorPeer", mirrorPeer.Name)
-	clientInfoMap, err := fetchClientInfoConfigMap(ctx, client, currentNamespace)
+	clientInfoMap, err := utils.FetchClientInfoConfigMap(ctx, client, currentNamespace)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return false, fmt.Errorf("client info config map not found")
@@ -1017,7 +994,7 @@ func checkOnboardingTicketStatus(ctx context.Context, client client.Client, logg
 	}
 	for _, item := range mirrorPeer.Spec.Items {
 		logger.Info("Fetching info for client", "ClientKey", utils.GetKey(item.ClusterName, item.StorageClusterRef.Name))
-		ci, err := getClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(item.ClusterName, item.StorageClusterRef.Name))
+		ci, err := utils.GetClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(item.ClusterName, item.StorageClusterRef.Name))
 		if err != nil {
 			return false, fmt.Errorf("failed to fetch client info from the config map %w", err)
 		}

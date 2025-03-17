@@ -41,6 +41,10 @@ func GetODFInfoConfigMap(ctx context.Context, c client.Client, namespace string)
 	return FetchConfigMap(ctx, c, ODFInfoConfigMapName, namespace)
 }
 
+func FetchClientInfoConfigMap(ctx context.Context, c client.Client, currentNamespace string) (*corev1.ConfigMap, error) {
+	return FetchConfigMap(ctx, c, ClientInfoConfigMapName, currentNamespace)
+}
+
 func SplitKeyForNamespacedName(key string) types.NamespacedName {
 	// key = openshift-storage_ocs-storagecluster.config.yaml
 	splitKey := strings.Split(key, ".")               // [openshift-storage_ocs-storagecluster,config,yaml]
