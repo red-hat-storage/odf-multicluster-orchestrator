@@ -124,6 +124,8 @@ func getFakeMirrorPeerReconciler(mirrorpeer multiclusterv1alpha1.MirrorPeer) Mir
 		Data: map[string]string{
 			"cluster1_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
 			"cluster2_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
+			"cluster3_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
+			"cluster4_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
 		},
 	}
 

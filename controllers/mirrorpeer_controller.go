@@ -597,6 +597,7 @@ func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, m
 	if err != nil {
 		return fmt.Errorf("failed to get managedclusteraddon config %w", err)
 	}
+
 	for _, config := range addonConfigs {
 		logger.Info("Handling ManagedClusterAddon for cluster", "ClusterName", config.Namespace)
 

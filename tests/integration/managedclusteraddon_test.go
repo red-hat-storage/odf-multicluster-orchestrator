@@ -21,6 +21,7 @@ package integration_test
 
 import (
 	"context"
+	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -63,6 +64,7 @@ var (
 var _ = Describe("ManagedClusterAddOn creation, updation and deletion", func() {
 	When("creating or updating ManagedClusterAddOn", func() {
 		BeforeEach(func() {
+			os.Setenv("POD_NAMESPACE", "openshift-operators")
 			newMirrorPeer := mirrorPeer1.DeepCopy()
 			newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
 				Type: "async",
@@ -125,6 +127,7 @@ var _ = Describe("ManagedClusterAddOn creation, updation and deletion", func() {
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Delete(context.TODO(), &ns2, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
+			os.Unsetenv("POD_NAMESPACE")
 		})
 		It("should not return any error", func() {
 			By("polling for the created ManagedClusterAddOn", func() {

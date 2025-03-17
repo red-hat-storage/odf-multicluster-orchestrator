@@ -140,7 +140,10 @@ func getFakeDRPolicyReconciler(drpolicy *ramenv1alpha1.DRPolicy, mp *multicluste
 				},
 			},
 		},
-		Data: map[string]string{},
+		Data: map[string]string{
+			"cluster-1_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
+			"cluster-2_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
+		},
 	}
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(drpolicy, mp, ns1, ns2, &hubSecret1, &hubSecret2, odfClientInfoConfigMap).Build()
