@@ -14,6 +14,7 @@ import (
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/console"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
 	"github.com/spf13/cobra"
 	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	"golang.org/x/sync/errgroup"
@@ -140,6 +141,8 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 	ctrl.SetLogger(zapr.NewLogger(zapLogger))
 	logger := utils.GetLogger(zapLogger)
 
+	logger.Info("Starting manager on hub", "version", version.Version)
+
 	currentNamespace := utils.GetEnv("POD_NAMESPACE", o.testEnvFile)
 
 	config, err := utils.GetClientConfig(o.KubeconfigFile)
@@ -184,7 +187,7 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		Scheme:           mgr.GetScheme(),
 		Logger:           logger.With("controller", "MirrorPeerReconciler"),
 		testEnvFile:      o.testEnvFile,
-		currentNamespace: currentNamespace,
+		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create MirrorPeer controller", "error", err)
 		os.Exit(1)
@@ -196,7 +199,7 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		Scheme:           mgr.GetScheme(),
 		Logger:           logger.With("controller", "MirrorPeerSecretReconciler"),
 		testEnvFile:      o.testEnvFile,
-		currentNamespace: currentNamespace,
+		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create MirrorPeer controller", "error", err)
 		os.Exit(1)
@@ -206,7 +209,7 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		Client:           mgr.GetClient(),
 		Logger:           logger.With("controller", "ManagedClusterReconciler"),
 		testEnvFile:      o.testEnvFile,
-		currentNamespace: currentNamespace,
+		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create ManagedCluster controller", "error", err)
 		os.Exit(1)
@@ -216,7 +219,7 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		Client:           mgr.GetClient(),
 		Logger:           logger.With("controller", "ManagedClusterViewReconciler"),
 		testEnvFile:      o.testEnvFile,
-		currentNamespace: currentNamespace,
+		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create ManagedClusterView controller", "error", err)
 		os.Exit(1)
@@ -285,7 +288,7 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		Scheme:           mgr.GetScheme(),
 		Logger:           logger.With("controller", "DRPolicyReconciler"),
 		testEnvFile:      o.testEnvFile,
-		currentNamespace: currentNamespace,
+		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create DRPolicy controller", "error", err)
 		os.Exit(1)

@@ -28,7 +28,7 @@ type ManagedClusterViewReconciler struct {
 	Client           client.Client
 	Logger           *slog.Logger
 	testEnvFile      string
-	currentNamespace string
+	CurrentNamespace string
 }
 
 const (
@@ -99,7 +99,7 @@ func (r *ManagedClusterViewReconciler) Reconcile(ctx context.Context, req reconc
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if err := createOrUpdateConfigMap(ctx, r.Client, r.currentNamespace, managedClusterView, r.Logger); err != nil {
+	if err := createOrUpdateConfigMap(ctx, r.Client, r.CurrentNamespace, managedClusterView, r.Logger); err != nil {
 		logger.Error("Failed to create or update ConfigMap for ManagedClusterView", "error", err)
 		return ctrl.Result{}, err
 	}

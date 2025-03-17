@@ -24,6 +24,7 @@ import (
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
 	"k8s.io/apimachinery/pkg/api/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -62,6 +63,21 @@ func isManagedCluster(ctx context.Context, client client.Client, clusterName str
 			return fmt.Errorf("validation: ManagedCluster %q not found : %q is not a managed cluster", clusterName, clusterName)
 		}
 		return fmt.Errorf("validation: unable to get ManagedCluster %q: error: %v", clusterName, err)
+	}
+	return nil
+}
+
+func isVersionCompatible(peerRef multiclusterv1alpha1.PeerRef, clientInfoMap map[string]string) error {
+	clientInfo, err := getClientInfoFromConfigMap(clientInfoMap, utils.GetKey(peerRef.ClusterName, peerRef.StorageClusterRef.Name))
+	if err != nil {
+		return fmt.Errorf("validation: unable to get client info: error: %v", err)
+	}
+	eq, err := utils.CompareSemverMajorMinorVersions(clientInfo.ProviderInfo.Version, version.Version, utils.Eq)
+	if err != nil {
+		return fmt.Errorf("validation: unable to parse versions: error: %v", err)
+	}
+	if !eq {
+		return fmt.Errorf("validation: StorageCluster version %q on ManagedCluster %q is incompatible with Multicluster Orchestrator version %q", clientInfo.ProviderInfo.Version, peerRef.ClusterName, version.Version)
 	}
 	return nil
 }

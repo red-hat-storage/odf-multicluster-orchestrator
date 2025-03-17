@@ -22,7 +22,7 @@ type ManagedClusterReconciler struct {
 	Client           client.Client
 	Logger           *slog.Logger
 	testEnvFile      string
-	currentNamespace string
+	CurrentNamespace string
 }
 
 func (r *ManagedClusterReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {

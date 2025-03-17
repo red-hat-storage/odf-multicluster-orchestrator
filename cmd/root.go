@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 )
@@ -19,6 +20,7 @@ var rootCmd = &cobra.Command{
 		}
 		os.Exit(1)
 	},
+	Version: version.Version,
 }
 
 func Execute() {
