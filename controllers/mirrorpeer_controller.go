@@ -747,12 +747,9 @@ func (r *MirrorPeerReconciler) deleteSecrets(ctx context.Context, mirrorPeer mul
 func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Logger.Info("Setting up controller for MirrorPeer")
 
-	mpPredicate := utils.ComposePredicates(predicate.GenerationChangedPredicate{})
-
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(mpPredicate)).
+		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
-
 }
 
 // CheckK8sUpdateErrors checks what type of error occurs when trying to update a k8s object

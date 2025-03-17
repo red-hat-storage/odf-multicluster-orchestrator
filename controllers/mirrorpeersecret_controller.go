@@ -104,7 +104,7 @@ func (r *MirrorPeerSecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	logger := r.Logger
 	logger.Info("Setting up controller with manager")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.Secret{}, builder.WithPredicates(utils.SourceOrDestinationPredicate)).
+		For(&corev1.Secret{}, builder.WithPredicates(utils.InternalSecretPredicate)).
 		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.secretConfigMapFunc)).
 		Complete(r)
 }

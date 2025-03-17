@@ -399,11 +399,11 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	r.Logger.Info("Setting up controller with manager")
-	mpPredicate := utils.ComposePredicates(predicate.GenerationChangedPredicate{}, mirrorPeerSpokeClusterPredicate)
+	mpPredicate := predicate.And(predicate.GenerationChangedPredicate{}, mirrorPeerSpokeClusterPredicate)
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("agent_mirrorpeer_controller").
 		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(mpPredicate)).
-		WatchesMetadata(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(tokenToMirrorPeerMapFunc), builder.WithPredicates(utils.SourceOrDestinationPredicate)).
+		WatchesMetadata(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(tokenToMirrorPeerMapFunc), builder.WithPredicates(utils.InternalSecretPredicate)).
 		Complete(r)
 }
 
