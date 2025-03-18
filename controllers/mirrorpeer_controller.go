@@ -45,6 +45,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -725,8 +726,37 @@ func (r *MirrorPeerReconciler) deleteSecrets(ctx context.Context, mirrorPeer mul
 func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Logger.Info("Setting up controller for MirrorPeer")
 
+	cmToMirrorPeerMapFunc := func(ctx context.Context, object client.Object) []ctrl.Request {
+		r.Logger.Debug("Mapping ConfigMap to MirrorPeer", "ConfigMap", client.ObjectKeyFromObject(object))
+		var reqs []ctrl.Request
+		_, ok := object.(*corev1.ConfigMap)
+		if !ok {
+			r.Logger.Debug("Unable to cast object into a ConfigMap. Not requeing any requests.")
+			return reqs
+		}
+		var mpList multiclusterv1alpha1.MirrorPeerList
+		err := r.Client.List(ctx, &mpList)
+		if err != nil {
+			r.Logger.Debug("Unable to fetch list of all MirrorPeers. Not requeing any requests.")
+			return reqs
+		}
+		for _, mp := range mpList.Items {
+			reqs = append(reqs, reconcile.Request{NamespacedName: types.NamespacedName{Name: mp.Name}})
+		}
+		r.Logger.Info("MirrorPeer reconcile requests generated based on ConfigMap change.", "RequestCount", len(reqs), "Requests", reqs)
+		return reqs
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(cmToMirrorPeerMapFunc),
+			builder.WithPredicates(predicate.NewPredicateFuncs(func(object client.Object) bool {
+				cm, ok := object.(*corev1.ConfigMap)
+				if !ok || cm.Name != utils.ClientInfoConfigMapName || cm.Namespace != r.CurrentNamespace {
+					return false
+				}
+				return true
+			}))).
 		Complete(r)
 }
 
