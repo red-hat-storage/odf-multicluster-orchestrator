@@ -20,6 +20,7 @@ package integration_test
 
 import (
 	"context"
+	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -90,6 +91,7 @@ var _ = Describe("Ramen Resource Tests", func() {
 	When("MirrorPeer is reconciled", func() {
 
 		BeforeEach(func() {
+			os.Setenv("POD_NAMESPACE", "openshift-operators")
 			err := k8sClient.Create(context.TODO(), &managedcluster1, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Create(context.TODO(), &managedcluster2, &client.CreateOptions{})
@@ -127,6 +129,7 @@ var _ = Describe("Ramen Resource Tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 			// giving time for the resources to be destroyed
 			time.Sleep(1 * time.Second)
+			os.Unsetenv("POD_NAMESPACE")
 		})
 
 		It("should create DRClusters", func() {

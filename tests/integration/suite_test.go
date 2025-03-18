@@ -146,12 +146,12 @@ var _ = BeforeSuite(func() {
 			},
 		},
 		Data: map[string]string{
-			"mc-1_test-storagecluster1":                    "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
-			"mc-2_test-storagecluster2":                    "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
-			"test-provider-cluster1_test-storagecluster-1": "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
-			"test-provider-cluster2_test-storagecluster-2": "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
-			"cluster1_test-storagecluster":                 "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
-			"cluster2_test-storagecluster":                 "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
+			"mc-1_test-storagecluster1":                    "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
+			"mc-2_test-storagecluster2":                    "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
+			"test-provider-cluster1_test-storagecluster-1": "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
+			"test-provider-cluster2_test-storagecluster-2": "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
+			"cluster1_test-storagecluster":                 "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
+			"cluster2_test-storagecluster":                 "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
 		},
 	}
 	err = k8sClient.Create(context.TODO(), odfClientInfoConfigMap, &client.CreateOptions{})

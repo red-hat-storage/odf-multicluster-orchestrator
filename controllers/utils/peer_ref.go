@@ -7,7 +7,6 @@ import (
 	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v4/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"gopkg.in/yaml.v2"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -116,15 +115,15 @@ func getPeerRefType(ctx context.Context, c client.Client, peerRef multiclusterv1
 		return PeerRefTypeStorageCluster, nil
 	} else {
 		operatorNamespace := GetEnv("POD_NAMESPACE")
-		cm, err := FetchConfigMap(ctx, c, ClientInfoConfigMapName, operatorNamespace)
-		if k8serrors.IsNotFound(err) {
-			return PeerRefTypeStorageCluster, nil
-		}
+		cm, err := FetchClientInfoConfigMap(ctx, c, operatorNamespace)
 		if err != nil {
 			return PeerRefTypeUnknown, err
 		}
-
-		if _, ok := cm.Data[fmt.Sprintf("%s_%s", peerRef.ClusterName, peerRef.StorageClusterRef.Name)]; ok {
+		cInfo, err := GetClientInfoFromConfigMap(cm.Data, GetKey(peerRef.ClusterName, peerRef.StorageClusterRef.Name))
+		if err != nil {
+			return PeerRefTypeUnknown, err
+		}
+		if cInfo.ProviderInfo.DeploymentType != "external" {
 			return PeerRefTypeStorageClient, nil
 		}
 		return PeerRefTypeStorageCluster, nil
