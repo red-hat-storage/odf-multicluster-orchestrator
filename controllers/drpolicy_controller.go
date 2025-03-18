@@ -54,8 +54,6 @@ type DRPolicyReconciler struct {
 func (r *DRPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Logger.Info("Setting up DRPolicyReconciler with manager")
 
-	dpPredicate := utils.ComposePredicates(predicate.GenerationChangedPredicate{})
-
 	tokenToDRPolicyMapFunc := func(ctx context.Context, obj client.Object) []ctrl.Request {
 		r.Logger.Debug("Mapping secret to DRPolicy", "SecretName", obj.GetName(), "SecretNamespace", obj.GetNamespace())
 		reqs := []ctrl.Request{}
@@ -97,8 +95,8 @@ func (r *DRPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&ramenv1alpha1.DRPolicy{}, builder.WithPredicates(dpPredicate)).
-		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(tokenToDRPolicyMapFunc), builder.WithPredicates(utils.SourcePredicate)).
+		For(&ramenv1alpha1.DRPolicy{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(tokenToDRPolicyMapFunc), builder.WithPredicates(utils.SourceSecretPredicate)).
 		Complete(r)
 }
 
