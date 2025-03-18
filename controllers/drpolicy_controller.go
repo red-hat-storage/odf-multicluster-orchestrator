@@ -2,19 +2,25 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
 
+	replicationv1alpha1 "github.com/csi-addons/kubernetes-csi-addons/apis/replication.storage/v1alpha1"
+	templatev1 "github.com/openshift/api/template/v1"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
@@ -22,18 +28,12 @@ const (
 	DefaultMirroringMode                         = "snapshot"
 	MirroringModeKey                             = "mirroringMode"
 	SchedulingIntervalKey                        = "schedulingInterval"
-	ReplicationSecretNameKey                     = "replication.storage.openshift.io/replication-secret-name"
-	ReplicationSecretNamespaceKey                = "replication.storage.openshift.io/replication-secret-namespace"
-	ReplicationIDKey                             = "replicationid"
 	RBDVolumeReplicationClassNameTemplate        = "rbd-volumereplicationclass-%v"
-	RBDReplicationSecretName                     = "rook-csi-rbd-provisioner"
-	RamenLabelTemplate                           = "ramendr.openshift.io/%s"
-	RBDProvisionerTemplate                       = "%s.rbd.csi.ceph.com"
+	RBDProvisionerName                           = "openshift-storage.rbd.csi.ceph.com"
 	RBDFlattenVolumeReplicationClassNameTemplate = "rbd-flatten-volumereplicationclass-%v"
 	RBDFlattenVolumeReplicationClassLabelKey     = "replication.storage.openshift.io/flatten-mode"
 	RBDFlattenVolumeReplicationClassLabelValue   = "force"
 	RBDVolumeReplicationClassDefaultAnnotation   = "replication.storage.openshift.io/is-default-class"
-	StorageIDKey                                 = "storageid"
 )
 
 type DRPolicyReconciler struct {
@@ -52,6 +52,7 @@ func (r *DRPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ramenv1alpha1.DRPolicy{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
+	//TODO: Add watch for odf-client-info
 }
 
 func (r *DRPolicyReconciler) getMirrorPeerForClusterSet(ctx context.Context, clusterSet []string) (*multiclusterv1alpha1.MirrorPeer, error) {
@@ -108,18 +109,142 @@ func (r *DRPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	// Check if the MirrorPeer contains StorageClient reference
-	hasStorageClientRef, err := utils.IsStorageClientType(ctx, r.HubClient, *mirrorPeer, false)
-	if err != nil {
-		logger.Error("Failed to determine if MirrorPeer contains StorageClient reference", "error", err)
-		return ctrl.Result{}, err
+	if mirrorPeer.Spec.Type != multiclusterv1alpha1.Async {
+		return ctrl.Result{}, nil
 	}
 
-	if hasStorageClientRef {
-		logger.Info("MirrorPeer contains StorageClient reference. Skipping creation of VolumeReplicationClasses", "MirrorPeer", mirrorPeer.Name)
-		return ctrl.Result{}, nil
+	err = r.createOrUpdateManifestWorkForVRC(ctx, mirrorPeer, &drpolicy)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to create VolumeReplicationClass via ManifestWork: %v", err)
 	}
 
 	logger.Info("Successfully reconciled DRPolicy")
 	return ctrl.Result{}, nil
+}
+
+func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Context, mp *multiclusterv1alpha1.MirrorPeer, dp *ramenv1alpha1.DRPolicy) error {
+	logger := r.Logger.With("DRPolicy", dp.Name, "MirrorPeer", mp.Name)
+
+	var vrcList []replicationv1alpha1.VolumeReplicationClass
+
+	vrc := replicationv1alpha1.VolumeReplicationClass{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "VolumeReplicationClass",
+			APIVersion: "replication.storage.openshift.io/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: fmt.Sprintf(RBDVolumeReplicationClassNameTemplate, utils.FnvHash(dp.Spec.SchedulingInterval)),
+			Annotations: map[string]string{
+				RBDVolumeReplicationClassDefaultAnnotation: "true",
+			},
+		},
+		Spec: replicationv1alpha1.VolumeReplicationClassSpec{
+			Parameters: map[string]string{
+				MirroringModeKey:      DefaultMirroringMode,
+				SchedulingIntervalKey: dp.Spec.SchedulingInterval,
+			},
+			Provisioner: RBDProvisionerName,
+		},
+	}
+	vrcList = append(vrcList, vrc)
+
+	if dp.Spec.ReplicationClassSelector.MatchLabels[RBDFlattenVolumeReplicationClassLabelKey] == RBDFlattenVolumeReplicationClassLabelValue {
+		vrcFlatten := *vrc.DeepCopy()
+		vrcFlatten.Name = fmt.Sprintf(RBDFlattenVolumeReplicationClassNameTemplate, utils.FnvHash(dp.Spec.SchedulingInterval))
+		vrcFlatten.Labels = map[string]string{
+			RBDFlattenVolumeReplicationClassLabelKey: RBDFlattenVolumeReplicationClassLabelValue,
+		}
+		vrcFlatten.Annotations = map[string]string{}
+		vrcFlatten.Spec.Parameters["flattenMode"] = "force"
+		vrcList = append(vrcList, vrcFlatten)
+	}
+
+	cm, err := utils.FetchClientInfoConfigMap(ctx, r.HubClient, r.CurrentNamespace)
+	if err != nil {
+		return err
+	}
+
+	manifestWorkName := fmt.Sprintf("vrc-%v", utils.FnvHash(dp.Name))
+	for _, pr := range mp.Spec.Items {
+		cInfo, err := utils.GetClientInfoFromConfigMap(cm.Data, utils.GetKey(pr.ClusterName, pr.StorageClusterRef.Name))
+		if err != nil {
+			return err
+		}
+
+		var manifestList []workv1.Manifest
+		for _, vrc := range vrcList {
+			vrcTemplateJson, err := getTemplateForVRC(vrc, cInfo.ProviderInfo.NamespacedName.Namespace)
+			if err != nil {
+				return fmt.Errorf("failed to get template for VRC %q, error %w", vrc.Name, err)
+			}
+			manifestList = append(manifestList, workv1.Manifest{
+				RawExtension: runtime.RawExtension{
+					Raw: vrcTemplateJson,
+				},
+			})
+		}
+
+		mw := workv1.ManifestWork{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      manifestWorkName,
+				Namespace: cInfo.ProviderInfo.ProviderManagedClusterName,
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						Kind:       dp.Kind,
+						Name:       dp.Name,
+						UID:        dp.UID,
+						APIVersion: dp.APIVersion,
+					},
+				},
+			},
+		}
+
+		_, err = controllerutil.CreateOrUpdate(ctx, r.HubClient, &mw, func() error {
+			mw.Spec = workv1.ManifestWorkSpec{
+				Workload: workv1.ManifestsTemplate{
+					Manifests: manifestList,
+				},
+			}
+			return nil
+		})
+
+		if err != nil {
+			logger.Error("Failed to create/update ManifestWork", "ManifestWorkName", manifestWorkName, "error", err)
+			return err
+		}
+
+		logger.Info("ManifestWork created/updated successfully", "ManifestWorkName", manifestWorkName, "VolumeReplicationClassName", vrc.Name)
+	}
+
+	return nil
+}
+
+func getTemplateForVRC(vrc replicationv1alpha1.VolumeReplicationClass, templateNamespace string) ([]byte, error) {
+	vrcJson, err := json.Marshal(vrc)
+	if err != nil {
+		return []byte{}, fmt.Errorf("failed to marshal %v to JSON, error %w", vrc, err)
+	}
+
+	vrcTemplate := templatev1.Template{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Template",
+			APIVersion: "template.openshift.io/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      vrc.Name,
+			Namespace: templateNamespace,
+		},
+		Objects: []runtime.RawExtension{
+			{
+				Raw: vrcJson,
+			},
+		},
+	}
+
+	vrcTemplateJson, err := json.Marshal(vrcTemplate)
+	if err != nil {
+		return []byte{}, fmt.Errorf("failed to marshal %v to JSON, error %w", vrcTemplate, err)
+	}
+
+	return vrcTemplateJson, nil
 }
