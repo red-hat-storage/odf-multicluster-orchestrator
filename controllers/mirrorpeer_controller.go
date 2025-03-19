@@ -602,38 +602,22 @@ func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, m
 	for _, config := range addonConfigs {
 		logger.Info("Handling ManagedClusterAddon for cluster", "ClusterName", config.Namespace)
 
-		var managedClusterAddOn addonapiv1alpha1.ManagedClusterAddOn
-		namespacedName := types.NamespacedName{
-			Name:      config.Name,
-			Namespace: config.Namespace,
-		}
-
-		err := r.Client.Get(ctx, namespacedName, &managedClusterAddOn)
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				logger.Info("ManagedClusterAddon not found, will create a new one", "ClusterName", config.Namespace)
-
-				annotations := make(map[string]string)
-				annotations[utils.DRModeAnnotationKey] = string(mirrorPeer.Spec.Type)
-				annotations[AddonVersionAnnotationKey] = version.Version
-				managedClusterAddOn = addonapiv1alpha1.ManagedClusterAddOn{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:        setup.TokenExchangeName,
-						Namespace:   config.Namespace,
-						Annotations: annotations,
-					},
-				}
-			}
+		managedClusterAddOn := addonapiv1alpha1.ManagedClusterAddOn{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      setup.TokenExchangeName,
+				Namespace: config.Namespace,
+			},
 		}
 
 		logger.Info("Installing agents on the namespace", "InstallNamespace", config.InstallNamespace)
 		_, err = controllerutil.CreateOrUpdate(ctx, r.Client, &managedClusterAddOn, func() error {
+			annotations := make(map[string]string)
+			annotations[utils.DRModeAnnotationKey] = string(mirrorPeer.Spec.Type)
+			annotations[AddonVersionAnnotationKey] = version.Version
+
+			managedClusterAddOn.Annotations = annotations
 			managedClusterAddOn.Spec.InstallNamespace = config.InstallNamespace
-			if err := controllerutil.SetOwnerReference(&mirrorPeer, &managedClusterAddOn, r.Scheme); err != nil {
-				logger.Error("Failed to set owner reference on ManagedClusterAddon", "error", err, "ClusterName", config.Namespace)
-				return err
-			}
-			return nil
+			return controllerutil.SetControllerReference(&mirrorPeer, &managedClusterAddOn, r.Scheme)
 		})
 
 		if err != nil {
@@ -749,6 +733,13 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Owns(&addonapiv1alpha1.ManagedClusterAddOn{}, builder.WithPredicates(predicate.NewPredicateFuncs(func(object client.Object) bool {
+			mca, ok := object.(*addonapiv1alpha1.ManagedClusterAddOn)
+			if !ok || mca.Name != setup.TokenExchangeName {
+				return false
+			}
+			return true
+		}))).
 		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(cmToMirrorPeerMapFunc),
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(object client.Object) bool {
 				cm, ok := object.(*corev1.ConfigMap)
