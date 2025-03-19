@@ -6,17 +6,12 @@ import (
 	"log/slog"
 	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
-	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -54,49 +49,8 @@ type DRPolicyReconciler struct {
 func (r *DRPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Logger.Info("Setting up DRPolicyReconciler with manager")
 
-	tokenToDRPolicyMapFunc := func(ctx context.Context, obj client.Object) []ctrl.Request {
-		r.Logger.Debug("Mapping secret to DRPolicy", "SecretName", obj.GetName(), "SecretNamespace", obj.GetNamespace())
-		reqs := []ctrl.Request{}
-		var mirrorPeerList multiclusterv1alpha1.MirrorPeerList
-		err := r.HubClient.List(ctx, &mirrorPeerList)
-		if err != nil {
-			r.Logger.Error("Unable to reconcile DRPolicy based on token changes. Failed to list MirrorPeers.", "error", err)
-			return reqs
-		}
-		r.Logger.Debug("Fetched MirrorPeers", "count", len(mirrorPeerList.Items))
-		for _, mirrorpeer := range mirrorPeerList.Items {
-			for _, peerRef := range mirrorpeer.Spec.Items {
-				name := utils.GetSecretNameByPeerRef(peerRef)
-				r.Logger.Debug("GetSecretNameByPeerRef()", "MirrorPeer", mirrorpeer.GetName(), "peerRef", peerRef, "SecretName", name)
-				if name == obj.GetName() {
-					r.Logger.Debug("GetSecretNameByPeerRef() == obj.GetName()", "MirrorPeer", mirrorpeer.GetName(), "peerRef", peerRef, "SecretName", name, "ObjectName", obj.GetName())
-					var drpolicyList ramenv1alpha1.DRPolicyList
-					err := r.HubClient.List(ctx, &drpolicyList)
-					if err != nil {
-						r.Logger.Error("Unable to reconcile DRPolicy based on token changes. Failed to list DRPolicies", "error", err)
-						return reqs
-					}
-					r.Logger.Debug("Fetched DRPolicies", "count", len(drpolicyList.Items))
-					for _, drpolicy := range drpolicyList.Items {
-						for i := range drpolicy.Spec.DRClusters {
-							if drpolicy.Spec.DRClusters[i] == peerRef.ClusterName {
-								r.Logger.Debug("drpolicy.Spec.DRClusters == peerRef.ClusterName", "DRPolicy", drpolicy.GetName(), "DRCluster", drpolicy.Spec.DRClusters[i], "peerRef.ClusterName", peerRef.ClusterName)
-								reqs = append(reqs, reconcile.Request{NamespacedName: types.NamespacedName{Name: drpolicy.Name}})
-							}
-						}
-					}
-					break
-				}
-				r.Logger.Debug("GetSecretNameByPeerRef() != obj.GetName()", "MirrorPeer", mirrorpeer.GetName(), "peerRef", peerRef, "SecretName", name, "ObjectName", obj.GetName())
-			}
-		}
-		r.Logger.Info("DRPolicy reconcile requests generated based on token change.", "RequestCount", len(reqs), "Requests", reqs, "TokenName", obj.GetName())
-		return reqs
-	}
-
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ramenv1alpha1.DRPolicy{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(tokenToDRPolicyMapFunc), builder.WithPredicates(utils.SourceSecretPredicate)).
 		Complete(r)
 }
 

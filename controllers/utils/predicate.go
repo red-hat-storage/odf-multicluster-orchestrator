@@ -19,18 +19,3 @@ var InternalSecretPredicate = predicate.Funcs{
 		return false
 	},
 }
-
-var SourceSecretPredicate = predicate.Funcs{
-	CreateFunc: func(e event.CreateEvent) bool {
-		return IsSecretSource(e.Object)
-	},
-	DeleteFunc: func(e event.DeleteEvent) bool {
-		return IsSecretSource(e.Object)
-	},
-	UpdateFunc: func(e event.UpdateEvent) bool {
-		return (IsSecretSource(e.ObjectOld) && IsSecretSource(e.ObjectNew))
-	},
-	GenericFunc: func(_ event.GenericEvent) bool {
-		return false
-	},
-}
