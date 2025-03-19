@@ -12,16 +12,20 @@ import (
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const (
@@ -49,10 +53,38 @@ type DRPolicyReconciler struct {
 func (r *DRPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Logger.Info("Setting up DRPolicyReconciler with manager")
 
+	cmToDRPolicyMapFunc := func(ctx context.Context, object client.Object) []ctrl.Request {
+		r.Logger.Debug("Mapping ConfigMap to DRPolicy", "ConfigMap", client.ObjectKeyFromObject(object))
+		var reqs []ctrl.Request
+		_, ok := object.(*corev1.ConfigMap)
+		if !ok {
+			r.Logger.Debug("Unable to cast object into a ConfigMap. Not requeing any requests.")
+			return reqs
+		}
+		var drpolicyList ramenv1alpha1.DRPolicyList
+		err := r.HubClient.List(ctx, &drpolicyList)
+		if err != nil {
+			r.Logger.Debug("Unable to fetch list of all DRPolicies. Not requeing any requests.")
+			return reqs
+		}
+		for _, mp := range drpolicyList.Items {
+			reqs = append(reqs, reconcile.Request{NamespacedName: types.NamespacedName{Name: mp.Name}})
+		}
+		r.Logger.Info("DRPolicy reconcile requests generated based on ConfigMap change.", "RequestCount", len(reqs), "Requests", reqs)
+		return reqs
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ramenv1alpha1.DRPolicy{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(cmToDRPolicyMapFunc),
+			builder.WithPredicates(predicate.NewPredicateFuncs(func(object client.Object) bool {
+				cm, ok := object.(*corev1.ConfigMap)
+				if !ok || cm.Name != utils.ClientInfoConfigMapName || cm.Namespace != r.CurrentNamespace {
+					return false
+				}
+				return true
+			}))).
 		Complete(r)
-	//TODO: Add watch for odf-client-info
 }
 
 func (r *DRPolicyReconciler) getMirrorPeerForClusterSet(ctx context.Context, clusterSet []string) (*multiclusterv1alpha1.MirrorPeer, error) {
