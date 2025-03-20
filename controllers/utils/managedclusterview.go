@@ -5,9 +5,7 @@ import (
 	"fmt"
 
 	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -54,16 +52,4 @@ func CreateOrUpdateManagedClusterView(ctx context.Context, client ctrlClient.Cli
 	}
 
 	return mcv, operationResult, nil
-}
-
-func GetManagedClusterView(client ctrlClient.Client, name, namespace string) (*viewv1beta1.ManagedClusterView, error) {
-	mcv := &viewv1beta1.ManagedClusterView{}
-	err := client.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: namespace}, mcv)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil, fmt.Errorf("ManagedClusterView %s not found in namespace %s", name, namespace)
-		}
-		return nil, fmt.Errorf("failed to get ManagedClusterView %s in namespace %s. %w", name, namespace, err)
-	}
-	return mcv, nil
 }

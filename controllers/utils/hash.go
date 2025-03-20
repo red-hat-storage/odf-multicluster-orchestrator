@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
-	"sort"
 	"strings"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
@@ -43,17 +42,6 @@ func CreateUniqueSecretName(managedCluster, storageClusterNamespace, storageClus
 
 func CreateUniqueSecretNameForClient(providerKey, clientKey1, clientKey2 string) string {
 	return CreateUniqueName(providerKey, clientKey1, clientKey2)[0:39]
-}
-
-func CreateUniqueReplicationId(storageIds ...string) (string, error) {
-	if len(storageIds) < 2 {
-		return "", fmt.Errorf("replicationID can not be generated due to missing cluster StorageIds")
-	}
-
-	sort.Strings(storageIds)
-
-	id := CalculateMD5Hash(storageIds)
-	return id, nil
 }
 
 func GenerateUniqueIdForMirrorPeer(mirrorPeer multiclusterv1alpha1.MirrorPeer) string {

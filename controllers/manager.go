@@ -194,17 +194,6 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 	}
 	//+kubebuilder:scaffold:builder
 
-	if err = (&MirrorPeerSecretReconciler{
-		Client:           mgr.GetClient(),
-		Scheme:           mgr.GetScheme(),
-		Logger:           logger.With("controller", "MirrorPeerSecretReconciler"),
-		testEnvFile:      o.testEnvFile,
-		CurrentNamespace: currentNamespace,
-	}).SetupWithManager(mgr); err != nil {
-		logger.Error("Failed to create MirrorPeer controller", "error", err)
-		os.Exit(1)
-	}
-
 	if err = (&ManagedClusterReconciler{
 		Client:           mgr.GetClient(),
 		Logger:           logger.With("controller", "ManagedClusterReconciler"),
