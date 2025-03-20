@@ -5,21 +5,30 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - events
+  - pods
+  - secrets
+  verbs:
+  - '*'
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
   - addon.open-cluster-management.io
   resources:
   - clustermanagementaddons
   - managedclusteraddons
-  verbs:
-  - '*'
-- apiGroups:
-  - addon.open-cluster-management.io
-  resources:
   - managedclusteraddons/finalizers
-  verbs:
-  - '*'
-- apiGroups:
-  - addon.open-cluster-management.io
-  resources:
   - managedclusteraddons/status
   verbs:
   - '*'
@@ -69,33 +78,6 @@ rules:
   - console.openshift.io
   resources:
   - consoleplugins
-  verbs:
-  - create
-  - get
-  - list
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  - events
-  - pods
-  - secrets
-  verbs:
-  - '*'
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  - events
-  - secrets
-  verbs:
-  - '*'
-- apiGroups:
-  - ""
-  resources:
-  - services
   verbs:
   - create
   - get
