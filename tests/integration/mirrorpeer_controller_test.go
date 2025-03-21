@@ -56,11 +56,17 @@ var (
 	mirrorPeerLookupKey = types.NamespacedName{Namespace: mirrorPeer.Namespace, Name: mirrorPeer.Name}
 )
 
-func GetFakeS3SecretForPeerRef(peer multiclusterv1alpha1.PeerRef) *v1.Secret {
+func GetFakeS3SecretForPeerRef(peer multiclusterv1alpha1.PeerRef, mirrorPeer *multiclusterv1alpha1.MirrorPeer) *v1.Secret {
 	return &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      utils.GetSecretNameByPeerRef(peer, utils.S3ProfilePrefix),
 			Namespace: peer.ClusterName,
+			Labels: map[string]string{
+				"multicluster.odf.openshift.io/secret-type": "INTERNAL",
+			},
+			Annotations: map[string]string{
+				"multicluster.odf.openshift.io/mirrorpeer": mirrorPeer.Name,
+			},
 		},
 		Data: map[string][]byte{
 			"namespace":            []byte("openshift-storage"),
