@@ -3,13 +3,11 @@ package utils
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -43,13 +41,6 @@ func GetODFInfoConfigMap(ctx context.Context, c client.Client, namespace string)
 
 func FetchClientInfoConfigMap(ctx context.Context, c client.Client, currentNamespace string) (*corev1.ConfigMap, error) {
 	return FetchConfigMap(ctx, c, ClientInfoConfigMapName, currentNamespace)
-}
-
-func SplitKeyForNamespacedName(key string) types.NamespacedName {
-	// key = openshift-storage_ocs-storagecluster.config.yaml
-	splitKey := strings.Split(key, ".")               // [openshift-storage_ocs-storagecluster,config,yaml]
-	namespacedName := strings.Split(splitKey[0], "_") // [openshift-storage,ocs-storagecluster]
-	return types.NamespacedName{Namespace: namespacedName[0], Name: namespacedName[1]}
 }
 
 func DecodeConfigMap(objJson []byte) (*corev1.ConfigMap, error) {

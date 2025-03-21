@@ -6,12 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -19,8 +17,6 @@ import (
 type SecretLabelType string
 
 const (
-	SourceLabel           SecretLabelType = "BLUE"
-	DestinationLabel      SecretLabelType = "GREEN"
 	InternalLabel         SecretLabelType = "INTERNAL"
 	IgnoreLabel           SecretLabelType = "IGNORE"
 	ProviderLabel         SecretLabelType = "PROVIDER"
@@ -31,32 +27,9 @@ const (
 	SecretDataKey                         = "secret-data"
 	SecretOriginKey                       = "secret-origin"
 	MirrorPeerSecret                      = "mirrorpeersecret"
-	RookTokenKey                          = "token"
-	ClusterTypeKey                        = "cluster_type"
 	HubRecoveryLabel                      = "cluster.open-cluster-management.io/backup"
-	StorageIDKey                          = "multicluster.odf.openshift.io/storageid"
-	SecretStorageIDKey                    = "storage_id"
 )
 
-type RookToken struct {
-	FSID      string `json:"fsid"`
-	Namespace string `json:"namespace"`
-	MonHost   string `json:"mon_host"`
-	ClientId  string `json:"client_id"`
-	Key       string `json:"key"`
-}
-
-type RookTokenExternal struct {
-	CephSecret   string `json:"ceph-secret,omitempty"`
-	CephUsername string `json:"ceph-username,omitempty"`
-	FSID         string `json:"fsid"`
-	MonSecret    string `json:"mon-secret,omitempty"`
-}
-
-type HubToken struct {
-	Token   string `json:"token"`
-	Cluster string `json:"cluster"`
-}
 type S3Token struct {
 	AccessKeyID          string `json:"AWS_ACCESS_KEY_ID"`
 	SecretAccessKey      string `json:"AWS_SECRET_ACCESS_KEY"`
@@ -81,17 +54,6 @@ func isObjectASecretWithProvidedLabel(obj client.Object, label, value string) bo
 	// if 'ok' (ie; if provided label key is present) AND values match,
 	// then return true
 	return ok && (lblVal == value)
-}
-
-// IsSecretSource returns true if the provided object is a secret with Source label
-func IsSecretSource(obj client.Object) bool {
-	return isObjectASecretWithProvidedLabel(obj, SecretLabelTypeKey, string(SourceLabel))
-}
-
-// IsSecretDestination returns true if the provided object is a secret with
-// Destination label
-func IsSecretDestination(obj client.Object) bool {
-	return isObjectASecretWithProvidedLabel(obj, SecretLabelTypeKey, string(DestinationLabel))
 }
 
 // IsSecretInternal returns true if the provided object is a secret with
@@ -127,16 +89,6 @@ func ValidateInternalSecret(internalSecret *corev1.Secret, expectedLabel SecretL
 	return nil
 }
 
-// ValidateSourceSecret validates whether the given secret is a Source type
-func ValidateSourceSecret(sourceSecret *corev1.Secret) error {
-	return ValidateInternalSecret(sourceSecret, SourceLabel)
-}
-
-// ValidateDestinationSecret validates whether the given secret is a Destination type
-func ValidateDestinationSecret(sourceSecret *corev1.Secret) error {
-	return ValidateInternalSecret(sourceSecret, DestinationLabel)
-}
-
 func HasHubRecoveryLabels(secret *corev1.Secret) bool {
 	return secret.ObjectMeta.Labels[HubRecoveryLabel] == ""
 }
@@ -149,70 +101,6 @@ func ValidateS3Secret(data map[string][]byte) bool {
 	_, awsAccessKeyIdOk := data[AwsAccessKeyId]
 	_, awsAccessKeyOk := data[AwsSecretAccessKey]
 	return s3ProfileName && s3BucketNameOK && s3EndpointOk && s3Region && awsAccessKeyIdOk && awsAccessKeyOk
-}
-
-// createInternalSecret a common function to create any type secret
-func createInternalSecret(secretNameAndNamespace types.NamespacedName,
-	storageClusterNameAndNamespace types.NamespacedName,
-	secretType SecretLabelType,
-	secretData []byte, secretOrigin string, storageId string) *corev1.Secret {
-	retSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretNameAndNamespace.Name,
-			Namespace: secretNameAndNamespace.Namespace,
-			Labels: map[string]string{
-				SecretLabelTypeKey: string(secretType),
-			},
-		},
-		Type: corev1.SecretTypeOpaque,
-		Data: map[string][]byte{
-			SecretDataKey:         secretData,
-			NamespaceKey:          []byte(storageClusterNameAndNamespace.Namespace),
-			StorageClusterNameKey: []byte(storageClusterNameAndNamespace.Name),
-			SecretOriginKey:       []byte(secretOrigin),
-			SecretStorageIDKey:    []byte(storageId),
-		},
-	}
-	return retSecret
-}
-
-// CreateSourceSecret creates a source secret
-func CreateSourceSecret(secretNameAndNamespace types.NamespacedName,
-	storageClusterNameAndNamespace types.NamespacedName,
-	secretData []byte, SecretOrigin string, storageId string) *corev1.Secret {
-	return createInternalSecret(secretNameAndNamespace,
-		storageClusterNameAndNamespace,
-		SourceLabel,
-		secretData,
-		SecretOrigin, storageId)
-}
-
-// CreateDestinationSecret creates a destination secret
-func CreateDestinationSecret(secretNameAndNamespace types.NamespacedName,
-	storageClusterNameAndNamespace types.NamespacedName,
-	secretData []byte, secretOrigin string, storageId string) *corev1.Secret {
-	return createInternalSecret(secretNameAndNamespace,
-		storageClusterNameAndNamespace,
-		DestinationLabel,
-		secretData,
-		secretOrigin,
-		storageId,
-	)
-}
-
-// CreatePeerRefFromSecret function creates a 'PeerRef' object
-// from the internal secret details
-func CreatePeerRefFromSecret(secret *corev1.Secret) (multiclusterv1alpha1.PeerRef, error) {
-	if err := ValidateInternalSecret(secret, IgnoreLabel); err != nil {
-		return multiclusterv1alpha1.PeerRef{}, err
-	}
-	retPeerRef := multiclusterv1alpha1.PeerRef{
-		ClusterName: secret.Namespace,
-		StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
-			Name:      string(secret.Data[StorageClusterNameKey]),
-			Namespace: string(secret.Data[NamespaceKey])},
-	}
-	return retPeerRef, nil
 }
 
 // FetchAllSecretsWithLabel will get all the internal secrets in the namespace and with the provided label
@@ -243,22 +131,6 @@ func FetchAllSecretsWithLabel(ctx context.Context, rc client.Client, namespace s
 	return sourceSecretList.Items, err
 }
 
-func FindMatchingSecretWithPeerRef(peerRef multiclusterv1alpha1.PeerRef, secrets []corev1.Secret) *corev1.Secret {
-	var matchingSourceSecret *corev1.Secret
-	for _, eachSecret := range secrets {
-		secretPeerRef, err := CreatePeerRefFromSecret(&eachSecret)
-		// ignore any error and continue with the next
-		if err != nil {
-			continue
-		}
-		if reflect.DeepEqual(secretPeerRef, peerRef) {
-			matchingSourceSecret = &eachSecret
-			break
-		}
-	}
-	return matchingSourceSecret
-}
-
 func FetchAllMirrorPeers(ctx context.Context, rc client.Client) ([]multiclusterv1alpha1.MirrorPeer, error) {
 	var mirrorPeerListObj multiclusterv1alpha1.MirrorPeerList
 	err := rc.List(ctx, &mirrorPeerListObj)
@@ -284,117 +156,6 @@ func FetchSecretWithName(ctx context.Context, rc client.Client, secretName types
 		return nil, err
 	}
 	return &secret, nil
-}
-
-func UnmarshalRookSecret(rookSecret *corev1.Secret) (*RookToken, error) {
-	encodedData, err := base64.StdEncoding.DecodeString(string(rookSecret.Data[RookTokenKey]))
-	if err != nil {
-		return nil, err
-	}
-
-	var token RookToken
-	err = json.Unmarshal(encodedData, &token)
-	if err != nil {
-		return nil, err
-	}
-
-	return &token, nil
-}
-
-func GetStorageIdsFromGreenSecret(greenSecret *corev1.Secret) (map[string]string, error) {
-	// Check if StorageIDs exist in the secret
-	storageIDsData, exists := greenSecret.Data[SecretStorageIDKey]
-	if !exists {
-		return nil, fmt.Errorf("StorageIDs key %q not found in green secret", SecretStorageIDKey)
-	}
-
-	// Unmarshal the StorageIDs JSON
-	var storageIDs map[string]string
-	if err := json.Unmarshal(storageIDsData, &storageIDs); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal StorageIDs from green secret: %v", err)
-	}
-
-	// Validate that required storage types exist
-	requiredTypes := []string{"cephfs", "rbd"}
-	for _, storageType := range requiredTypes {
-		if _, exists := storageIDs[storageType]; !exists {
-			return nil, fmt.Errorf("required storage type %q not found in StorageIDs", storageType)
-		}
-		if storageIDs[storageType] == "" {
-			return nil, fmt.Errorf("empty StorageID found for storage type %q", storageType)
-		}
-	}
-
-	return storageIDs, nil
-}
-
-func UnmarshalRookSecretExternal(rookSecret *corev1.Secret) (*RookTokenExternal, error) {
-	fsid := string(rookSecret.Data["fsid"])
-
-	cephUsername := string(rookSecret.Data["ceph-username"])
-
-	cephSecret := string(rookSecret.Data["ceph-secret"])
-
-	monSecret := string(rookSecret.Data["mon-secret"])
-
-	token := RookTokenExternal{
-		FSID:         string(fsid),
-		CephSecret:   string(cephSecret),
-		CephUsername: string(cephUsername),
-		MonSecret:    string(monSecret),
-	}
-
-	return &token, nil
-}
-
-func UnmarshalHubSecret(hubSecret *corev1.Secret) (*RookToken, error) {
-	var token HubToken
-	err := json.Unmarshal(hubSecret.Data[SecretDataKey], &token)
-	if err != nil {
-		return nil, err
-	}
-
-	// Do an annoying conversion to RookToken
-	// Double decoding
-
-	tokenbyte, err := base64.StdEncoding.DecodeString(token.Token)
-	if err != nil {
-		return nil, err
-	}
-
-	actualtokenjsonbyte, err := base64.StdEncoding.DecodeString(string(tokenbyte))
-	if err != nil {
-		return nil, err
-	}
-
-	var actualtoken RookToken
-	err = json.Unmarshal(actualtokenjsonbyte, &actualtoken)
-	if err != nil {
-		return nil, err
-	}
-
-	return &actualtoken, nil
-}
-
-func GetStorageIdsFromHubSecret(hubSecret *corev1.Secret) (map[string]string, error) {
-	storageIDsData, exists := hubSecret.Data[SecretStorageIDKey]
-	if !exists {
-		return nil, fmt.Errorf("StorageIDs key %q not found in hub secret", SecretStorageIDKey)
-	}
-
-	var storageIDs map[string]string
-	if err := json.Unmarshal(storageIDsData, &storageIDs); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal StorageIDs from hub secret: %v", err)
-	}
-
-	requiredTypes := []string{"cephfs", "rbd"}
-	for _, storageType := range requiredTypes {
-		if _, exists := storageIDs[storageType]; !exists {
-			return nil, fmt.Errorf("required storage type %q not found in StorageIDs", storageType)
-		}
-	}
-
-	return storageIDs, nil
 }
 
 func UnmarshalS3Secret(s3Secret *corev1.Secret) (*S3Token, error) {

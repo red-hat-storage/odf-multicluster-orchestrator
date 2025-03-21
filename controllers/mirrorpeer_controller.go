@@ -275,7 +275,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				logger.Error("Error in fetching s3 internal secret", "Cluster", peerRef.ClusterName, "error", err)
 				return ctrl.Result{}, err
 			}
-			err = createOrUpdateSecretsFromInternalSecret(ctx, r.Client, r.CurrentNamespace, &s3Secret, []multiclusterv1alpha1.MirrorPeer{mirrorPeer}, logger)
+			err = utils.CreateOrUpdateSecretsFromInternalSecret(ctx, r.Client, r.CurrentNamespace, &s3Secret, []multiclusterv1alpha1.MirrorPeer{mirrorPeer}, logger)
 			if err != nil {
 				logger.Error("Error in updating S3 profile", "Cluster", peerRef.ClusterName, "error", err)
 				return ctrl.Result{}, err
