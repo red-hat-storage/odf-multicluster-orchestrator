@@ -149,9 +149,10 @@ func getFakeDRPolicyReconciler(drpolicy *ramenv1alpha1.DRPolicy, mp *multicluste
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(drpolicy, mp, ns1, ns2, &hubSecret1, &hubSecret2, odfClientInfoConfigMap).Build()
 
 	r := DRPolicyReconciler{
-		HubClient: fakeClient,
-		Scheme:    scheme,
-		Logger:    utils.GetLogger(utils.GetZapLogger(true)),
+		HubClient:        fakeClient,
+		Scheme:           scheme,
+		Logger:           utils.GetLogger(utils.GetZapLogger(true)),
+		CurrentNamespace: utils.GetEnv("POD_NAMESPACE"),
 	}
 
 	return r
