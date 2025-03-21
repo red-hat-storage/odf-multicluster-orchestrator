@@ -79,14 +79,24 @@ var _ = Describe("Ramen Resource Tests", func() {
 					},
 				},
 			},
+			ManageS3: true,
+		},
+	}
+	fakeRamenConfig := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ramen-hub-operator-config",
+			Namespace: "openshift-operators",
+		},
+		Data: map[string]string{
+			"ramen_manager_config.yaml": "{\"ramenControllerType\": \"hub\",}",
 		},
 	}
 
 	pr1 := fakeMirrorPeer.Spec.Items[0]
 	pr2 := fakeMirrorPeer.Spec.Items[1]
 
-	s3sec1 := GetFakeS3SecretForPeerRef(pr1)
-	s3sec2 := GetFakeS3SecretForPeerRef(pr2)
+	s3sec1 := GetFakeS3SecretForPeerRef(pr1, fakeMirrorPeer)
+	s3sec2 := GetFakeS3SecretForPeerRef(pr2, fakeMirrorPeer)
 
 	When("MirrorPeer is reconciled", func() {
 
@@ -104,6 +114,8 @@ var _ = Describe("Ramen Resource Tests", func() {
 			err = k8sClient.Create(context.TODO(), s3sec1, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Create(context.TODO(), s3sec2, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Create(context.TODO(), &fakeRamenConfig, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Create(context.TODO(), fakeMirrorPeer, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
@@ -124,6 +136,8 @@ var _ = Describe("Ramen Resource Tests", func() {
 			err = k8sClient.Delete(context.TODO(), s3sec1, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Delete(context.TODO(), s3sec2, &client.DeleteOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Delete(context.TODO(), &fakeRamenConfig, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Delete(context.TODO(), fakeMirrorPeer, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
