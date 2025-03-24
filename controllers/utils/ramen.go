@@ -5,73 +5,40 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"reflect"
 
 	rmn "github.com/ramendr/ramen/api/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
 )
 
-func createOrUpdateRamenS3Secret(ctx context.Context, rc client.Client, secret *corev1.Secret, data map[string][]byte, ramenHubNamespace string, logger *slog.Logger) error {
+func createOrUpdateRamenS3Secret(ctx context.Context, rc client.Client, scheme *runtime.Scheme, name string, data map[string][]byte, ramenHubNamespace string, mirrorPeer multiclusterv1alpha1.MirrorPeer, logger *slog.Logger) error {
 
-	expectedSecret := corev1.Secret{
+	secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      secret.Name,
+			Name:      name,
 			Namespace: ramenHubNamespace,
-			Labels: map[string]string{
-				CreatedByLabelKey: MirrorPeerSecret,
-			},
 		},
-		Type: corev1.SecretTypeOpaque,
-		Data: map[string][]byte{
+	}
+
+	_, err := controllerutil.CreateOrUpdate(ctx, rc, &secret, func() error {
+		secret.Labels = map[string]string{
+			CreatedByLabelKey: MirrorPeerSecret,
+		}
+		secret.Type = corev1.SecretTypeOpaque
+		secret.Data = map[string][]byte{
 			AwsAccessKeyId:     data[AwsAccessKeyId],
 			AwsSecretAccessKey: data[AwsSecretAccessKey],
-		},
-	}
-
-	localSecret := corev1.Secret{}
-	namespacedName := types.NamespacedName{
-		Name:      secret.Name,
-		Namespace: ramenHubNamespace,
-	}
-
-	logger = logger.With("SecretName", expectedSecret.Name, "SecretNamespace", expectedSecret.Namespace, "RamenHubNamespace", ramenHubNamespace)
-
-	err := rc.Get(ctx, namespacedName, &localSecret)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			logger.Info("Creating a new S3 secret")
-			if createErr := rc.Create(ctx, &expectedSecret); createErr != nil {
-				logger.Error("Failed to create the S3 secret", "error", createErr)
-				return createErr
-			}
-			return nil
 		}
-		logger.Error("Failed to fetch the S3 secret", "error", err)
-		return err
-	}
+		return controllerutil.SetControllerReference(&mirrorPeer, &secret, scheme)
+	})
 
-	if !reflect.DeepEqual(expectedSecret.Data, localSecret.Data) {
-		logger.Info("Updating the existing S3 secret")
-		_, updateErr := controllerutil.CreateOrUpdate(ctx, rc, &localSecret, func() error {
-			localSecret.Data = expectedSecret.Data
-			return nil
-		})
-		if updateErr != nil {
-			logger.Error("Failed to update the S3 secret", "error", updateErr)
-			return updateErr
-		}
-	} else {
-		logger.Info("No updates required for the S3 secret")
-	}
-
-	return nil
+	return err
 }
 
 func updateS3ProfileFields(expected *rmn.S3StoreProfile, found *rmn.S3StoreProfile) {
@@ -106,36 +73,19 @@ func areS3ProfileFieldsEqual(expected rmn.S3StoreProfile, found rmn.S3StoreProfi
 	return true
 }
 
-func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret *corev1.Secret, data map[string][]byte, mirrorPeers []multiclusterv1alpha1.MirrorPeer, ramenHubNamespace string, logger *slog.Logger) error {
+func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret *corev1.Secret, data map[string][]byte, mirrorPeer multiclusterv1alpha1.MirrorPeer, ramenHubNamespace string, logger *slog.Logger) error {
 	logger.Info("Starting to update Ramen Hub Operator config", "SecretName", secret.Name, "Namespace", secret.Namespace)
-
-	if mirrorPeers == nil {
-		var err error
-		mirrorPeers, err = FetchAllMirrorPeers(ctx, rc)
-		if err != nil {
-			logger.Error("Failed to fetch all MirrorPeers", "error", err)
-			return err
-		}
-	}
 
 	if _, ok := secret.Annotations[MirrorPeerNameAnnotationKey]; !ok {
 		return fmt.Errorf("failed to find MirrorPeerName on secret")
 	}
 
 	mirrorPeerName := secret.Annotations[MirrorPeerNameAnnotationKey]
-	var foundMirrorPeer *multiclusterv1alpha1.MirrorPeer
-	for _, mp := range mirrorPeers {
-		if mp.Name == mirrorPeerName {
-			foundMirrorPeer = &mp
-			break
-		}
-	}
-
-	if foundMirrorPeer == nil {
+	if mirrorPeer.Name != mirrorPeerName {
 		return fmt.Errorf("MirrorPeer %q not found", mirrorPeerName)
 	}
 
-	if !foundMirrorPeer.Spec.ManageS3 {
+	if !mirrorPeer.Spec.ManageS3 {
 		logger.Info("Manage S3 is disabled on MirrorPeer spec, skipping update", "MirrorPeer", mirrorPeerName)
 		return nil
 	}
@@ -213,7 +163,7 @@ func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret 
 	return nil
 }
 
-func CreateOrUpdateSecretsFromInternalSecret(ctx context.Context, rc client.Client, currentNamespace string, secret *corev1.Secret, mirrorPeers []multiclusterv1alpha1.MirrorPeer, logger *slog.Logger) error {
+func CreateOrUpdateSecretsFromInternalSecret(ctx context.Context, rc client.Client, scheme *runtime.Scheme, currentNamespace string, secret *corev1.Secret, mirrorPeer multiclusterv1alpha1.MirrorPeer, logger *slog.Logger) error {
 	logger.Info("Validating internal secret", "SecretName", secret.Name, "Namespace", secret.Namespace)
 
 	if err := ValidateInternalSecret(secret, InternalLabel); err != nil {
@@ -237,11 +187,11 @@ func CreateOrUpdateSecretsFromInternalSecret(ctx context.Context, rc client.Clie
 			return err
 		}
 
-		if err := createOrUpdateRamenS3Secret(ctx, rc, secret, data, currentNamespace, logger); err != nil {
+		if err := createOrUpdateRamenS3Secret(ctx, rc, scheme, secret.Name, data, currentNamespace, mirrorPeer, logger); err != nil {
 			logger.Error("Failed to create or update Ramen S3 secret", "error", err, "SecretName", secret.Name, "Namespace", currentNamespace)
 			return err
 		}
-		if err := updateRamenHubOperatorConfig(ctx, rc, secret, data, mirrorPeers, currentNamespace, logger); err != nil {
+		if err := updateRamenHubOperatorConfig(ctx, rc, secret, data, mirrorPeer, currentNamespace, logger); err != nil {
 			logger.Error("Failed to update Ramen Hub Operator config", "error", err, "SecretName", secret.Name, "Namespace", currentNamespace)
 			return err
 		}
