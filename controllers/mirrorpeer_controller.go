@@ -175,15 +175,36 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			logger.Error("Error occurred while updating the status of mirrorpeer", "Error", statusErr)
 			return ctrl.Result{Requeue: true}, nil
 		}
+
 		if utils.ContainsString(mirrorPeer.GetFinalizers(), mirrorPeerFinalizer) {
+			var drpolicyList ramenv1alpha1.DRPolicyList
+			err := r.Client.List(ctx, &drpolicyList)
+			if err != nil {
+				logger.Error("Failed to delete resources", "error", err)
+				return reconcile.Result{}, err
+			}
+
+			for i := range drpolicyList.Items {
+				drClusters := drpolicyList.Items[i].Spec.DRClusters
+				if (mirrorPeer.Spec.Items[0].ClusterName == drClusters[0] &&
+					mirrorPeer.Spec.Items[1].ClusterName == drClusters[1]) ||
+					(mirrorPeer.Spec.Items[0].ClusterName == drClusters[1] &&
+						mirrorPeer.Spec.Items[1].ClusterName == drClusters[0]) {
+					return reconcile.Result{}, fmt.Errorf("DRPolicy '%s' exists and requires MirrorPeer '%s'. MirrorPeer can not be deleted",
+						drpolicyList.Items[i].Name, mirrorPeer.Name)
+				}
+			}
+
 			if utils.ContainsSuffix(mirrorPeer.GetFinalizers(), addons.SpokeMirrorPeerFinalizer) {
 				logger.Info("Waiting for agent to delete resources")
 				return reconcile.Result{Requeue: true}, err
 			}
+
 			if err := r.deleteSecrets(ctx, mirrorPeer); err != nil {
 				logger.Error("Failed to delete resources", "error", err)
 				return reconcile.Result{Requeue: true}, err
 			}
+
 			mirrorPeer.Finalizers = utils.RemoveString(mirrorPeer.Finalizers, mirrorPeerFinalizer)
 			if err := r.Client.Update(ctx, &mirrorPeer); err != nil {
 				logger.Error("Failed to remove finalizer from MirrorPeer", "error", err)
