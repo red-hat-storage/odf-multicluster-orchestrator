@@ -1,20 +1,19 @@
-PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
-CWD := $(shell pwd)
-
 .DEFAULT_GOAL := help
 
-# All variables are defined here
-include hack/make/vars.mk
-
-# Install required tools
-include hack/make/tools.mk
-
+PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
+CWD := $(shell pwd)
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
 else
 GOBIN=$(shell go env GOBIN)
 endif
+
+# All variables are defined here
+include hack/make/vars.mk
+
+# Install required tools
+include hack/make/tools.mk
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # This is a requirement for 'setup-envtest.sh' in the test target.
@@ -52,7 +51,6 @@ kube-linter: kubelinter-bin ## Run kube-linter against YAML files
 unit-test: ## Run unit tests
 	go test ./... -v -tags unit -coverprofile unit-cover.out
 
-ENVTEST_ASSETS_DIR=$(CWD)/testbin
 OPENSHIFT_CI ?= false
 test: ## Run integration tests.
 ifeq ($(OPENSHIFT_CI), true)
@@ -61,10 +59,8 @@ ifeq ($(OPENSHIFT_CI), true)
 else
 	@echo "Running outside OpenShift CI. Ignoring vendor"
 endif
-	make manifests generate fmt vet golangci-lint
-	mkdir -p ${ENVTEST_ASSETS_DIR}
-	test -f ${ENVTEST_ASSETS_DIR}/setup-envtest.sh || curl -sSLo ${ENVTEST_ASSETS_DIR}/setup-envtest.sh https://raw.githubusercontent.com/kubernetes-sigs/controller-runtime/v0.8.3/hack/setup-envtest.sh
-	source ${ENVTEST_ASSETS_DIR}/setup-envtest.sh; fetch_envtest_tools $(ENVTEST_ASSETS_DIR); setup_envtest_env $(ENVTEST_ASSETS_DIR); go test ./tests/integration/... -v -tags integration -coverprofile integration-cover.out
+	make manifests generate fmt vet golangci-lint setup-envtest
+	KUBEBUILDER_ASSETS=`$(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path` go test ./tests/integration/... -v -tags integration -coverprofile integration-cover.out
 
 ##@ Build
 

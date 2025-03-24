@@ -66,25 +66,25 @@ const (
 	AddonVersionAnnotationKey   = "multicluster.odf.openshift.io/version"
 )
 
-//+kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers/finalizers,verbs=update
-//+kubebuilder:rbac:groups=core,resources=pods;secrets;configmaps;events,verbs=*
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles;clusterrolebindings;roles;rolebindings,verbs=*
-//+kubebuilder:rbac:groups=authorization.k8s.io,resources=subjectaccessreviews,verbs=get;create
-//+kubebuilder:rbac:groups=certificates.k8s.io,resources=certificatesigningrequests;certificatesigningrequests/approval,verbs=get;list;watch;create;update
-//+kubebuilder:rbac:groups=certificates.k8s.io,resources=signers,verbs=approve
-//+kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=managedclusters,verbs=get;list;watch
-//+kubebuilder:rbac:groups=work.open-cluster-management.io,resources=manifestworks,verbs=*
-//+kubebuilder:rbac:groups=addon.open-cluster-management.io,resources=managedclusteraddons/finalizers,verbs=*
-//+kubebuilder:rbac:groups=addon.open-cluster-management.io,resources=managedclusteraddons;clustermanagementaddons,verbs=*
-//+kubebuilder:rbac:groups=addon.open-cluster-management.io,resources=managedclusteraddons/status,verbs=*
-//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;create;update;watch
-//+kubebuilder:rbac:groups=console.openshift.io,resources=consoleplugins,verbs=get;list;create;update;watch
-//+kubebuilder:rbac:groups=view.open-cluster-management.io,resources=managedclusterviews,verbs=get;list;watch;create;update
-//+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;create;update;watch
-//+kubebuilder:rbac:groups=ramendr.openshift.io,resources=drclusters;drpolicies,verbs=get;list;create;update;watch
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;create;update;delete;watch,resourceNames=spoke-clusterrole-bindings
+// +kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers/finalizers,verbs=update
+// +kubebuilder:rbac:groups=core,resources=pods;secrets;configmaps;events,verbs=*
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles;clusterrolebindings;roles;rolebindings,verbs=*
+// +kubebuilder:rbac:groups=authorization.k8s.io,resources=subjectaccessreviews,verbs=get;create
+// +kubebuilder:rbac:groups=certificates.k8s.io,resources=certificatesigningrequests;certificatesigningrequests/approval,verbs=get;list;watch;create;update
+// +kubebuilder:rbac:groups=certificates.k8s.io,resources=signers,verbs=approve
+// +kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=managedclusters,verbs=get;list;watch
+// +kubebuilder:rbac:groups=work.open-cluster-management.io,resources=manifestworks,verbs=*
+// +kubebuilder:rbac:groups=addon.open-cluster-management.io,resources=managedclusteraddons/finalizers,verbs=*
+// +kubebuilder:rbac:groups=addon.open-cluster-management.io,resources=managedclusteraddons;clustermanagementaddons,verbs=*
+// +kubebuilder:rbac:groups=addon.open-cluster-management.io,resources=managedclusteraddons/status,verbs=*
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;create;update;watch
+// +kubebuilder:rbac:groups=console.openshift.io,resources=consoleplugins,verbs=get;list;create;update;watch
+// +kubebuilder:rbac:groups=view.open-cluster-management.io,resources=managedclusterviews,verbs=get;list;watch;create;update
+// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;create;update;watch
+// +kubebuilder:rbac:groups=ramendr.openshift.io,resources=drclusters;drpolicies,verbs=get;list;create;update;watch
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;create;update;delete;watch,resourceNames=spoke-clusterrole-bindings
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

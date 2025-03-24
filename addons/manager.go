@@ -54,7 +54,7 @@ func init() {
 	utilruntime.Must(rookv1.AddToScheme(mgrScheme))
 	utilruntime.Must(extv1.AddToScheme(mgrScheme))
 	utilruntime.Must(snapshotv1.AddToScheme(mgrScheme))
-	//+kubebuilder:scaffold:scheme
+	// +kubebuilder:scaffold:scheme
 }
 
 func NewAddonAgentCommand() *cobra.Command {

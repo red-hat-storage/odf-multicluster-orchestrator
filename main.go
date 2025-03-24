@@ -24,7 +24,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/cmd"
-	//+kubebuilder:scaffold:imports
+	// +kubebuilder:scaffold:imports
 )
 
 func main() {
