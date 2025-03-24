@@ -116,12 +116,10 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 		}
 	} else {
-		if !hasStorageClientRef {
-			result, err := r.deleteMirrorPeer(ctx, mirrorPeer, scr)
-			if err != nil {
-				return result, err
-			}
-		} // TODO Write complete deletion for Provider mode mirrorpeer
+		result, err := r.deleteMirrorPeer(ctx, mirrorPeer, scr)
+		if err != nil {
+			return result, err
+		}
 
 		err = r.HubClient.Get(ctx, req.NamespacedName, &mirrorPeer)
 		if err != nil {
