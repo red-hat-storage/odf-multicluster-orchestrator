@@ -562,7 +562,7 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	mpPredicate := utils.ComposePredicates(predicate.GenerationChangedPredicate{}, mirrorPeerSpokeClusterPredicate)
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(mpPredicate)).
-		WatchesMetadata(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(tokenToMirrorPeerMapFunc), builder.WithPredicates(utils.SourceOrDestinationPredicate)).
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(tokenToMirrorPeerMapFunc), builder.WithPredicates(utils.SourceOrDestinationPredicate)).
 		Complete(r)
 }
 
