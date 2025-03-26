@@ -265,14 +265,21 @@ func (a *Addons) permissionConfig(cluster *clusterv1.ManagedCluster, addon *addo
 				APIGroups: []string{"addon.open-cluster-management.io"},
 				Resources: []string{"managedclusteraddons"},
 				Verbs:     []string{"get", "list", "watch", "update", "patch"},
-			}, {
+			},
+			{
 				APIGroups: []string{"addon.open-cluster-management.io"},
 				Resources: []string{"managedclusteraddons/finalizers"},
 				Verbs:     []string{"update"},
-			}, {
+			},
+			{
 				APIGroups: []string{"addon.open-cluster-management.io"},
 				Resources: []string{"managedclusteraddons/status"},
 				Verbs:     []string{"patch", "update"},
+			},
+			{
+				APIGroups: []string{"work.open-cluster-management.io"},
+				Resources: []string{"manifestworks"},
+				Verbs:     []string{"get", "list", "watch"},
 			},
 		}
 		return nil
