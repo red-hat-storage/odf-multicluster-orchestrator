@@ -132,7 +132,6 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, operatorNames
 			CephClusterFSID:               odfInfo.StorageCluster.CephClusterFSID,
 			StorageProviderEndpoint:       odfInfo.StorageCluster.StorageProviderEndpoint,
 			NamespacedName:                odfInfo.StorageCluster.NamespacedName,
-			StorageSystemName:             odfInfo.StorageSystemName,
 			ProviderManagedClusterName:    managedClusterView.Namespace,
 			StorageProviderPublicEndpoint: providerPublicEndpoint,
 		}
