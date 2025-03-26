@@ -31,7 +31,6 @@ import (
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -39,7 +38,6 @@ import (
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
-	"open-cluster-management.io/addon-framework/pkg/agent"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -256,12 +254,6 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	if err := r.processManagedClusterAddon(ctx, mirrorPeer); err != nil {
 		logger.Error("Failed to process managedclusteraddon", "error", err)
-		return ctrl.Result{}, err
-	}
-
-	err = r.createClusterRoleBindingsForSpoke(ctx, mirrorPeer)
-	if err != nil {
-		logger.Error("Failed to create cluster role bindings for spoke", "error", err)
 		return ctrl.Result{}, err
 	}
 
@@ -835,70 +827,6 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, name string
 	return err
 }
 
-func (r *MirrorPeerReconciler) createClusterRoleBindingsForSpoke(ctx context.Context, peer multiclusterv1alpha1.MirrorPeer) error {
-	logger := r.Logger
-	logger.Info("Starting to create or update ClusterRoleBindings for the spoke", "MirrorPeerName", peer.Name)
-
-	crb := rbacv1.ClusterRoleBinding{}
-	err := r.Client.Get(ctx, types.NamespacedName{Name: spokeClusterRoleBindingName}, &crb)
-	if err != nil {
-		if !k8serrors.IsNotFound(err) {
-			logger.Error("Failed to get ClusterRoleBinding", "error", err, "ClusterRoleBindingName", spokeClusterRoleBindingName)
-			return err
-		}
-		logger.Info("ClusterRoleBinding not found, will be created", "ClusterRoleBindingName", spokeClusterRoleBindingName)
-	}
-
-	var subjects []rbacv1.Subject
-	if crb.Subjects != nil {
-		subjects = crb.Subjects
-	}
-
-	// Add users and groups
-	for _, pr := range peer.Spec.Items {
-		usub := getSubjectByPeerRef(pr, "User")
-		gsub := getSubjectByPeerRef(pr, "Group")
-		if !utils.ContainsSubject(subjects, usub) {
-			subjects = append(subjects, *usub)
-			logger.Info("Adding user subject to ClusterRoleBinding", "User", usub.Name)
-		}
-
-		if !utils.ContainsSubject(subjects, gsub) {
-			subjects = append(subjects, *gsub)
-			logger.Info("Adding group subject to ClusterRoleBinding", "Group", gsub.Name)
-		}
-	}
-
-	spokeRoleBinding := rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: spokeClusterRoleBindingName,
-		},
-	}
-	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, &spokeRoleBinding, func() error {
-		spokeRoleBinding.Subjects = subjects
-
-		if spokeRoleBinding.CreationTimestamp.IsZero() {
-			// RoleRef is immutable, so it's set only while creating new object
-			spokeRoleBinding.RoleRef = rbacv1.RoleRef{
-				APIGroup: "rbac.authorization.k8s.io",
-				Kind:     "ClusterRole",
-				Name:     "open-cluster-management:token-exchange:agent",
-			}
-			logger.Info("Setting RoleRef for new ClusterRoleBinding", "RoleRef", spokeRoleBinding.RoleRef.Name)
-		}
-
-		return controllerutil.SetControllerReference(&peer, &spokeRoleBinding, r.Scheme)
-	})
-
-	if err != nil {
-		logger.Error("Failed to create or update ClusterRoleBinding", "error", err, "ClusterRoleBindingName", spokeClusterRoleBindingName)
-		return err
-	}
-
-	logger.Info("Successfully created or updated ClusterRoleBinding", "ClusterRoleBindingName", spokeClusterRoleBindingName)
-	return nil
-}
-
 func (r *MirrorPeerReconciler) updateMirrorPeerStatus(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, hasStorageClientRef bool) (ctrl.Result, error) {
 	logger := r.Logger
 	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
@@ -1055,23 +983,4 @@ func checkS3ProfileStatus(ctx context.Context, client client.Client, logger *slo
 
 	logger.Info("Successfully verified S3 profile status for all peer references", "MirrorPeerName", mp.Name)
 	return true, nil
-}
-
-func getSubjectByPeerRef(pr multiclusterv1alpha1.PeerRef, kind string) *rbacv1.Subject {
-	switch kind {
-	case "User":
-		return &rbacv1.Subject{
-			Kind:     kind,
-			Name:     agent.DefaultUser(pr.ClusterName, setup.TokenExchangeName, setup.TokenExchangeName),
-			APIGroup: "rbac.authorization.k8s.io",
-		}
-	case "Group":
-		return &rbacv1.Subject{
-			Kind:     kind,
-			Name:     agent.DefaultGroups(pr.ClusterName, setup.TokenExchangeName)[0],
-			APIGroup: "rbac.authorization.k8s.io",
-		}
-	default:
-		return nil
-	}
 }

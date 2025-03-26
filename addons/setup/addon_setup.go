@@ -6,24 +6,24 @@ import (
 	"embed"
 	"encoding/pem"
 	"fmt"
-
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	"reflect"
 
 	"github.com/openshift/library-go/pkg/assets"
-	"github.com/openshift/library-go/pkg/operator/events"
-	"github.com/openshift/library-go/pkg/operator/resource/resourceapply"
-	operatorhelpers "github.com/openshift/library-go/pkg/operator/v1helpers"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	certificatesv1 "k8s.io/api/certificates/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog/v2"
 	"open-cluster-management.io/addon-framework/pkg/agent"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 var (
@@ -45,27 +45,13 @@ var tokenExchangeDeploymentFiles = []string{
 	"tokenexchange-manifests/spoke_deployment.yaml",
 }
 
-var agentHubPermissionFiles = []string{
-	"hub-manifests/te_hub_role.yaml",
-	"hub-manifests/te_hub_rolebinding.yaml",
-	"hub-manifests/te_hub_clusterrole.yaml",
-	"hub-manifests/te_hub_clusterrolebinding.yaml",
-}
-
 //go:embed tokenexchange-manifests
 var exchangeManifestFiles embed.FS
 
-//go:embed hub-manifests
-var hubManifests embed.FS
-
 type Addons struct {
-	KubeClient kubernetes.Interface
-	Recorder   events.Recorder
+	Client     client.Client
 	AgentImage string
 	AddonName  string
-}
-type TokenExchangeAddon struct {
-	Addons
 }
 
 // Manifests generates manifestworks to deploy the token exchange addon agent on the managed cluster
@@ -199,37 +185,135 @@ func (a *Addons) csrApproveCheck(cluster *clusterv1.ManagedCluster, addon *addon
 func (a *Addons) permissionConfig(cluster *clusterv1.ManagedCluster, addon *addonapiv1alpha1.ManagedClusterAddOn) error {
 	groups := agent.DefaultGroups(cluster.Name, a.AddonName)
 	user := agent.DefaultUser(cluster.Name, a.AddonName, a.AddonName)
-	config := struct {
-		ClusterName string
-		Group       string
-		User        string
-	}{
-		ClusterName: cluster.Name,
-		Group:       groups[0],
-		User:        user,
+	clusterName := cluster.Name
+	var err error
+	ctx := context.TODO()
+
+	clusterrole := rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "open-cluster-management:token-exchange:agent",
+		},
+	}
+	_, err = controllerutil.CreateOrUpdate(ctx, a.Client, &clusterrole, func() error {
+		clusterrole.Rules = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"multicluster.odf.openshift.io"},
+				Resources: []string{"mirrorpeers"},
+				Verbs:     []string{"get", "list", "watch", "update"},
+			},
+			{
+				APIGroups: []string{"cluster.open-cluster-management.io"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"get"},
+			},
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
-	results := resourceapply.ApplyDirectly(
-		context.TODO(),
-		resourceapply.NewKubeClientHolder(a.KubeClient),
-		a.Recorder,
-		resourceapply.NewResourceCache(),
-		func(name string) ([]byte, error) {
-			template, err := hubManifests.ReadFile(name)
-			if err != nil {
-				return nil, err
-			}
-			return assets.MustCreateAssetFromTemplate(name, template, config).Data, nil
+	clusterrolebinding := rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "open-cluster-management:token-exchange:agent",
 		},
-		agentHubPermissionFiles...,
-	)
+	}
+	_, err = controllerutil.CreateOrUpdate(ctx, a.Client, &clusterrolebinding, func() error {
+		if clusterrolebinding.CreationTimestamp.IsZero() {
+			clusterrolebinding.RoleRef = rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "ClusterRole",
+				Name:     "open-cluster-management:token-exchange:agent",
+			}
+		}
+		uSub := rbacv1.Subject{
+			Kind:     "User",
+			Name:     user,
+			APIGroup: "rbac.authorization.k8s.io",
+		}
+		gSub := rbacv1.Subject{
+			Kind:     "Group",
+			Name:     groups[0],
+			APIGroup: "rbac.authorization.k8s.io",
+		}
+		if !containsSubject(clusterrolebinding.Subjects, &uSub) {
+			clusterrolebinding.Subjects = append(clusterrolebinding.Subjects, uSub)
+		}
+		if !containsSubject(clusterrolebinding.Subjects, &gSub) {
+			clusterrolebinding.Subjects = append(clusterrolebinding.Subjects, gSub)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
 
-	errs := []error{}
-	for _, result := range results {
-		if result.Error != nil {
-			errs = append(errs, result.Error)
+	role := rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "open-cluster-management:token-exchange:agent",
+			Namespace: clusterName,
+		},
+	}
+	_, err = controllerutil.CreateOrUpdate(ctx, a.Client, &role, func() error {
+		role.Rules = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get", "list", "watch", "create", "delete", "update", "patch"},
+			},
+			{
+				APIGroups: []string{"addon.open-cluster-management.io"},
+				Resources: []string{"managedclusteraddons"},
+				Verbs:     []string{"get", "list", "watch", "update", "patch"},
+			}, {
+				APIGroups: []string{"addon.open-cluster-management.io"},
+				Resources: []string{"managedclusteraddons/finalizers"},
+				Verbs:     []string{"update"},
+			}, {
+				APIGroups: []string{"addon.open-cluster-management.io"},
+				Resources: []string{"managedclusteraddons/status"},
+				Verbs:     []string{"patch", "update"},
+			},
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	rolebinding := rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:         "open-cluster-management:token-exchange:agent",
+			GenerateName: clusterName,
+		},
+	}
+	_, err = controllerutil.CreateOrUpdate(ctx, a.Client, &rolebinding, func() error {
+		if rolebinding.CreationTimestamp.IsZero() {
+			rolebinding.RoleRef = rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "Role",
+				Name:     "open-cluster-management:token-exchange:agent",
+			}
+		}
+		gSub := rbacv1.Subject{
+			Kind:     "Group",
+			Name:     groups[0],
+			APIGroup: "rbac.authorization.k8s.io",
+		}
+		if !containsSubject(rolebinding.Subjects, &gSub) {
+			rolebinding.Subjects = append(rolebinding.Subjects, gSub)
+		}
+		return nil
+	})
+
+	return err
+}
+
+func containsSubject(slice []rbacv1.Subject, subject *rbacv1.Subject) bool {
+	for i := range slice {
+		if reflect.DeepEqual(slice[i], *subject) {
+			return true
 		}
 	}
-
-	return operatorhelpers.NewMultiLineAggregate(errs)
+	return false
 }
