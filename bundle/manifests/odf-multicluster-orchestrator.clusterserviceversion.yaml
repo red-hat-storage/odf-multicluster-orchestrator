@@ -36,7 +36,7 @@ metadata:
       ]
     capabilities: Seamless Upgrades
     console.openshift.io/plugins: '["odf-multicluster-console"]'
-    createdAt: "2025-03-26T04:59:43Z"
+    createdAt: "2025-03-27T08:38:25Z"
     olm.skipRange: ""
     operators.openshift.io/infrastructure-features: '["disconnected"]'
     operators.operatorframework.io/builder: operator-sdk-unknown
@@ -71,11 +71,47 @@ spec:
           - ""
           resources:
           - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resourceNames:
+          - odf-client-info
+          resources:
+          - configmaps
+          verbs:
+          - create
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
           - events
+          verbs:
+          - create
+          - patch
+          - update
+        - apiGroups:
+          - ""
+          resources:
           - pods
+          verbs:
+          - get
+        - apiGroups:
+          - ""
+          resources:
           - secrets
           verbs:
-          - '*'
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
         - apiGroups:
           - ""
           resources:
@@ -91,20 +127,38 @@ spec:
           resources:
           - clustermanagementaddons
           - managedclusteraddons
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - addon.open-cluster-management.io
+          resources:
           - managedclusteraddons/finalizers
           - managedclusteraddons/status
           verbs:
-          - '*'
+          - create
+          - delete
+          - patch
+          - update
         - apiGroups:
           - apps
           resources:
           - deployments
           verbs:
-          - create
           - get
           - list
-          - update
           - watch
+        - apiGroups:
+          - apps
+          resources:
+          - replicasets
+          verbs:
+          - get
         - apiGroups:
           - authorization.k8s.io
           resources:
@@ -144,15 +198,12 @@ spec:
           verbs:
           - create
           - get
-          - list
           - update
-          - watch
         - apiGroups:
           - multicluster.odf.openshift.io
           resources:
           - mirrorpeers
           verbs:
-          - create
           - delete
           - get
           - list
@@ -163,13 +214,10 @@ spec:
           - multicluster.odf.openshift.io
           resources:
           - mirrorpeers/finalizers
-          verbs:
-          - update
-        - apiGroups:
-          - multicluster.odf.openshift.io
-          resources:
           - mirrorpeers/status
           verbs:
+          - create
+          - delete
           - get
           - patch
           - update
@@ -177,12 +225,19 @@ spec:
           - ramendr.openshift.io
           resources:
           - drclusters
-          - drpolicies
           verbs:
           - create
           - get
           - list
           - update
+          - watch
+        - apiGroups:
+          - ramendr.openshift.io
+          resources:
+          - drpolicies
+          verbs:
+          - get
+          - list
           - watch
         - apiGroups:
           - rbac.authorization.k8s.io
@@ -205,13 +260,20 @@ spec:
           - rolebindings
           - roles
           verbs:
-          - '*'
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
         - apiGroups:
           - view.open-cluster-management.io
           resources:
           - managedclusterviews
           verbs:
           - create
+          - delete
           - get
           - list
           - update
@@ -221,7 +283,13 @@ spec:
           resources:
           - manifestworks
           verbs:
-          - '*'
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
         - apiGroups:
           - authentication.k8s.io
           resources:
