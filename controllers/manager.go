@@ -9,7 +9,6 @@ import (
 
 	"github.com/go-logr/zapr"
 	consolev1 "github.com/openshift/api/console/v1"
-	"github.com/openshift/library-go/pkg/operator/events"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
@@ -25,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/selection"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"open-cluster-management.io/addon-framework/pkg/addonmanager"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
@@ -254,30 +252,11 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 	}
 
 	logger.Info("Initializing token exchange addon")
-	kubeClient, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		logger.Error("Failed to get kubeclient", "error", err)
-	}
 
-	controllerRef, err := events.GetControllerReferenceForCurrentPod(context.TODO(), kubeClient, currentNamespace, nil)
-	if err != nil {
-		logger.Info("Failed to get owner reference (falling back to namespace)", "error", err)
-	}
-	teEventRecorder := events.NewKubeRecorder(kubeClient.CoreV1().Events(currentNamespace), setup.TokenExchangeName, controllerRef)
-
-	agentImage := utils.GetEnv("TOKEN_EXCHANGE_IMAGE", o.testEnvFile)
-
-	tokenExchangeAddon := setup.TokenExchangeAddon{
-		Addons: struct {
-			KubeClient kubernetes.Interface
-			Recorder   events.Recorder
-			AgentImage string
-			AddonName  string
-		}{
-			KubeClient: kubeClient,
-			Recorder:   teEventRecorder,
-			AgentImage: agentImage,
-			AddonName:  setup.TokenExchangeName},
+	tokenExchangeAddon := setup.Addons{
+		Client:     mgr.GetClient(),
+		AgentImage: utils.GetEnv("TOKEN_EXCHANGE_IMAGE", o.testEnvFile),
+		AddonName:  setup.TokenExchangeName,
 	}
 
 	logger.Info("Creating addon manager")
