@@ -9,6 +9,8 @@ run:
 linters:
   enable:
     - sloglint
+    - ginkgolinter
+    - revive
 
 linters-settings:
   errcheck:
@@ -41,7 +43,9 @@ linters-settings:
       limitations under the License.
   misspell:
     locale: US
-
+  revive:
+    rules:
+      - name: comment-spacings
 # output configuration options
 output:
   print-issued-lines: true

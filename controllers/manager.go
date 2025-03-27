@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"os"
@@ -34,7 +35,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 var (
@@ -52,11 +54,12 @@ func init() {
 	utilruntime.Must(ramenv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(workv1.AddToScheme(mgrScheme))
 	utilruntime.Must(viewv1beta1.AddToScheme(mgrScheme))
-	//+kubebuilder:scaffold:scheme
+	// +kubebuilder:scaffold:scheme
 }
 
 type ManagerOptions struct {
 	MetricsAddr             string
+	SecureMetrics           bool
 	EnableLeaderElection    bool
 	ProbeAddr               string
 	MulticlusterConsolePort int
@@ -72,7 +75,10 @@ func NewManagerOptions() *ManagerOptions {
 
 func (o *ManagerOptions) AddFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
-	flags.StringVar(&o.MetricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
+	flags.StringVar(&o.MetricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
+		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
+	flags.BoolVar(&o.SecureMetrics, "metrics-secure", true,
+		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
 	flags.StringVar(&o.ProbeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flags.IntVar(&o.MulticlusterConsolePort, "multicluster-console-port", 9001, "The port where the multicluster console server will be serving its payload")
 	flags.BoolVar(&o.EnableLeaderElection, "leader-elect", false,
@@ -168,11 +174,23 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 	}
 	logger.Info("Finished garbage collection")
 
+	var tlsOpts []func(*tls.Config)
+	metricsServerOptions := metricsserver.Options{
+		BindAddress:   o.MetricsAddr,
+		SecureServing: o.SecureMetrics,
+		TLSOpts:       tlsOpts,
+	}
+
+	if o.SecureMetrics {
+		// FilterProvider is used to protect the metrics endpoint with authn/authz.
+		// These configurations ensure that only authorized users and service accounts
+		// can access the metrics endpoint.
+		metricsServerOptions.FilterProvider = filters.WithAuthenticationAndAuthorization
+	}
+
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
-		Scheme: mgrScheme,
-		Metrics: server.Options{
-			BindAddress: o.MetricsAddr,
-		},
+		Scheme:                 mgrScheme,
+		Metrics:                metricsServerOptions,
 		HealthProbeBindAddress: o.ProbeAddr,
 		LeaderElection:         o.EnableLeaderElection,
 		LeaderElectionID:       "1d19c724.odf.openshift.io",
@@ -192,7 +210,7 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		logger.Error("Failed to create MirrorPeer controller", "error", err)
 		os.Exit(1)
 	}
-	//+kubebuilder:scaffold:builder
+	// +kubebuilder:scaffold:builder
 
 	if err = (&ManagedClusterReconciler{
 		Client:           mgr.GetClient(),

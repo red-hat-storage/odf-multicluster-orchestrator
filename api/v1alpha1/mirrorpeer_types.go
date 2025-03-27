@@ -84,9 +84,9 @@ type MirrorPeerStatus struct {
 	Message string    `json:"message,omitempty"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:resource:scope=Cluster
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
 
 // MirrorPeer is the Schema for the mirrorpeers API
 type MirrorPeer struct {
@@ -97,7 +97,7 @@ type MirrorPeer struct {
 	Status MirrorPeerStatus `json:"status,omitempty"`
 }
 
-//+kubebuilder:object:root=true
+// +kubebuilder:object:root=true
 
 // MirrorPeerList contains a list of MirrorPeer
 type MirrorPeerList struct {

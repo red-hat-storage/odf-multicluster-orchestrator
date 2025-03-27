@@ -239,9 +239,7 @@ var _ = Describe("MirrorPeer Validations", func() {
 				err = k8sClient.Update(context.TODO(), &newMirrorPeer, &client.UpdateOptions{})
 				Expect(err).To(HaveOccurred())
 			})
-		})
-		It("should not return validation error ", func() {
-			By("updating MirrorPeer.Spec.Items", func() {
+			By("updating MirrorPeer.Spec.Items to new values", func() {
 				var newMirrorPeer multiclusterv1alpha1.MirrorPeer
 				err := k8sClient.Get(context.TODO(), types.NamespacedName{
 					Name:      "test-mirrorpeer-update",
@@ -261,6 +259,34 @@ var _ = Describe("MirrorPeer Validations", func() {
 						StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
 							Name:      "test-storagecluster-22",
 							Namespace: "test-storagecluster-ns22",
+						},
+					},
+				}
+				err = k8sClient.Update(context.TODO(), &newMirrorPeer, &client.UpdateOptions{})
+				Expect(err).To(HaveOccurred())
+			})
+		})
+		It("should not return validation error ", func() {
+			By("updating MirrorPeer.Spec.Items with reversed array index", func() {
+				var newMirrorPeer multiclusterv1alpha1.MirrorPeer
+				err := k8sClient.Get(context.TODO(), types.NamespacedName{
+					Name:      "test-mirrorpeer-update",
+					Namespace: "",
+				}, &newMirrorPeer)
+				Expect(err).NotTo(HaveOccurred())
+				newMirrorPeer.Spec.Items = []multiclusterv1alpha1.PeerRef{
+					{
+						ClusterName: "test-provider-cluster2",
+						StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
+							Name:      "test-storagecluster-2",
+							Namespace: "test-storagecluster-ns2",
+						},
+					},
+					{
+						ClusterName: "test-provider-cluster1",
+						StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
+							Name:      "test-storagecluster-1",
+							Namespace: "test-storagecluster-ns1",
 						},
 					},
 				}
