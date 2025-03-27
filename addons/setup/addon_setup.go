@@ -259,7 +259,7 @@ func (a *Addons) permissionConfig(cluster *clusterv1.ManagedCluster, addon *addo
 			{
 				APIGroups: []string{""},
 				Resources: []string{"secrets"},
-				Verbs:     []string{"get", "list", "watch", "create", "delete", "update", "patch"},
+				Verbs:     []string{"get", "list", "watch", "create", "delete", "update"},
 			},
 			{
 				APIGroups: []string{"addon.open-cluster-management.io"},
@@ -290,8 +290,8 @@ func (a *Addons) permissionConfig(cluster *clusterv1.ManagedCluster, addon *addo
 
 	rolebinding := rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:         "open-cluster-management:token-exchange:agent",
-			GenerateName: clusterName,
+			Name:      "open-cluster-management:token-exchange:agent",
+			Namespace: clusterName,
 		},
 	}
 	_, err = controllerutil.CreateOrUpdate(ctx, a.Client, &rolebinding, func() error {
