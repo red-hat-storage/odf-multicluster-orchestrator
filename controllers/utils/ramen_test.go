@@ -55,28 +55,26 @@ var (
 	StorageClusterNamespace = "openshift-storage"
 )
 
-func fakeMirrorPeers(manageS3 bool) []multiclusterv1alpha1.MirrorPeer {
-	return []multiclusterv1alpha1.MirrorPeer{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "mirrorpeer",
-			},
-			Spec: multiclusterv1alpha1.MirrorPeerSpec{
-				ManageS3: manageS3,
-				Items: []multiclusterv1alpha1.PeerRef{
-					{
-						ClusterName: TestSourceManagedClusterEast,
-						StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
-							Name:      StorageClusterName,
-							Namespace: StorageClusterNamespace,
-						},
+func fakeMirrorPeers(manageS3 bool) multiclusterv1alpha1.MirrorPeer {
+	return multiclusterv1alpha1.MirrorPeer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "mirrorpeer",
+		},
+		Spec: multiclusterv1alpha1.MirrorPeerSpec{
+			ManageS3: manageS3,
+			Items: []multiclusterv1alpha1.PeerRef{
+				{
+					ClusterName: TestSourceManagedClusterEast,
+					StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
+						Name:      StorageClusterName,
+						Namespace: StorageClusterNamespace,
 					},
-					{
-						ClusterName: TestDestinationManagedClusterWest,
-						StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
-							Name:      StorageClusterName,
-							Namespace: StorageClusterNamespace,
-						},
+				},
+				{
+					ClusterName: TestDestinationManagedClusterWest,
+					StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
+						Name:      StorageClusterName,
+						Namespace: StorageClusterNamespace,
 					},
 				},
 			},
@@ -265,14 +263,16 @@ func TestCreateOrUpdateSecretsFromInternalSecret(t *testing.T) {
 	scheme := runtime.NewScheme()
 	err := corev1.AddToScheme(scheme)
 	assert.NoError(t, err)
+	err = multiclusterv1alpha1.AddToScheme(scheme)
+	assert.NoError(t, err)
 	fakeClient := getFakeClient(t, scheme)
 	fakeLogger := GetLogger(GetZapLogger(true))
 	for _, c := range cases {
 		os.Setenv("POD_NAMESPACE", c.ramenNamespace)
 		ctx := context.TODO()
-		err := CreateOrUpdateSecretsFromInternalSecret(ctx, fakeClient, c.ramenNamespace, fakeS3InternalSecret(t, TestSourceManagedClusterEast), fakeMirrorPeers(c.manageS3), fakeLogger)
+		err := CreateOrUpdateSecretsFromInternalSecret(ctx, fakeClient, scheme, c.ramenNamespace, fakeS3InternalSecret(t, TestSourceManagedClusterEast), fakeMirrorPeers(c.manageS3), fakeLogger)
 		assert.NoError(t, err)
-		err = CreateOrUpdateSecretsFromInternalSecret(ctx, fakeClient, c.ramenNamespace, fakeS3InternalSecret(t, TestDestinationManagedClusterWest), fakeMirrorPeers(c.manageS3), fakeLogger)
+		err = CreateOrUpdateSecretsFromInternalSecret(ctx, fakeClient, scheme, c.ramenNamespace, fakeS3InternalSecret(t, TestDestinationManagedClusterWest), fakeMirrorPeers(c.manageS3), fakeLogger)
 		assert.NoError(t, err)
 
 		if c.ignoreS3Profile {

@@ -175,15 +175,36 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			logger.Error("Error occurred while updating the status of mirrorpeer", "Error", statusErr)
 			return ctrl.Result{Requeue: true}, nil
 		}
+
 		if utils.ContainsString(mirrorPeer.GetFinalizers(), mirrorPeerFinalizer) {
+			var drpolicyList ramenv1alpha1.DRPolicyList
+			err := r.Client.List(ctx, &drpolicyList)
+			if err != nil {
+				logger.Error("Failed to delete resources", "error", err)
+				return reconcile.Result{}, err
+			}
+
+			for i := range drpolicyList.Items {
+				drClusters := drpolicyList.Items[i].Spec.DRClusters
+				if (mirrorPeer.Spec.Items[0].ClusterName == drClusters[0] &&
+					mirrorPeer.Spec.Items[1].ClusterName == drClusters[1]) ||
+					(mirrorPeer.Spec.Items[0].ClusterName == drClusters[1] &&
+						mirrorPeer.Spec.Items[1].ClusterName == drClusters[0]) {
+					return reconcile.Result{}, fmt.Errorf("DRPolicy '%s' exists and requires MirrorPeer '%s'. MirrorPeer can not be deleted",
+						drpolicyList.Items[i].Name, mirrorPeer.Name)
+				}
+			}
+
 			if utils.ContainsSuffix(mirrorPeer.GetFinalizers(), addons.SpokeMirrorPeerFinalizer) {
 				logger.Info("Waiting for agent to delete resources")
 				return reconcile.Result{Requeue: true}, err
 			}
+
 			if err := r.deleteSecrets(ctx, mirrorPeer); err != nil {
 				logger.Error("Failed to delete resources", "error", err)
 				return reconcile.Result{Requeue: true}, err
 			}
+
 			mirrorPeer.Finalizers = utils.RemoveString(mirrorPeer.Finalizers, mirrorPeerFinalizer)
 			if err := r.Client.Update(ctx, &mirrorPeer); err != nil {
 				logger.Error("Failed to remove finalizer from MirrorPeer", "error", err)
@@ -277,13 +298,13 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				return ctrl.Result{}, err
 			}
 
-			err = utils.CreateOrUpdateSecretsFromInternalSecret(ctx, r.Client, r.CurrentNamespace, &s3Secret, []multiclusterv1alpha1.MirrorPeer{mirrorPeer}, logger)
+			err = utils.CreateOrUpdateSecretsFromInternalSecret(ctx, r.Client, r.Scheme, r.CurrentNamespace, &s3Secret, mirrorPeer, logger)
 			if err != nil {
 				logger.Error("Error in updating S3 profile", "Cluster", peerRef.ClusterName, "error", err)
 				return ctrl.Result{}, err
 			}
 
-			err = r.createDRClusters(ctx, peerRef.ClusterName, s3Secret)
+			err = r.createDRClusters(ctx, peerRef.ClusterName, s3Secret, mirrorPeer)
 			if err != nil {
 				if k8serrors.IsNotFound(err) {
 					logger.Info("Secret not synchronised yet, retrying to create DRCluster", "MirrorPeer", mirrorPeer.Name)
@@ -791,7 +812,7 @@ func GetNamespacedNameForClientS3Secret(ctx context.Context, client client.Clien
 	return s3SecretName, s3SecretNamespace, nil
 }
 
-func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, name string, secret corev1.Secret) error {
+func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, name string, secret corev1.Secret, mirrorpeer multiclusterv1alpha1.MirrorPeer) error {
 	logger := r.Logger
 
 	logger.Info("Unmarshalling S3 secret", "SecretName", secret.Name)
@@ -801,14 +822,14 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, name string
 		return err
 	}
 
-	dc := ramenv1alpha1.DRCluster{
+	dc := &ramenv1alpha1.DRCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 	}
 
 	logger.Info("Creating and updating DR clusters", "ClusterName", name)
-	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, &dc, func() error {
+	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, dc, func() error {
 		dc.Spec.S3ProfileName = st.S3ProfileName
-		return nil
+		return controllerutil.SetControllerReference(&mirrorpeer, dc, r.Scheme)
 	})
 
 	return err
@@ -866,7 +887,7 @@ func (r *MirrorPeerReconciler) createClusterRoleBindingsForSpoke(ctx context.Con
 			logger.Info("Setting RoleRef for new ClusterRoleBinding", "RoleRef", spokeRoleBinding.RoleRef.Name)
 		}
 
-		return nil
+		return controllerutil.SetControllerReference(&peer, &spokeRoleBinding, r.Scheme)
 	})
 
 	if err != nil {
