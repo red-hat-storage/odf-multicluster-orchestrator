@@ -343,7 +343,7 @@ func TestMirrorPeerReconcile(t *testing.T) {
 			t.Errorf("Failed to get CephFS StorageClass %q: %v", cephfsScName, err)
 		}
 
-		expectedCephFSStorageID := "f9708852fe4cf1f4d5de7e525f1b0aba"
+		expectedCephFSStorageID := "53bcee28df765abb22cdba2d3d16b63c"
 		if foundCephfsSC.Labels[fmt.Sprintf(RamenLabelTemplate, StorageIDKey)] != expectedCephFSStorageID {
 			t.Errorf("CephFS StorageClass %q has incorrect StorageID - expected: %q, got: %q",
 				foundCephfsSC.Name,
@@ -358,7 +358,7 @@ func TestMirrorPeerReconcile(t *testing.T) {
 			t.Errorf("Failed to get CephRBD StorageClass %q: %v", cephRbdScName, err)
 		}
 
-		expectedRBDStorageID := "dcd70114947d0bb1f6b96f0dd6a9aaca"
+		expectedRBDStorageID := "d9b40172f24bf4752da07dfc1ad9c982"
 		if foundCephRBDSC.Labels[fmt.Sprintf(RamenLabelTemplate, StorageIDKey)] != expectedRBDStorageID {
 			t.Errorf("CephRBD StorageClass %q has incorrect StorageID - expected: %q, got: %q",
 				cephRbdScName,

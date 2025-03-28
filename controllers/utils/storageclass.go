@@ -125,28 +125,14 @@ func CalculateStorageId(ctx context.Context, c client.Client, sc *storagev1.Stor
 
 	switch sc.Provisioner {
 	case fmt.Sprintf(RBDProvisionerTemplate, storageClusterNamespacedName.Namespace):
-		poolID, err := fetchPoolIdForCephBlockPool(ctx, c, sc, storageClusterNamespacedName.Namespace)
-		if err != nil {
-			return "", fmt.Errorf("failed to get pool ID: %v", err)
-		}
-		storageId = CalculateMD5Hash([3]string{cephClusterFSID, poolID, DefaultRadosNamespace})
+		storageId = CalculateMD5Hash([2]string{cephClusterFSID, DefaultRadosNamespace})
 
 	case fmt.Sprintf(CephFSProvisionerTemplate, storageClusterNamespacedName.Namespace):
-		fileSystemName := fetchFileSystemNameForCephFileSystem(sc)
-		if fileSystemName == "" {
-			return "", fmt.Errorf("failed to get filesystem name for CephFS StorageClass %s", sc.Name)
-		}
-		storageId = CalculateMD5Hash([3]string{cephClusterFSID, fileSystemName, DefaultSubvolumeGroup})
+		storageId = CalculateMD5Hash([2]string{cephClusterFSID, DefaultSubvolumeGroup})
 
 	default:
 		return "", fmt.Errorf("unknown provisioner type: %s", sc.Provisioner)
 	}
 
 	return storageId, nil
-}
-func fetchFileSystemNameForCephFileSystem(sc *storagev1.StorageClass) string {
-	if sc.Parameters == nil {
-		return ""
-	}
-	return sc.Parameters["fsName"]
 }
