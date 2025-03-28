@@ -70,7 +70,7 @@ const (
 
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get
-// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;delete
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;delete;deletecollection
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update,resourceNames=odf-client-info
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;update;patch

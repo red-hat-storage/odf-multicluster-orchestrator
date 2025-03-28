@@ -16,7 +16,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -87,33 +86,6 @@ func (r *DRPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *DRPolicyReconciler) getMirrorPeerForClusterSet(ctx context.Context, clusterSet []string) (*multiclusterv1alpha1.MirrorPeer, error) {
-	logger := r.Logger
-
-	var mpList multiclusterv1alpha1.MirrorPeerList
-	err := r.HubClient.List(ctx, &mpList)
-	if err != nil {
-		logger.Error("Could not list MirrorPeers on hub", "error", err)
-		return nil, err
-	}
-
-	if len(mpList.Items) == 0 {
-		logger.Info("No MirrorPeers found on hub yet")
-		return nil, k8serrors.NewNotFound(schema.GroupResource{Group: multiclusterv1alpha1.GroupVersion.Group, Resource: "MirrorPeer"}, "MirrorPeerList")
-	}
-
-	for _, mp := range mpList.Items {
-		if (mp.Spec.Items[0].ClusterName == clusterSet[0] && mp.Spec.Items[1].ClusterName == clusterSet[1]) ||
-			(mp.Spec.Items[1].ClusterName == clusterSet[0] && mp.Spec.Items[0].ClusterName == clusterSet[1]) {
-			logger.Info("Found MirrorPeer for DRPolicy", "MirrorPeerName", mp.Name)
-			return &mp, nil
-		}
-	}
-
-	logger.Info("Could not find any MirrorPeer for DRPolicy")
-	return nil, k8serrors.NewNotFound(schema.GroupResource{Group: multiclusterv1alpha1.GroupVersion.Group, Resource: "MirrorPeer"}, fmt.Sprintf("ClusterSet-%s-%s", clusterSet[0], clusterSet[1]))
-}
-
 func (r *DRPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := r.Logger.With("Request", req.NamespacedName.String())
 	logger.Info("Running DRPolicy reconciler on hub cluster")
@@ -131,7 +103,7 @@ func (r *DRPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	// Find MirrorPeer for clusterset for the storagecluster namespaces
-	mirrorPeer, err := r.getMirrorPeerForClusterSet(ctx, drpolicy.Spec.DRClusters)
+	mirrorPeer, err := utils.GetMirrorPeerForClusterSet(ctx, r.HubClient, drpolicy.Spec.DRClusters)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.Info("MirrorPeer not found. Requeuing", "DRClusters", drpolicy.Spec.DRClusters)

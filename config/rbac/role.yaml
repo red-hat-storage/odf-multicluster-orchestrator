@@ -45,6 +45,7 @@ rules:
   verbs:
   - create
   - delete
+  - deletecollection
   - get
   - list
   - update

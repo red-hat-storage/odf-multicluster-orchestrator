@@ -7,6 +7,8 @@ import (
 	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v4/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"gopkg.in/yaml.v2"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -142,4 +144,26 @@ func IsStorageClientType(ctx context.Context, c client.Client, mirrorPeer multic
 		}
 	}
 	return true, nil
+}
+
+func GetMirrorPeerForClusterSet(ctx context.Context, client client.Client, clusterSet []string) (*multiclusterv1alpha1.MirrorPeer, error) {
+
+	var mpList multiclusterv1alpha1.MirrorPeerList
+	err := client.List(ctx, &mpList)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(mpList.Items) == 0 {
+		return nil, k8serrors.NewNotFound(schema.GroupResource{Group: multiclusterv1alpha1.GroupVersion.Group, Resource: "MirrorPeer"}, "MirrorPeerList")
+	}
+
+	for _, mp := range mpList.Items {
+		if (mp.Spec.Items[0].ClusterName == clusterSet[0] && mp.Spec.Items[1].ClusterName == clusterSet[1]) ||
+			(mp.Spec.Items[1].ClusterName == clusterSet[0] && mp.Spec.Items[0].ClusterName == clusterSet[1]) {
+			return &mp, nil
+		}
+	}
+
+	return nil, k8serrors.NewNotFound(schema.GroupResource{Group: multiclusterv1alpha1.GroupVersion.Group, Resource: "MirrorPeer"}, fmt.Sprintf("ClusterSet-%s-%s", clusterSet[0], clusterSet[1]))
 }

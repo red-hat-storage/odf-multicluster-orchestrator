@@ -29,6 +29,7 @@ import (
 	addonutils "open-cluster-management.io/addon-framework/pkg/utils"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -54,6 +55,7 @@ func init() {
 	utilruntime.Must(rookv1.AddToScheme(mgrScheme))
 	utilruntime.Must(extv1.AddToScheme(mgrScheme))
 	utilruntime.Must(snapshotv1.AddToScheme(mgrScheme))
+	utilruntime.Must(workv1.AddToScheme(mgrScheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -185,6 +187,16 @@ func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.
 		CurrentNamespace:     currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create MirrorPeer controller", "controller", "MirrorPeer", "error", err)
+		os.Exit(1)
+	}
+
+	if err = (&ManifestWorkReconciler{
+		Scheme:      mgr.GetScheme(),
+		HubClient:   mgr.GetClient(),
+		SpokeClient: spokeClient,
+		Logger:      logger.With("controller", "ManifestWorkReconciler"),
+	}).SetupWithManager(mgr); err != nil {
+		logger.Error("Failed to create ManifestWork controller", "controller", "ManifestWorkReconciler", "error", err)
 		os.Exit(1)
 	}
 

@@ -10,7 +10,6 @@ import (
 type ProviderInfo struct {
 	Version                       string               `json:"version"`
 	DeploymentType                string               `json:"deploymentType"`
-	StorageSystemName             string               `json:"storageSystemName"`
 	ProviderManagedClusterName    string               `json:"providerManagedClusterName"`
 	NamespacedName                types.NamespacedName `json:"namespacedName"`
 	StorageProviderEndpoint       string               `json:"storageProviderEndpoint"`
