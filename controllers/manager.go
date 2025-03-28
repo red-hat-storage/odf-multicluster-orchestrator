@@ -3,8 +3,6 @@ package controllers
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
-	"log/slog"
 	"os"
 
 	"github.com/go-logr/zapr"
@@ -18,11 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	"golang.org/x/sync/errgroup"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/selection"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"open-cluster-management.io/addon-framework/pkg/addonmanager"
@@ -30,7 +24,6 @@ import (
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -100,41 +93,6 @@ func NewManagerCommand() *cobra.Command {
 	return cmd
 }
 
-// TODO: Remove/update this function in a later release when cleanup is not required.
-func preRunGarbageCollection(cl client.Client, logger *slog.Logger) error {
-	ctx := context.TODO()
-	req, err := labels.NewRequirement("openshiftVersion-major-minor", selection.In, []string{"4.16", "4.17", "4.18"})
-	if err != nil {
-		return fmt.Errorf("couldn't create ManagedCluster selector requirement. %w", err)
-	}
-
-	var managedClusters clusterv1.ManagedClusterList
-	err = cl.List(ctx, &managedClusters, &client.ListOptions{
-		LabelSelector: labels.NewSelector().Add(*req),
-	})
-	if err != nil {
-		return fmt.Errorf("couldn't list ManagedClusters. %w", err)
-	}
-	logger.Info(fmt.Sprintf("Found %v ManagedClusters matching given requirements", len(managedClusters.Items)), "Requirements", req)
-
-	for idx := range managedClusters.Items {
-		maintenanceAddon := addonapiv1alpha1.ManagedClusterAddOn{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "maintenance",
-				Namespace: managedClusters.Items[idx].Name,
-			},
-		}
-		err = cl.Delete(ctx, &maintenanceAddon, &client.DeleteOptions{})
-		if err != nil && !errors.IsNotFound(err) {
-			return fmt.Errorf("failed to delete maintenance addon from cluster %q. %w", managedClusters.Items[idx].Name, err)
-		}
-		if err == nil || errors.IsNotFound(err) {
-			logger.Info("Deleted maintenance addon from ManagedCluster", "ManagedCluster", managedClusters.Items[idx].Name)
-		}
-	}
-	return nil
-}
-
 func (o *ManagerOptions) runManager(ctx context.Context) {
 	zapLogger := utils.GetZapLogger(o.DevMode)
 	defer func() {
@@ -154,23 +112,6 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		logger.Error("Failed to get kubeconfig", "error", err)
 		os.Exit(1)
 	}
-
-	preRunClient, err := client.New(config, client.Options{
-		Scheme: mgrScheme,
-		Cache:  nil,
-	})
-	if err != nil {
-		logger.Error("Failed to create a client for pre-run garbage collection", "error", err)
-		os.Exit(1)
-	}
-
-	logger.Info("Starting garbage collection before starting manager")
-	err = preRunGarbageCollection(preRunClient, logger)
-	if err != nil {
-		logger.Error("Pre-run garbage collection failed", "error", err)
-		os.Exit(1)
-	}
-	logger.Info("Finished garbage collection")
 
 	var tlsOpts []func(*tls.Config)
 	metricsServerOptions := metricsserver.Options{
