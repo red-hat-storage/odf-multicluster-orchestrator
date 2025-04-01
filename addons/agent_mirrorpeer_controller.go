@@ -335,7 +335,7 @@ func (r *MirrorPeerReconciler) fetchClusterStorageIds(ctx context.Context, mp *m
 			for k, v := range storageIds {
 				currentPeerStorageIds[string(k)] = v
 			}
-		} else {
+		} else if clusterType != utils.EXTERNAL {
 			// For remote cluster, get storage IDs from secret
 			secretName := r.getSecretNameByType(clusterType, pr)
 			logger.Info("Checking secret",
