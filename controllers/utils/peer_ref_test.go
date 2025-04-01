@@ -74,7 +74,6 @@ storageCluster:
     ocs.openshift.io/deployment-mode: provider
     uninstall.ocs.openshift.io/cleanup-policy: delete
     uninstall.ocs.openshift.io/mode: graceful
-storageSystemName: ocs-storagecluster-storagesystem
 `,
 			},
 		},

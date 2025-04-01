@@ -44,7 +44,6 @@ storageCluster:
     name: test-storagecluster
   storageProviderEndpoint: ""
   cephClusterFSID: 986532da-8dba-4d35-a8d2-12f037712b39
-storageSystemName: test-storagecluster-storagesystem
 `,
 		},
 	}
