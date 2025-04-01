@@ -265,7 +265,7 @@ func labelDefaultStorageClasses(ctx context.Context, logger *slog.Logger, client
 		logger.Info("Labelling StorageClass", "StorageClass", sc.Name)
 		sc.Labels[fmt.Sprintf(RamenLabelTemplate, StorageIDKey)] = storageIdsMap[storageClassType]
 
-		if err := client.Update(ctx, sc); err != nil {
+		if err := client.Update(ctx, &sc); err != nil {
 			return fmt.Errorf("failed to update StorageClass %s: %v", sc.Name, err)
 		}
 	}
