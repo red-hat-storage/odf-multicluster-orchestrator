@@ -204,7 +204,12 @@ func (a *Addons) permissionConfig(cluster *clusterv1.ManagedCluster, addon *addo
 			{
 				APIGroups: []string{"cluster.open-cluster-management.io"},
 				Resources: []string{"managedclusters"},
-				Verbs:     []string{"get"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"ramendr.openshift.io"},
+				Resources: []string{"drpolicies"},
+				Verbs:     []string{"get", "list", "watch"},
 			},
 		}
 		return nil
