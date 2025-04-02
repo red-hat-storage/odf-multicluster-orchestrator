@@ -117,10 +117,17 @@ func (r *ManifestWorkReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	templateName := manifestwork.Status.ResourceStatus.Manifests[0].ResourceMeta.Name
 	templateNamespace := manifestwork.Status.ResourceStatus.Manifests[0].ResourceMeta.Namespace
 	for _, id := range clusterIDs {
-		var foundConsumer ocsv1alpha1.StorageConsumer
-		err = r.SpokeClient.Get(ctx, types.NamespacedName{Namespace: templateNamespace, Name: fmt.Sprintf("storageconsumer-%s", id)}, &foundConsumer)
+		var storageConsumerList ocsv1alpha1.StorageConsumerList
+		err = r.SpokeClient.List(ctx, &storageConsumerList, client.InNamespace(templateNamespace))
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("unable to reconcile ManifestWork %q: %w", req.String(), err)
+		}
+
+		var foundConsumer ocsv1alpha1.StorageConsumer
+		for consumerIndex := range storageConsumerList.Items {
+			if storageConsumerList.Items[consumerIndex].Status.Client.ClusterID == id {
+				foundConsumer = storageConsumerList.Items[consumerIndex]
+			}
 		}
 
 		expectedConsumer := foundConsumer.DeepCopy()
@@ -138,7 +145,9 @@ func (r *ManifestWorkReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 		if !reflect.DeepEqual(foundConsumer, expectedConsumer) {
 			err = r.SpokeClient.Update(ctx, expectedConsumer)
-			return ctrl.Result{}, fmt.Errorf("unable to reconcile ManifestWork %q: %w", req.String(), err)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("unable to reconcile ManifestWork %q: %w", req.String(), err)
+			}
 		}
 	}
 	return ctrl.Result{}, nil

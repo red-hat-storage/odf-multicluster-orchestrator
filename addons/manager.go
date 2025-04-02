@@ -12,6 +12,7 @@ import (
 	routev1 "github.com/openshift/api/route/v1"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
+	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v4/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
@@ -50,6 +51,7 @@ func init() {
 	utilruntime.Must(replicationv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(corev1.AddToScheme(mgrScheme))
 	utilruntime.Must(ocsv1.AddToScheme(mgrScheme))
+	utilruntime.Must(ocsv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(obv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(routev1.AddToScheme(mgrScheme))
 	utilruntime.Must(rookv1.AddToScheme(mgrScheme))
