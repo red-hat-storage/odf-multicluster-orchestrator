@@ -21,6 +21,7 @@ func CompareSemverMajorMinorVersions(v1, v2 string, opr operator) (bool, error) 
 	}
 	v1Sem.Pre = nil
 	v1Sem.Build = nil
+	v1Sem.Patch = 0
 
 	v2Sem, err := semver.Parse(v2)
 	if err != nil {
@@ -28,6 +29,7 @@ func CompareSemverMajorMinorVersions(v1, v2 string, opr operator) (bool, error) 
 	}
 	v2Sem.Pre = nil
 	v2Sem.Build = nil
+	v2Sem.Patch = 0
 
 	switch opr {
 	case Eq:
