@@ -51,7 +51,7 @@ func (r *ManifestWorkReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return isVRCManifestWork(e.ObjectNew)
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			return isVRCManifestWork(e.Object)
+			return false
 		},
 		GenericFunc: func(e event.GenericEvent) bool {
 			return false
