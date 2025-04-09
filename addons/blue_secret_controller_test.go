@@ -141,8 +141,8 @@ func TestBlueSecretReconciler_Reconcile(t *testing.T) {
 			}
 			// Check StorageIDs
 			expectedStorageIDs := map[string]string{
-				"cephfs": "f9708852fe4cf1f4d5de7e525f1b0aba",
-				"rbd":    "dcd70114947d0bb1f6b96f0dd6a9aaca",
+				"cephfs": "53bcee28df765abb22cdba2d3d16b63c",
+				"rbd":    "d9b40172f24bf4752da07dfc1ad9c982",
 			}
 
 			storageIDsData, exists := reconciledSecret.Data[utils.SecretStorageIDKey]
