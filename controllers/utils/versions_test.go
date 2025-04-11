@@ -28,7 +28,7 @@ func TestCompareSemverMajorMinorVersions(t *testing.T) {
 			name: "test lt",
 			args: args{
 				v1:  "4.19.1",
-				v2:  "4.19.2",
+				v2:  "4.20.1",
 				opr: Lt,
 			},
 			want:    true,
@@ -37,7 +37,7 @@ func TestCompareSemverMajorMinorVersions(t *testing.T) {
 		{
 			name: "test gt",
 			args: args{
-				v1:  "4.19.2",
+				v1:  "4.20.1",
 				v2:  "4.19.1",
 				opr: Gt,
 			},
@@ -51,13 +51,13 @@ func TestCompareSemverMajorMinorVersions(t *testing.T) {
 				v2:  "4.19.1",
 				opr: Eq,
 			},
-			want:    false,
+			want:    true,
 			wantErr: false,
 		},
 		{
 			name: "test lt",
 			args: args{
-				v1:  "4.19.2",
+				v1:  "4.20.1",
 				v2:  "4.19.1",
 				opr: Lt,
 			},
@@ -68,7 +68,7 @@ func TestCompareSemverMajorMinorVersions(t *testing.T) {
 			name: "test gt",
 			args: args{
 				v1:  "4.19.1",
-				v2:  "4.19.2",
+				v2:  "4.20.1",
 				opr: Gt,
 			},
 			want:    false,
