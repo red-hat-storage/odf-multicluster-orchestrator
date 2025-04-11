@@ -325,7 +325,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	if hasStorageClientRef {
+	if hasStorageClientRef && mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
 		result, err := createStorageClusterPeer(ctx, r.Client, logger, r.CurrentNamespace, mirrorPeer)
 		if err != nil {
 			logger.Error("Failed to create StorageClusterPeer", "error", err)

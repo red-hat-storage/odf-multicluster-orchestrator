@@ -356,17 +356,36 @@ func (r *MirrorPeerReconciler) hasSpokeCluster(obj client.Object) bool {
 	return false
 }
 
+func (r *MirrorPeerReconciler) hasProviderSpokeCluster(obj client.Object) bool {
+	mp, ok := obj.(*multiclusterv1alpha1.MirrorPeer)
+	if !ok {
+		return false
+	}
+	if mp.Status.Phase == multiclusterv1alpha1.IncompatibleVersion {
+		return false
+	}
+	peerRefs, err := utils.GetPeerRefForProviderCluster(context.TODO(), r.SpokeClient, r.HubClient, mp)
+	if err != nil {
+		r.Logger.Error("Unable to reconcile MirrorPeer", "MirrorPeer", mp.GetName(), "Error", err)
+		return false
+	}
+	if len(peerRefs) > 0 {
+		return true
+	}
+	return false
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	mirrorPeerSpokeClusterPredicate := predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			return r.hasSpokeCluster(e.Object)
+			return r.hasSpokeCluster(e.Object) || r.hasProviderSpokeCluster(e.Object)
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			return r.hasSpokeCluster(e.Object)
+			return r.hasSpokeCluster(e.Object) || r.hasProviderSpokeCluster(e.Object)
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			return r.hasSpokeCluster(e.ObjectNew)
+			return r.hasSpokeCluster(e.ObjectNew) || r.hasProviderSpokeCluster(e.ObjectNew)
 		},
 		GenericFunc: func(_ event.GenericEvent) bool {
 			return false
