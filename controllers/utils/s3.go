@@ -58,10 +58,8 @@ func CreateOrUpdateObjectBucketClaim(ctx context.Context, c client.Client, bucke
 	}
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c, noobaaOBC, func() error {
-		noobaaOBC.Spec = obv1alpha1.ObjectBucketClaimSpec{
-			BucketName:       bucketName,
-			StorageClassName: fmt.Sprintf("%s.noobaa.io", bucketNamespace),
-		}
+		noobaaOBC.Spec.BucketName = bucketName
+		noobaaOBC.Spec.StorageClassName = fmt.Sprintf("%s.noobaa.io", bucketNamespace)
 
 		if noobaaOBC.Annotations == nil {
 			noobaaOBC.Annotations = annotations
