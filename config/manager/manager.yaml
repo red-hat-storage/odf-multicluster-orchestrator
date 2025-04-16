@@ -26,13 +26,13 @@ spec:
         runAsNonRoot: true
       containers:
       - command:
-        - /manager
+        - /odf-multicluster-orchestrator
         args:
         - manager
         - --leader-elect
         # - --health-probe-bind-address=:8080
         image: controller:latest
-        name: manager
+        name: odf-multicluster-orchestrator
         ports:
         - containerPort: 8081
           protocol: TCP

@@ -36,7 +36,7 @@ metadata:
       ]
     capabilities: Seamless Upgrades
     console.openshift.io/plugins: '["odf-multicluster-console"]'
-    createdAt: "2025-03-27T16:11:36Z"
+    createdAt: "2025-04-16T07:16:26Z"
     olm.skipRange: ""
     operators.openshift.io/infrastructure-features: '["disconnected"]'
     operators.operatorframework.io/builder: operator-sdk-unknown
@@ -324,7 +324,7 @@ spec:
                 - manager
                 - --leader-elect
                 command:
-                - /manager
+                - /odf-multicluster-orchestrator
                 env:
                 - name: TOKEN_EXCHANGE_IMAGE
                   value: quay.io/ocs-dev/odf-multicluster-orchestrator:latest
@@ -343,7 +343,7 @@ spec:
                     port: 8081
                   initialDelaySeconds: 15
                   periodSeconds: 20
-                name: manager
+                name: odf-multicluster-orchestrator
                 ports:
                 - containerPort: 8081
                   protocol: TCP
