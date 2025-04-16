@@ -12,8 +12,10 @@ const (
 	StorageIDKey                  = "storageid"
 	CephFSProvisionerTemplate     = "%s.cephfs.csi.ceph.com"
 	SpokeMirrorPeerFinalizer      = "spoke.multicluster.odf.openshift.io"
+	ResourceDistributionFinalizer = "multicluster.odf.openshift.io/resource-distribution-controller"
 	OBCTypeAnnotationKey          = "multicluster.odf.openshift.io/obc-type"
 	OBCNameAnnotationKey          = "multicluster.odf.openshift.io/obc-name"
+	AddonDeletionlockName         = "token-exchange-addon-lock"
 )
 
 var (

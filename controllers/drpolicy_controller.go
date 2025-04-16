@@ -237,6 +237,9 @@ func getTemplateForVRC(vrc replicationv1alpha1.VolumeReplicationClass, templateN
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      vrc.Name,
 			Namespace: templateNamespace,
+			Labels: map[string]string{
+				utils.CreatedByLabelKey: utils.CreatorMulticlusterOrchestrator,
+			},
 		},
 		Objects: []runtime.RawExtension{
 			{

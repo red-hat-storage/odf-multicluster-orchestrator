@@ -17,17 +17,18 @@ import (
 type SecretLabelType string
 
 const (
-	InternalLabel         SecretLabelType = "INTERNAL"
-	IgnoreLabel           SecretLabelType = "IGNORE"
-	ProviderLabel         SecretLabelType = "PROVIDER"
-	SecretLabelTypeKey                    = "multicluster.odf.openshift.io/secret-type"
-	CreatedByLabelKey                     = "multicluster.odf.openshift.io/created-by"
-	NamespaceKey                          = "namespace"
-	StorageClusterNameKey                 = "storage-cluster-name"
-	SecretDataKey                         = "secret-data"
-	SecretOriginKey                       = "secret-origin"
-	MirrorPeerSecret                      = "mirrorpeersecret"
-	HubRecoveryLabel                      = "cluster.open-cluster-management.io/backup"
+	InternalLabel                   SecretLabelType = "INTERNAL"
+	IgnoreLabel                     SecretLabelType = "IGNORE"
+	ProviderLabel                   SecretLabelType = "PROVIDER"
+	SecretLabelTypeKey                              = "multicluster.odf.openshift.io/secret-type"
+	CreatedByLabelKey                               = "multicluster.odf.openshift.io/created-by"
+	CreatorMulticlusterOrchestrator                 = "odf-multicluster-orchestrator"
+	NamespaceKey                                    = "namespace"
+	StorageClusterNameKey                           = "storage-cluster-name"
+	SecretDataKey                                   = "secret-data"
+	SecretOriginKey                                 = "secret-origin"
+	MirrorPeerSecret                                = "mirrorpeersecret"
+	HubRecoveryLabel                                = "cluster.open-cluster-management.io/backup"
 )
 
 type S3Token struct {

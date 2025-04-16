@@ -15,6 +15,7 @@ const (
 	ODFInfoConfigMapName                = "odf-info"
 	ConfigMapResourceType               = "ConfigMap"
 	ClientInfoConfigMapName             = "odf-client-info"
+	StorageClientMappingConfigMapName   = "storage-client-mapping"
 	StorageClusterPeerNameAnnotationKey = "ocs.openshift.io/storage-cluster-peer"
 )
 
@@ -41,6 +42,10 @@ func GetODFInfoConfigMap(ctx context.Context, c client.Client, namespace string)
 
 func FetchClientInfoConfigMap(ctx context.Context, c client.Client, currentNamespace string) (*corev1.ConfigMap, error) {
 	return FetchConfigMap(ctx, c, ClientInfoConfigMapName, currentNamespace)
+}
+
+func GetStorageClientMapping(ctx context.Context, c client.Client, currentNamespace string) (*corev1.ConfigMap, error) {
+	return FetchConfigMap(ctx, c, StorageClientMappingConfigMapName, currentNamespace)
 }
 
 func DecodeConfigMap(objJson []byte) (*corev1.ConfigMap, error) {
