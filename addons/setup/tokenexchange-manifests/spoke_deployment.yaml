@@ -39,7 +39,7 @@ spec:
           periodSeconds: 30
           initialDelaySeconds: 60
         command:
-        - "/manager"
+        - "/odf-multicluster-orchestrator"
         args:
           - "addons"
           - "--hub-kubeconfig=/var/run/hub/kubeconfig"
