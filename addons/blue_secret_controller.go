@@ -2,18 +2,21 @@ package addons
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
+	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // BlueSecretReconciler reconciles a MirrorPeer object
@@ -46,12 +49,50 @@ func (r *BlueSecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		},
 	}
 
+	cephClusterPredicate := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			c, ok := e.Object.(*rookv1.CephCluster)
+			if !ok {
+				return false
+			}
+			return c.Status.CephStatus.FSID != ""
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return false
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oc, ok := e.ObjectOld.(*rookv1.CephCluster)
+			if !ok {
+				return false
+			}
+			nc, ok := e.ObjectNew.(*rookv1.CephCluster)
+			if !ok {
+				return false
+			}
+			return oc.Status.CephStatus.FSID != nc.Status.CephStatus.FSID
+		},
+		GenericFunc: func(_ event.GenericEvent) bool {
+			return false
+		},
+	}
+
 	r.Logger.Info("Setting up controller with manager")
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("bluesecret_controller").
 		Watches(&corev1.Secret{}, &handler.EnqueueRequestForObject{},
-			builder.WithPredicates(predicate.LabelChangedPredicate{}, blueSecretPredicate)).
+			builder.WithPredicates(blueSecretPredicate)).
+		Watches(&rookv1.CephCluster{}, handler.EnqueueRequestsFromMapFunc(
+			func(_ context.Context, obj client.Object) []reconcile.Request {
+				return []reconcile.Request{
+					{
+						NamespacedName: types.NamespacedName{
+							Name:      fmt.Sprintf("%s-%s", RookDefaultBlueSecretMatchConvergedString, obj.GetName()),
+							Namespace: obj.GetNamespace(),
+						},
+					},
+				}
+			}), builder.WithPredicates(cephClusterPredicate)).
 		Complete(r)
 }
 

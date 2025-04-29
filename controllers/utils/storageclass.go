@@ -121,8 +121,11 @@ func CalculateStorageId(ctx context.Context, c client.Client, sc *storagev1.Stor
 	}
 
 	cephClusterFSID := cephCluster.Status.CephStatus.FSID
-	var storageId string
+	if cephClusterFSID == "" {
+		return "", fmt.Errorf("failed to calculate StorageID. Ceph FSID is empty")
+	}
 
+	var storageId string
 	switch sc.Provisioner {
 	case fmt.Sprintf(RBDProvisionerTemplate, storageClusterNamespacedName.Namespace):
 		storageId = CalculateMD5Hash([2]string{cephClusterFSID, DefaultRadosNamespace})
