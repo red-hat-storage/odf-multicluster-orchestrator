@@ -10,6 +10,7 @@ import (
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	routev1 "github.com/openshift/api/route/v1"
+	templatev1 "github.com/openshift/api/template/v1"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
 	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v4/v1alpha1"
@@ -22,6 +23,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
@@ -30,7 +33,6 @@ import (
 	addonutils "open-cluster-management.io/addon-framework/pkg/utils"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -57,7 +59,7 @@ func init() {
 	utilruntime.Must(rookv1.AddToScheme(mgrScheme))
 	utilruntime.Must(extv1.AddToScheme(mgrScheme))
 	utilruntime.Must(snapshotv1.AddToScheme(mgrScheme))
-	utilruntime.Must(workv1.AddToScheme(mgrScheme))
+	utilruntime.Must(templatev1.AddToScheme(mgrScheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -192,16 +194,6 @@ func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.
 		os.Exit(1)
 	}
 
-	if err = (&ManifestWorkReconciler{
-		Scheme:      mgr.GetScheme(),
-		HubClient:   mgr.GetClient(),
-		SpokeClient: spokeClient,
-		Logger:      logger.With("controller", "ManifestWorkReconciler"),
-	}).SetupWithManager(mgr); err != nil {
-		logger.Error("Failed to create ManifestWork controller", "controller", "ManifestWorkReconciler", "error", err)
-		os.Exit(1)
-	}
-
 	logger.Info("Starting hub controller manager")
 	if err := mgr.Start(ctx); err != nil {
 		logger.Error("Problem running hub controller manager", "error", err)
@@ -275,6 +267,30 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slo
 		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create S3Secret controller", "controller", "S3Secret", "error", err)
+		os.Exit(1)
+	}
+
+	if err = (&ResourceDistributionReconciler{
+		Scheme:           mgr.GetScheme(),
+		HubClient:        hubClient,
+		SpokeClient:      mgr.GetClient(),
+		SpokeClusterName: options.SpokeClusterName,
+		Logger:           logger.With("controller", "ResourceDistributionReconciler"),
+		CurrentNamespace: currentNamespace,
+	}).SetupWithManager(mgr); err != nil {
+		logger.Error("Failed to create ResourceDistributionReconciler controller", "controller", "ResourceDistributionReconciler", "error", err)
+		os.Exit(1)
+	}
+
+	addonDeletionLock := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      AddonDeletionlockName,
+			Namespace: currentNamespace,
+		},
+	}
+	_, err = spokeKubeClient.CoreV1().ConfigMaps(currentNamespace).Create(ctx, &addonDeletionLock, metav1.CreateOptions{})
+	if err != nil && !errors.IsAlreadyExists(err) {
+		logger.Error("Error occurred when creating addon deletion lock", "error", err)
 		os.Exit(1)
 	}
 

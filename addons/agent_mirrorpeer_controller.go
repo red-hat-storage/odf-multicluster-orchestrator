@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
@@ -116,6 +117,16 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 		}
 	} else {
+		var addonDeletionlock corev1.ConfigMap
+		err = r.SpokeClient.Get(ctx, types.NamespacedName{Namespace: r.CurrentNamespace, Name: AddonDeletionlockName}, &addonDeletionlock)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		if slices.Contains(addonDeletionlock.GetFinalizers(), ResourceDistributionFinalizer) {
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+
 		result, err := r.deleteMirrorPeer(ctx, mirrorPeer, scr)
 		if err != nil {
 			return result, err
@@ -130,12 +141,12 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			logger.Error("Failed to retrieve MirrorPeer after deletion", "error", err)
 			return ctrl.Result{}, err
 		}
-		mirrorPeer.Finalizers = utils.RemoveString(mirrorPeer.Finalizers, agentFinalizer)
 
-		if err := r.HubClient.Update(ctx, &mirrorPeer); err != nil {
-			logger.Error("Failed to remove finalizer from MirrorPeer", "error", err)
+		err = removeFinalizerFromObject(ctx, r.HubClient, &mirrorPeer, agentFinalizer)
+		if err != nil {
 			return ctrl.Result{}, err
 		}
+
 		logger.Info("MirrorPeer deletion complete")
 		return ctrl.Result{}, nil
 	}

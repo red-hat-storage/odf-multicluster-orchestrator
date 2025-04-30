@@ -206,11 +206,6 @@ func (a *Addons) permissionConfig(cluster *clusterv1.ManagedCluster, addon *addo
 				Resources: []string{"managedclusters"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
-			{
-				APIGroups: []string{"ramendr.openshift.io"},
-				Resources: []string{"drpolicies"},
-				Verbs:     []string{"get", "list", "watch"},
-			},
 		}
 		return nil
 	})
@@ -280,11 +275,6 @@ func (a *Addons) permissionConfig(cluster *clusterv1.ManagedCluster, addon *addo
 				APIGroups: []string{"addon.open-cluster-management.io"},
 				Resources: []string{"managedclusteraddons/status"},
 				Verbs:     []string{"patch", "update"},
-			},
-			{
-				APIGroups: []string{"work.open-cluster-management.io"},
-				Resources: []string{"manifestworks"},
-				Verbs:     []string{"get", "list", "watch"},
 			},
 		}
 		return nil
