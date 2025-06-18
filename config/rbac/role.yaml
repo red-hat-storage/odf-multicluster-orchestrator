@@ -165,6 +165,7 @@ rules:
   - drclusters
   verbs:
   - create
+  - delete
   - get
   - list
   - update

@@ -36,7 +36,7 @@ metadata:
       ]
     capabilities: Seamless Upgrades
     console.openshift.io/plugins: '["odf-multicluster-console"]'
-    createdAt: "2025-04-16T07:16:26Z"
+    createdAt: "2025-06-18T05:39:14Z"
     olm.skipRange: ""
     operators.openshift.io/infrastructure-features: '["disconnected"]'
     operators.operatorframework.io/builder: operator-sdk-unknown
@@ -228,6 +228,7 @@ spec:
           - drclusters
           verbs:
           - create
+          - delete
           - get
           - list
           - update
