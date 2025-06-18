@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-func CreateOrUpdateManifestWork(ctx context.Context, c client.Client, name string, namespace string, objJson []byte, ownerRef metav1.OwnerReference) (controllerutil.OperationResult, error) {
+func CreateOrUpdateManifestWork(ctx context.Context, c client.Client, name string, namespace string, objJson []byte, manifestConfigOptions []workv1.ManifestConfigOption, ownerRef metav1.OwnerReference) (controllerutil.OperationResult, error) {
 	mw := workv1.ManifestWork{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -34,6 +34,9 @@ func CreateOrUpdateManifestWork(ctx context.Context, c client.Client, name strin
 					},
 				},
 			},
+		}
+		if len(manifestConfigOptions) > 0 {
+			mw.Spec.ManifestConfigs = manifestConfigOptions
 		}
 		return nil
 	})

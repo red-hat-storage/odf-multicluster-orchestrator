@@ -22,6 +22,7 @@ import (
 	"log/slog"
 	"reflect"
 
+	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
@@ -85,7 +86,7 @@ func isVersionCompatible(peerRef multiclusterv1alpha1.PeerRef, clientInfoMap map
 // checkStorageClusterPeerStatus checks if the ManifestWorks for StorageClusterPeer resources
 // have been created and reached the Applied status.
 func checkStorageClusterPeerStatus(ctx context.Context, client client.Client, logger *slog.Logger, currentNamespace string, mirrorPeer *multiclusterv1alpha1.MirrorPeer) (bool, error) {
-	logger.Info("Checking if StorageClusterPeer ManifestWorks have been created and reached Applied status")
+	logger.Info("Checking if StorageClusterPeer ManifestWorks have been created and reached Peered status")
 
 	// Fetch the client info ConfigMap
 	clientInfoMap, err := utils.FetchClientInfoConfigMap(ctx, client, currentNamespace)
@@ -140,12 +141,17 @@ func checkStorageClusterPeerStatus(ctx context.Context, client client.Client, lo
 			logger.Info("StorageClusterPeer ManifestWork has not reached Applied status", "ManifestWorkName", manifestWorkName)
 			return false, nil
 		}
-
 		logger.Info("StorageClusterPeer ManifestWork has reached Applied status", "ManifestWorkName", manifestWorkName)
+
+		if *manifestWork.Status.ResourceStatus.Manifests[0].StatusFeedbacks.Values[0].Value.String != string(ocsv1.StorageClusterPeerStatePeered) {
+			logger.Info("StorageClusterPeer has not reached Peered status", "ManifestWorkName", manifestWorkName)
+			return false, nil
+		}
+		logger.Info("StorageClusterPeer has reached Peered status", "ManifestWorkName", manifestWorkName)
 	}
 
 	// All ManifestWorks have been created and have Applied status
-	logger.Info("All StorageClusterPeer ManifestWorks have been created and reached Applied status")
+	logger.Info("All StorageClusterPeer ManifestWorks have been created and reached Peered status")
 	return true, nil
 }
 
