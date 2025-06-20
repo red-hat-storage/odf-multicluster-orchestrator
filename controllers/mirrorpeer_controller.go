@@ -38,6 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/ptr"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -214,6 +215,11 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			if utils.ContainsSuffix(mirrorPeer.GetFinalizers(), addons.SpokeMirrorPeerFinalizer) {
 				logger.Info("Waiting for agent to delete resources")
 				return reconcile.Result{Requeue: true}, err
+			}
+
+			if err := deleteManagedClusterAddon(ctx, r.Client, r.Scheme, r.CurrentNamespace, mirrorPeer); err != nil {
+				logger.Error("Failed to delete ManagedClusterAddon", "error", err)
+				return reconcile.Result{}, err
 			}
 
 			if err := r.deleteSecrets(ctx, mirrorPeer); err != nil {
@@ -643,6 +649,62 @@ func getConfig(ctx context.Context, c client.Client, currentNamespace string, mp
 	return managedClusterAddonsConfig, nil
 }
 
+func deleteManagedClusterAddon(ctx context.Context, client client.Client, scheme *runtime.Scheme, currentNamespace string, mirrorPeer multiclusterv1alpha1.MirrorPeer) error {
+	addonConfigs, err := getConfig(ctx, client, currentNamespace, mirrorPeer)
+	if err != nil {
+		return fmt.Errorf("failed to get managedclusteraddon config %w", err)
+	}
+
+	for _, config := range addonConfigs {
+		var managedClusterAddOn addonapiv1alpha1.ManagedClusterAddOn
+		namespacedName := types.NamespacedName{
+			Name:      config.Name,
+			Namespace: config.Namespace,
+		}
+
+		err := client.Get(ctx, namespacedName, &managedClusterAddOn)
+		if err != nil {
+			return err
+		}
+
+		refs := []metav1.OwnerReference{
+			{
+				APIVersion:         "addon.open-cluster-management.io/v1alpha1",
+				Kind:               "ManagedClusterAddOn",
+				Name:               mirrorPeer.GetName(),
+				UID:                mirrorPeer.GetUID(),
+				BlockOwnerDeletion: ptr.To(true),
+				Controller:         ptr.To(true),
+			},
+		}
+
+		found, err := controllerutil.HasOwnerReference(refs, &managedClusterAddOn, scheme)
+		if err != nil {
+			return err
+		}
+
+		if found {
+			err = controllerutil.RemoveOwnerReference(&mirrorPeer, &managedClusterAddOn, scheme)
+			if err != nil {
+				return err
+			}
+		}
+
+		err = client.Get(ctx, namespacedName, &managedClusterAddOn)
+		if err != nil {
+			return err
+		}
+
+		if len(managedClusterAddOn.GetOwnerReferences()) == 0 {
+			err = client.Delete(ctx, &managedClusterAddOn)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // processManagedClusterAddon creates an addon for the cluster management in all the peer refs,
 // the resources gets an owner ref of the mirrorpeer to let the garbage collector handle it if the mirrorpeer gets deleted
 func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer) error {
@@ -672,7 +734,7 @@ func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, m
 
 			managedClusterAddOn.Annotations = annotations
 			managedClusterAddOn.Spec.InstallNamespace = config.InstallNamespace
-			return controllerutil.SetControllerReference(&mirrorPeer, &managedClusterAddOn, r.Scheme)
+			return controllerutil.SetOwnerReference(&mirrorPeer, &managedClusterAddOn, r.Scheme)
 		})
 
 		if err != nil {
@@ -786,15 +848,33 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return reqs
 	}
 
+	addonToMirrorPeerMapFunc := func(ctx context.Context, object client.Object) []ctrl.Request {
+		r.Logger.Debug("Mapping ManagedClusterAddon to MirrorPeer", "ManagedClusterAddon", client.ObjectKeyFromObject(object))
+		var reqs []ctrl.Request
+		addon, ok := object.(*addonapiv1alpha1.ManagedClusterAddOn)
+		if !ok {
+			r.Logger.Debug("Unable to cast object into ManagedClusterAddon. Not requeing any requests.")
+			return reqs
+		}
+		for _, owners := range addon.GetOwnerReferences() {
+			if owners.Kind == "MirrorPeer" {
+				reqs = append(reqs, reconcile.Request{NamespacedName: types.NamespacedName{Name: owners.Name}})
+			}
+		}
+		r.Logger.Info("MirrorPeer reconcile requests generated based on ManagedClusterAddon change.", "RequestCount", len(reqs), "Requests", reqs)
+		return reqs
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		Owns(&addonapiv1alpha1.ManagedClusterAddOn{}, builder.WithPredicates(predicate.NewPredicateFuncs(func(object client.Object) bool {
-			mca, ok := object.(*addonapiv1alpha1.ManagedClusterAddOn)
-			if !ok || mca.Name != setup.TokenExchangeName {
-				return false
-			}
-			return true
-		}))).
+		Watches(&addonapiv1alpha1.ManagedClusterAddOn{}, handler.EnqueueRequestsFromMapFunc(addonToMirrorPeerMapFunc),
+			builder.WithPredicates(predicate.NewPredicateFuncs(func(object client.Object) bool {
+				mca, ok := object.(*addonapiv1alpha1.ManagedClusterAddOn)
+				if !ok || mca.Name != setup.TokenExchangeName {
+					return false
+				}
+				return true
+			}))).
 		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(cmToMirrorPeerMapFunc),
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(object client.Object) bool {
 				cm, ok := object.(*corev1.ConfigMap)
