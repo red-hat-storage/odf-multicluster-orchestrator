@@ -40,6 +40,7 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -450,7 +451,7 @@ func updateProviderConfigMap(logger *slog.Logger, ctx context.Context, client cl
 	}
 
 	logger.Info("Creating or updating ManifestWork with updated ConfigMap")
-	_, err = utils.CreateOrUpdateManifestWork(ctx, client, manifestWorkName, manifestWorkNamespace, updatedObjJson, ownerRef)
+	_, err = utils.CreateOrUpdateManifestWork(ctx, client, manifestWorkName, manifestWorkNamespace, updatedObjJson, []workv1.ManifestConfigOption{}, ownerRef)
 	if err != nil {
 		return fmt.Errorf("failed to update ManifestWork for provider %s: %w", providerName, err)
 	}
@@ -543,7 +544,28 @@ func createStorageClusterPeer(ctx context.Context, client client.Client, logger 
 		// The namespace of Provider A is where this ManifestWork will be created on the hub
 		namespace := currentClient.ProviderInfo.ProviderManagedClusterName
 
-		operationResult, err := utils.CreateOrUpdateManifestWork(ctx, client, manifestWorkName, namespace, storageClusterPeerJson, ownerRef)
+		manifesConfigOption := []workv1.ManifestConfigOption{
+			{
+				ResourceIdentifier: workv1.ResourceIdentifier{
+					Group:     ocsv1.GroupVersion.Group,
+					Resource:  "storageclusterpeers",
+					Name:      storageClusterPeer.Name,
+					Namespace: storageClusterPeer.Namespace,
+				},
+				FeedbackRules: []workv1.FeedbackRule{
+					{
+						Type: workv1.JSONPathsType,
+						JsonPaths: []workv1.JsonPath{
+							{
+								Name: "state",
+								Path: ".status.state",
+							},
+						},
+					},
+				},
+			},
+		}
+		operationResult, err := utils.CreateOrUpdateManifestWork(ctx, client, manifestWorkName, namespace, storageClusterPeerJson, manifesConfigOption, ownerRef)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
