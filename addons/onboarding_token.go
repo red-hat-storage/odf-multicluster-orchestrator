@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
@@ -72,7 +71,7 @@ func requestStorageClusterPeerToken(ctx context.Context, proxyServiceNamespace s
 	return body, nil
 }
 
-func createStorageClusterPeerTokenSecret(ctx context.Context, client client.Client, scheme *runtime.Scheme, spokeClusterName string, odfOperatorNamespace string, mirrorPeer multiclusterv1alpha1.MirrorPeer, storageClusterRef *v1alpha1.StorageClusterRef) error {
+func createStorageClusterPeerTokenSecret(ctx context.Context, client client.Client, scheme *runtime.Scheme, spokeClusterName string, odfOperatorNamespace string, mirrorPeer multiclusterv1alpha1.MirrorPeer, storageClusterRef *multiclusterv1alpha1.StorageClusterRef) error {
 	uniqueSecretName := string(mirrorPeer.GetUID())
 	_, err := utils.FetchSecretWithName(ctx, client, types.NamespacedName{Namespace: spokeClusterName, Name: uniqueSecretName})
 	if err != nil && !errors.IsNotFound(err) {
