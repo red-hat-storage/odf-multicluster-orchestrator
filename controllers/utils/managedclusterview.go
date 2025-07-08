@@ -39,6 +39,7 @@ func CreateOrUpdateManagedClusterView(ctx context.Context, client ctrlClient.Cli
 		}
 
 		mcv.Labels[CreatedByLabelKey] = "odf-multicluster-managedcluster-controller"
+		mcv.Labels[HubRecoveryLabel] = ""
 
 		if ownerRef != nil {
 			mcv.OwnerReferences = []metav1.OwnerReference{*ownerRef}
