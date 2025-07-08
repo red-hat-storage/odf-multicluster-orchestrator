@@ -190,6 +190,11 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, operatorNames
 
 	op, err := controllerutil.CreateOrUpdate(ctx, c, configMap, func() error {
 
+		if configMap.Labels == nil {
+			configMap.Labels = make(map[string]string)
+		}
+		configMap.Labels[utils.HubRecoveryLabel] = ""
+
 		if configMap.Data == nil {
 			configMap.Data = make(map[string]string)
 		}
