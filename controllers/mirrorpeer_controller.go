@@ -141,35 +141,29 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// MirrorPeer.Spec must be defined
 	if err := undefinedMirrorPeerSpec(mirrorPeer.Spec); err != nil {
 		logger.Error("MirrorPeer spec is undefined", "error", err)
-		return ctrl.Result{Requeue: false}, err
+		return r.updateMirrorPeerStatusMessage(ctx, mirrorPeer, false, err)
 	}
 	// MirrorPeer.Spec.Items must be unique
 	if err := uniqueSpecItems(mirrorPeer.Spec); err != nil {
 		logger.Error("MirrorPeer spec items are not unique", "error", err)
-		return ctrl.Result{Requeue: false}, err
+		return r.updateMirrorPeerStatusMessage(ctx, mirrorPeer, false, err)
 	}
 	for i := range mirrorPeer.Spec.Items {
 		// MirrorPeer.Spec.Items must not have empty fields
 		if err := emptySpecItems(mirrorPeer.Spec.Items[i]); err != nil {
 			logger.Error("MirrorPeer spec items have empty fields", "error", err)
-			return reconcile.Result{Requeue: false}, err
+			return r.updateMirrorPeerStatusMessage(ctx, mirrorPeer, false, err)
 		}
 		// MirrorPeer.Spec.Items[*].ClusterName must be a valid ManagedCluster
 		if err := isManagedCluster(ctx, r.Client, mirrorPeer.Spec.Items[i].ClusterName); err != nil {
 			logger.Error("Invalid ManagedCluster", "ClusterName", mirrorPeer.Spec.Items[i].ClusterName, "error", err)
-			return ctrl.Result{}, err
+			return r.updateMirrorPeerStatusMessage(ctx, mirrorPeer, false, err)
 		}
 		// MirrorPeer.Spec.Items[*].StorageClusterRef must have a compatible version
 		if err := isVersionCompatible(mirrorPeer.Spec.Items[i], clientInfoMap.Data); err != nil {
 			logger.Error("Can not reconcile MirrorPeer", "error", err)
 			mirrorPeer.Status.Phase = multiclusterv1alpha1.IncompatibleVersion
-			mirrorPeer.Status.Message = err.Error()
-			statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
-			if statusErr != nil {
-				logger.Error("Error occurred while updating the status of mirrorpeer. Requeing request.", "Error ", statusErr)
-				return ctrl.Result{Requeue: true}, nil
-			}
-			return ctrl.Result{}, err
+			return r.updateMirrorPeerStatusMessage(ctx, mirrorPeer, false, err)
 		} else {
 			if mirrorPeer.Status.Phase == multiclusterv1alpha1.IncompatibleVersion {
 				mirrorPeer.Status.Phase = ""
@@ -273,12 +267,12 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	hasStorageClientRef, err := utils.IsStorageClientType(ctx, r.Client, mirrorPeer, false)
 	if err != nil {
 		logger.Error("Failed to determine if MirrorPeer contains StorageClient reference", "error", err)
-		return ctrl.Result{}, err
+		return r.updateMirrorPeerStatusMessage(ctx, mirrorPeer, false, err)
 	}
 
 	if err := r.processManagedClusterAddon(ctx, mirrorPeer); err != nil {
 		logger.Error("Failed to process managedclusteraddon", "error", err)
-		return ctrl.Result{}, err
+		return r.updateMirrorPeerStatusMessage(ctx, mirrorPeer, false, err)
 	}
 
 	// update s3 profile when MirrorPeer changes
@@ -311,13 +305,13 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					return ctrl.Result{Requeue: true}, nil
 				}
 				logger.Error("Error in fetching s3 internal secret", "Cluster", peerRef.ClusterName, "error", err)
-				return ctrl.Result{}, err
+				return r.updateMirrorPeerStatusMessage(ctx, mirrorPeer, false, err)
 			}
 
 			err = utils.CreateOrUpdateSecretsFromInternalSecret(ctx, r.Client, r.Scheme, r.CurrentNamespace, &s3Secret, mirrorPeer, logger)
 			if err != nil {
 				logger.Error("Error in updating S3 profile", "Cluster", peerRef.ClusterName, "error", err)
-				return ctrl.Result{}, err
+				return r.updateMirrorPeerStatusMessage(ctx, mirrorPeer, false, err)
 			}
 
 			err = r.createDRClusters(ctx, peerRef.ClusterName, s3Secret, mirrorPeer)
@@ -327,7 +321,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					return ctrl.Result{Requeue: true}, nil
 				}
 				logger.Error("Failed to create DRClusters for MirrorPeer", "error", err)
-				return ctrl.Result{}, err
+				return r.updateMirrorPeerStatusMessage(ctx, mirrorPeer, false, err)
 			}
 		}
 	}
@@ -336,13 +330,13 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		result, err := createStorageClusterPeer(ctx, r.Client, logger, r.CurrentNamespace, mirrorPeer)
 		if err != nil {
 			logger.Error("Failed to create StorageClusterPeer", "error", err)
-			return result, err
+			return r.updateMirrorPeerStatusMessage(ctx, mirrorPeer, result.Requeue, err)
 		}
 
 		result, err = createManifestWorkForClusterPairingConfigMap(ctx, r.Client, logger, r.CurrentNamespace, mirrorPeer)
 		if err != nil {
 			logger.Error("Failed to create ManifestWork for ClusterPairingConfigMap", "error", err)
-			return result, err
+			return r.updateMirrorPeerStatusMessage(ctx, mirrorPeer, result.Requeue, err)
 		}
 	}
 
@@ -1005,6 +999,18 @@ func (r *MirrorPeerReconciler) updateMirrorPeerStatus(ctx context.Context, mirro
 	}
 
 	return ctrl.Result{Requeue: true}, nil
+}
+
+// updateMirrorPeerStatusMessage updates the MirrorPeer.Status.Message with the reconcile error message
+func (r *MirrorPeerReconciler) updateMirrorPeerStatusMessage(ctx context.Context, mirrorPeer multiclusterv1alpha1.MirrorPeer, ctrlRequeue bool, err error) (ctrl.Result, error) {
+	mirrorPeer.Status.Message = err.Error()
+	statusErr := r.Client.Status().Update(ctx, &mirrorPeer)
+	if statusErr != nil {
+		r.Logger.Error("Error occurred while updating the status of mirrorpeer. Requeing request.", "Error ", statusErr)
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	return ctrl.Result{Requeue: ctrlRequeue}, err
 }
 
 func isProviderModePeeringDone(ctx context.Context, client client.Client, logger *slog.Logger, currentNamespace string, mirrorPeer *multiclusterv1alpha1.MirrorPeer) (bool, error) {
