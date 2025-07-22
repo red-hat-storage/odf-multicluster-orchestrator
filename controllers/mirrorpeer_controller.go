@@ -876,13 +876,14 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return true
 			}))).
 		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(cmToMirrorPeerMapFunc),
-			builder.WithPredicates(predicate.NewPredicateFuncs(func(object client.Object) bool {
-				cm, ok := object.(*corev1.ConfigMap)
-				if !ok || cm.Name != utils.ClientInfoConfigMapName || cm.Namespace != r.CurrentNamespace {
-					return false
-				}
-				return true
-			}))).
+			builder.WithPredicates(
+				predicate.Or(
+					utils.NamePredicate(utils.ClientInfoConfigMapName),
+					utils.NamePredicate(utils.RamenHubOperatorConfigName),
+				),
+				utils.NamespacePredicate(r.CurrentNamespace),
+				utils.EventTypePredicate(true, true, true, true),
+			)).
 		Complete(r)
 }
 
