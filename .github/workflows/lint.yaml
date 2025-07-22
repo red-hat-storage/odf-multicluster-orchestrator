@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go: [ '1.23' ]
+        go: [ '1.24' ]
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
@@ -31,7 +31,7 @@ jobs:
     - name: Lint
       uses: golangci/golangci-lint-action@v3
       with:
-        version: v1.63.4
+        version: v1.64.8
 
   kube-linter:
     name: Kube YAML
