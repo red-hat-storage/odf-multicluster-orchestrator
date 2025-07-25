@@ -26,7 +26,6 @@ import (
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
-	"k8s.io/apimachinery/pkg/api/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -60,7 +59,7 @@ func isManagedCluster(ctx context.Context, client client.Client, clusterName str
 	var mcluster clusterv1.ManagedCluster
 	err := client.Get(ctx, types.NamespacedName{Name: clusterName}, &mcluster)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if k8serrors.IsNotFound(err) {
 			return fmt.Errorf("validation: ManagedCluster %q not found : %q is not a managed cluster", clusterName, clusterName)
 		}
 		return fmt.Errorf("validation: unable to get ManagedCluster %q: error: %v", clusterName, err)
@@ -143,8 +142,14 @@ func checkStorageClusterPeerStatus(ctx context.Context, client client.Client, lo
 		}
 		logger.Info("StorageClusterPeer ManifestWork has reached Applied status", "ManifestWorkName", manifestWorkName)
 
-		if *manifestWork.Status.ResourceStatus.Manifests[0].StatusFeedbacks.Values[0].Value.String != string(ocsv1.StorageClusterPeerStatePeered) {
-			logger.Info("StorageClusterPeer has not reached Peered status", "ManifestWorkName", manifestWorkName)
+		mwResourceStatusManifests := manifestWork.Status.ResourceStatus.Manifests
+		if len(mwResourceStatusManifests) > 0 {
+			if *mwResourceStatusManifests[0].StatusFeedbacks.Values[0].Value.String != string(ocsv1.StorageClusterPeerStatePeered) {
+				logger.Info("StorageClusterPeer has not reached Peered status", "ManifestWorkName", manifestWorkName)
+				return false, nil
+			}
+		} else {
+			logger.Info("StorageClusterPeer ManifestWork has not been updated with resource status yet", "ManifestWorkName", manifestWorkName)
 			return false, nil
 		}
 		logger.Info("StorageClusterPeer has reached Peered status", "ManifestWorkName", manifestWorkName)
