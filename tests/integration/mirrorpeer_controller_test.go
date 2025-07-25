@@ -21,6 +21,8 @@ package integration_test
 
 import (
 	"context"
+	"os"
+	"time"
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 
@@ -51,6 +53,16 @@ var (
 	ns22 = v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-provider-cluster2",
+		},
+	}
+	ns1a = v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-provider-clustera",
+		},
+	}
+	ns2b = v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-provider-clusterb",
 		},
 	}
 	mirrorPeerLookupKey = types.NamespacedName{Namespace: mirrorPeer.Namespace, Name: mirrorPeer.Name}
@@ -266,24 +278,99 @@ var _ = Describe("MirrorPeer Validations", func() {
 				Expect(err).To(HaveOccurred())
 			})
 		})
+	})
+
+	When("updating MirrorPeer", func() {
+		BeforeEach(func() {
+			os.Setenv("POD_NAMESPACE", "openshift-operators")
+			managedcluster1 := clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-provider-clustera",
+				},
+				Spec: clusterv1.ManagedClusterSpec{},
+			}
+			err := k8sClient.Create(context.TODO(), &managedcluster1, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			managedcluster2 := clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-provider-clusterb",
+				},
+				Spec: clusterv1.ManagedClusterSpec{},
+			}
+			err = k8sClient.Create(context.TODO(), &managedcluster2, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = k8sClient.Create(context.TODO(), &ns1a, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Create(context.TODO(), &ns2b, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			newMirrorPeer := mirrorPeer.DeepCopy()
+			newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-update1"
+			newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
+				Type: "async",
+				Items: []multiclusterv1alpha1.PeerRef{
+					{
+						ClusterName: "test-provider-clustera",
+						StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
+							Name:      "test-storagecluster-1",
+							Namespace: "test-storagecluster-ns1",
+						},
+					},
+					{
+						ClusterName: "test-provider-clusterb",
+						StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
+							Name:      "test-storagecluster-2",
+							Namespace: "test-storagecluster-ns2",
+						},
+					},
+				},
+			}
+			err = k8sClient.Create(context.TODO(), newMirrorPeer, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			// giving time for the resources to be created
+			time.Sleep(1 * time.Second)
+		})
+		AfterEach(func() {
+			newMirrorPeer := mirrorPeer.DeepCopy()
+			newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-update1"
+			err := k8sClient.Delete(context.TODO(), newMirrorPeer, &client.DeleteOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = k8sClient.DeleteAllOf(context.TODO(), &clusterv1.ManagedCluster{}, &client.DeleteAllOfOptions{
+				ListOptions: client.ListOptions{
+					Namespace: "",
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = k8sClient.Delete(context.TODO(), &ns1a, &client.DeleteOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Delete(context.TODO(), &ns2b, &client.DeleteOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			// giving time for the resources to be destroyed
+			time.Sleep(1 * time.Second)
+			os.Unsetenv("POD_NAMESPACE")
+		})
 		It("should not return validation error ", func() {
 			By("updating MirrorPeer.Spec.Items with reversed array index", func() {
 				var newMirrorPeer multiclusterv1alpha1.MirrorPeer
 				err := k8sClient.Get(context.TODO(), types.NamespacedName{
-					Name:      "test-mirrorpeer-update",
+					Name:      "test-mirrorpeer-update1",
 					Namespace: "",
 				}, &newMirrorPeer)
 				Expect(err).NotTo(HaveOccurred())
 				newMirrorPeer.Spec.Items = []multiclusterv1alpha1.PeerRef{
 					{
-						ClusterName: "test-provider-cluster2",
+						ClusterName: "test-provider-clusterb",
 						StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
 							Name:      "test-storagecluster-2",
 							Namespace: "test-storagecluster-ns2",
 						},
 					},
 					{
-						ClusterName: "test-provider-cluster1",
+						ClusterName: "test-provider-clustera",
 						StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
 							Name:      "test-storagecluster-1",
 							Namespace: "test-storagecluster-ns1",

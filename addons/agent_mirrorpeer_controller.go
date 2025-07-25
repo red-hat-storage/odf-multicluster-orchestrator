@@ -38,10 +38,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-const (
-	DefaultExternalSecretName = "rook-ceph-mon"
-)
-
 // MirrorPeerReconciler reconciles a MirrorPeer object
 type MirrorPeerReconciler struct {
 	HubClient            client.Client

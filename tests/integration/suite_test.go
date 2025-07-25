@@ -149,6 +149,8 @@ var _ = BeforeSuite(func() {
 			"mc-2_test-storagecluster2":                    "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
 			"test-provider-cluster1_test-storagecluster-1": "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
 			"test-provider-cluster2_test-storagecluster-2": "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
+			"test-provider-clustera_test-storagecluster-1": "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
+			"test-provider-clusterb_test-storagecluster-2": "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
 			"cluster1_test-storagecluster":                 "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
 			"cluster2_test-storagecluster":                 "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
 		},
