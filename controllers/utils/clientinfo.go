@@ -7,6 +7,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+type InfoCephBlockPool struct {
+	Name          string `json:"name"`
+	MirrorEnabled bool   `json:"mirrorEnabled"`
+}
+
 type ProviderInfo struct {
 	Version                       string               `json:"version"`
 	DeploymentType                string               `json:"deploymentType"`
@@ -15,6 +20,7 @@ type ProviderInfo struct {
 	StorageProviderEndpoint       string               `json:"storageProviderEndpoint"`
 	CephClusterFSID               string               `json:"cephClusterFSID"`
 	StorageProviderPublicEndpoint string               `json:"storageProviderPublicEndpoint"`
+	InfoCephBlockPools            []InfoCephBlockPool  `json:"infoCephBlockPools"`
 }
 
 type ClientInfo struct {
