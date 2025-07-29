@@ -126,6 +126,13 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, operatorNames
 		if providerPublicEndpoint == "" {
 			logger.Info("StorageProviderPublicEndpoint is not available.")
 		}
+		cephblockPoolsInfo := []utils.InfoCephBlockPool{}
+		for _, cephblockpool := range odfInfo.StorageCluster.InfoCephBlockPools {
+			cephblockPoolsInfo = append(cephblockPoolsInfo, utils.InfoCephBlockPool{
+				Name:          cephblockpool.Name,
+				MirrorEnabled: cephblockpool.MirrorEnabled,
+			})
+		}
 		providerInfo := utils.ProviderInfo{
 			Version:                       odfInfo.Version,
 			DeploymentType:                odfInfo.DeploymentType,
@@ -134,6 +141,10 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, operatorNames
 			NamespacedName:                odfInfo.StorageCluster.NamespacedName,
 			ProviderManagedClusterName:    managedClusterView.Namespace,
 			StorageProviderPublicEndpoint: providerPublicEndpoint,
+		}
+
+		if len(cephblockPoolsInfo) > 0 {
+			providerInfo.InfoCephBlockPools = cephblockPoolsInfo
 		}
 
 		if len(odfInfo.Clients) == 0 {
