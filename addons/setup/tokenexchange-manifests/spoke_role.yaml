@@ -21,7 +21,7 @@ rules:
   verbs: ["get", "list", "update"]
 - apiGroups: ["ocs.openshift.io"]
   resources: ["storageclusters"]
-  verbs: ["get", "watch", "list", "create"]
+  verbs: ["get", "watch", "list", "create", "update"]
 - apiGroups: ["template.openshift.io"]
   resources: ["templates", "templates/finalizer"]
   verbs: ["update"]
