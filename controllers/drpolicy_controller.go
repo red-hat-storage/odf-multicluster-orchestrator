@@ -170,6 +170,9 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRCAndVGRC(ctx context
 			Labels: map[string]string{
 				RamenMaintenanceModeLabelKey: RamenMaintenanceModeLabelValue,
 			},
+			Annotations: map[string]string{
+				RBDVolumeReplicationClassDefaultAnnotation: "true",
+			},
 		},
 		Spec: replicationv1alpha1.VolumeGroupReplicationClassSpec{
 			Parameters: map[string]string{
@@ -196,6 +199,7 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRCAndVGRC(ctx context
 		vgrcFlatten.Labels = map[string]string{
 			RBDFlattenVolumeReplicationClassLabelKey: RBDFlattenVolumeReplicationClassLabelValue,
 		}
+		vgrcFlatten.Annotations = map[string]string{}
 		vgrcFlatten.Spec.Parameters["flattenMode"] = "force"
 		vgrcList = append(vgrcList, vgrcFlatten)
 	}
