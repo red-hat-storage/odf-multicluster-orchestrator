@@ -86,6 +86,7 @@ func (a *Addons) Manifests(cluster *clusterv1.ManagedCluster, addon *addonapiv1a
 		ClusterName           string
 		AddonInstallNamespace string
 		OdfOperatorNamespace  string
+		HubOperatorNamespace  string
 		Image                 string
 		DRMode                string
 		Group                 string
@@ -94,6 +95,7 @@ func (a *Addons) Manifests(cluster *clusterv1.ManagedCluster, addon *addonapiv1a
 		KubeConfigSecret:      fmt.Sprintf("%s-hub-kubeconfig", a.AddonName),
 		AddonInstallNamespace: installNamespace,
 		OdfOperatorNamespace:  odfOperatorNamespace,
+		HubOperatorNamespace:  addon.Annotations[utils.HubOperatorNamespaceKey],
 		ClusterName:           cluster.Name,
 		Image:                 a.AgentImage,
 		DRMode:                addon.Annotations[utils.DRModeAnnotationKey],
@@ -204,6 +206,11 @@ func (a *Addons) permissionConfig(cluster *clusterv1.ManagedCluster, addon *addo
 			{
 				APIGroups: []string{"cluster.open-cluster-management.io"},
 				Resources: []string{"managedclusters"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
 		}

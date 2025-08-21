@@ -31,6 +31,7 @@ const (
 	S3SecretHandlerName         = "s3"
 	DRModeAnnotationKey         = "multicluster.openshift.io/mode"
 	MirrorPeerNameAnnotationKey = "multicluster.odf.openshift.io/mirrorpeer"
+	HubOperatorNamespaceKey     = "hub.multicluster.odf.openshift.io/operator-namespace"
 )
 
 func GetCurrentStorageClusterRef(mp *multiclusterv1alpha1.MirrorPeer, spokeClusterName string) (*multiclusterv1alpha1.StorageClusterRef, error) {

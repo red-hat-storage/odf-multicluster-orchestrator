@@ -264,7 +264,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Check if the MirrorPeer contains StorageClient reference
-	hasStorageClientRef, err := utils.IsStorageClientType(ctx, r.Client, mirrorPeer, false)
+	hasStorageClientRef, err := utils.IsStorageClientType(ctx, r.Client, mirrorPeer, r.CurrentNamespace)
 	if err != nil {
 		logger.Error("Failed to determine if MirrorPeer contains StorageClient reference", "error", err)
 		return r.updateMirrorPeerStatusMessage(ctx, mirrorPeer, false, err)
@@ -608,7 +608,7 @@ func getConfig(ctx context.Context, c client.Client, currentNamespace string, mp
 	managedClusterAddonsConfig := make([]ManagedClusterAddonConfig, 0)
 
 	// Check if the MirrorPeer contains StorageClient reference
-	hasStorageClientRef, err := utils.IsStorageClientType(ctx, c, mp, false)
+	hasStorageClientRef, err := utils.IsStorageClientType(ctx, c, mp, currentNamespace)
 	if err != nil {
 		return []ManagedClusterAddonConfig{}, err
 	}
@@ -725,6 +725,7 @@ func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, m
 			annotations := make(map[string]string)
 			annotations[utils.DRModeAnnotationKey] = string(mirrorPeer.Spec.Type)
 			annotations[AddonVersionAnnotationKey] = version.Version
+			annotations[utils.HubOperatorNamespaceKey] = r.CurrentNamespace
 
 			managedClusterAddOn.Annotations = annotations
 			managedClusterAddOn.Spec.InstallNamespace = config.InstallNamespace
