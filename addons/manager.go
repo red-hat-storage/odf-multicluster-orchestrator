@@ -35,6 +35,7 @@ import (
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
@@ -143,6 +144,7 @@ func (o *AddonAgentOptions) RunAgent(ctx context.Context) {
 
 func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.Logger) {
 	currentNamespace := utils.GetEnv("POD_NAMESPACE", options.testEnvFile)
+	hubOperatorNamespace := utils.GetEnv("HUB_OPERATOR_NAMESPACE")
 
 	hubConfig, err := utils.GetClientConfig(options.HubKubeconfigFile)
 	if err != nil {
@@ -160,6 +162,13 @@ func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.
 		Cache: cache.Options{
 			DefaultNamespaces: map[string]cache.Config{
 				options.SpokeClusterName: {},
+			},
+			ByObject: map[client.Object]cache.ByObject{
+				&corev1.ConfigMap{}: {
+					Namespaces: map[string]cache.Config{
+						hubOperatorNamespace: {}, // Cache only in 'hubOperatorNamespace'
+					},
+				},
 			},
 		},
 	})
@@ -189,6 +198,7 @@ func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.
 		Logger:               logger.With("controller", "MirrorPeerReconciler"),
 		testEnvFile:          options.testEnvFile,
 		CurrentNamespace:     currentNamespace,
+		HubOperatorNamespace: hubOperatorNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create MirrorPeer controller", "controller", "MirrorPeer", "error", err)
 		os.Exit(1)
