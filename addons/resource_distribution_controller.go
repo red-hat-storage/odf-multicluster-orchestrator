@@ -12,8 +12,10 @@ import (
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -126,9 +128,10 @@ func (r *ResourceDistributionReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, err
 	}
 
-	err = addFinalizerToObject(ctx, r.SpokeClient, &addonDeletionlock, ResourceDistributionFinalizer)
+	var storageClientMapping *corev1.ConfigMap
+	storageClientMapping, err = utils.GetStorageClientMapping(ctx, r.SpokeClient, r.CurrentNamespace)
 	if err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("unable to distribute resources to StorageConsumers: %w", err)
 	}
 
 	addVRCToConsumers := []string{}
@@ -141,8 +144,8 @@ func (r *ResourceDistributionReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 	if len(storageConsumerList.Items) == 0 {
 		logger.Info("No StorageConsumer to add/remove resources.")
-		err = removeFinalizerFromObject(ctx, r.SpokeClient, &addonDeletionlock, ResourceDistributionFinalizer)
-		if err != nil {
+		addonDeletionlock.Data = nil
+		if err = r.SpokeClient.Update(ctx, &addonDeletionlock); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -156,17 +159,44 @@ func (r *ResourceDistributionReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 	if len(templateList.Items) == 0 {
 		logger.Info("No resources to distribute to StorageConsumers.")
-		err = removeFinalizerFromObject(ctx, r.SpokeClient, &addonDeletionlock, ResourceDistributionFinalizer)
-		if err != nil {
+		addonDeletionlock.Data = nil
+		if err = r.SpokeClient.Update(ctx, &addonDeletionlock); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
 
-	var storageClientMapping *corev1.ConfigMap
-	storageClientMapping, err = utils.GetStorageClientMapping(ctx, r.SpokeClient, r.CurrentNamespace)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("unable to distribute resources to StorageConsumers: %w", err)
+	if addonDeletionlock.Data == nil {
+		addonDeletionlock.Data = make(map[string]string)
+	}
+
+	var manifestWorkList workv1.ManifestWorkList
+	listOpts := &client.ListOptions{
+		Namespace: r.SpokeClusterName,
+		LabelSelector: labels.SelectorFromSet(map[string]string{
+			utils.CreatedByLabelKey: utils.CreatorMulticlusterOrchestrator,
+		}),
+	}
+	if err = r.HubClient.List(ctx, &manifestWorkList, listOpts); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	tmpAddonDeletionLockData := addonDeletionlock.Data
+	addonDeletionlock.Data = make(map[string]string)
+	for _, mw := range manifestWorkList.Items {
+		if mw.DeletionTimestamp.IsZero() {
+			cId := mw.Labels[utils.CreatedForClientID]
+			if _, ok := addonDeletionlock.Data[cId]; !ok {
+				addonDeletionlock.Data[cId] = ""
+			}
+		}
+	}
+
+	if !reflect.DeepEqual(tmpAddonDeletionLockData, addonDeletionlock.Data) {
+		logger.Info("Updating addonDeletionLock cm with clientIDs to which resources are distributed")
+		if err = r.SpokeClient.Update(ctx, &addonDeletionlock); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	for k := range storageClientMapping.Data {
