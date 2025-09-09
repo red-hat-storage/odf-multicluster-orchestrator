@@ -200,6 +200,10 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRC(ctx context.Contex
 						APIVersion: dp.APIVersion,
 					},
 				},
+				Labels: map[string]string{
+					utils.CreatedByLabelKey:  utils.CreatorMulticlusterOrchestrator,
+					utils.CreatedForClientID: cInfo.ClientID,
+				},
 			},
 		}
 
