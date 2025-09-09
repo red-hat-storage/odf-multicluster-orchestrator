@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"slices"
 	"time"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
@@ -115,12 +114,34 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	} else {
 		var addonDeletionlock corev1.ConfigMap
-		err = r.SpokeClient.Get(ctx, types.NamespacedName{Namespace: r.CurrentNamespace, Name: AddonDeletionlockName}, &addonDeletionlock)
+		if err = r.SpokeClient.Get(ctx, types.NamespacedName{Namespace: r.CurrentNamespace, Name: AddonDeletionlockName}, &addonDeletionlock); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		// Remove finalizer if present from previous versions.
+		if err = removeFinalizerFromObject(ctx, r.SpokeClient, &addonDeletionlock, ResourceDistributionFinalizer); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		cm, err := utils.FetchClientInfoConfigMap(ctx, r.HubClient, r.HubOperatorNamespace)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 
-		if slices.Contains(addonDeletionlock.GetFinalizers(), ResourceDistributionFinalizer) {
+		addonKey := ""
+		for _, peer := range mirrorPeer.Spec.Items {
+			cInfo, err := utils.GetClientInfoFromConfigMap(cm.Data, utils.GetKey(peer.ClusterName, peer.StorageClusterRef.Name))
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if cInfo.ProviderInfo.ProviderManagedClusterName == r.SpokeClusterName {
+				addonKey = cInfo.ClientID
+				break
+			}
+		}
+
+		if _, ok := addonDeletionlock.Data[addonKey]; ok {
+			logger.Info("Dependent resources like templates for mirrorpeer are not yet deleted, requing")
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 

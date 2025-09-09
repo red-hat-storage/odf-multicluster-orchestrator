@@ -33,6 +33,7 @@ import (
 	addonutils "open-cluster-management.io/addon-framework/pkg/utils"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -61,6 +62,7 @@ func init() {
 	utilruntime.Must(extv1.AddToScheme(mgrScheme))
 	utilruntime.Must(snapshotv1.AddToScheme(mgrScheme))
 	utilruntime.Must(templatev1.AddToScheme(mgrScheme))
+	utilruntime.Must(workv1.AddToScheme(mgrScheme))
 	// +kubebuilder:scaffold:scheme
 }
 
