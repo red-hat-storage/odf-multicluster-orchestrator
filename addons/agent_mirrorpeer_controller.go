@@ -47,8 +47,9 @@ type MirrorPeerReconciler struct {
 	OdfOperatorNamespace string
 	Logger               *slog.Logger
 
-	testEnvFile      string
-	CurrentNamespace string
+	testEnvFile          string
+	CurrentNamespace     string
+	HubOperatorNamespace string
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -71,7 +72,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	hasStorageClientRef, err := utils.IsStorageClientType(ctx, r.SpokeClient, mirrorPeer, true)
+	hasStorageClientRef, err := utils.IsStorageClientType(ctx, r.HubClient, mirrorPeer, r.HubOperatorNamespace)
 	logger.Info("MirrorPeer has client reference?", "True/False", hasStorageClientRef)
 
 	if err != nil {

@@ -16,6 +16,7 @@ import (
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
+	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -45,6 +46,24 @@ storageCluster:
   storageProviderEndpoint: ""
   cephClusterFSID: 986532da-8dba-4d35-a8d2-12f037712b39
 `,
+		},
+	}
+	odfClientInfoConfigMap = &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "odf-client-info",
+			Namespace: "openshift-operators",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: viewv1beta1.GroupVersion.String(),
+					Kind:       "ManagedClusterView",
+					Name:       "mcv-1",
+					UID:        "mcv-uid",
+				},
+			},
+		},
+		Data: map[string]string{
+			"cluster1_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
+			"cluster2_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
 		},
 	}
 	mpItems = []multiclusterv1alpha1.PeerRef{
@@ -225,7 +244,7 @@ func GetTestCephBlockPool() *rookv1.CephBlockPool {
 func TestMirrorPeerReconcile(t *testing.T) {
 	ctx := context.TODO()
 	scheme := mgrScheme
-	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer1, &mirrorpeer2).Build()
+	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer1, &mirrorpeer2, odfClientInfoConfigMap).Build()
 	os.Setenv("POD_NAMESPACE", odfNamespace)
 
 	for _, pr := range mirrorpeer1.Spec.Items {
@@ -241,11 +260,12 @@ func TestMirrorPeerReconcile(t *testing.T) {
 		fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&storageCluster, cephCluster, rbdVirtStorageClass, cephblockpool, rbdStorageClass, cephfsStorageClass, &odfInfoConfigMap, rbdVolumeSnapshotClass, cephfsVolumeSnapshotClass).Build()
 
 		r := MirrorPeerReconciler{
-			HubClient:        fakeHubClient,
-			SpokeClient:      fakeSpokeClient,
-			Scheme:           scheme,
-			SpokeClusterName: pr.ClusterName,
-			Logger:           utils.GetLogger(utils.GetZapLogger(true)),
+			HubClient:            fakeHubClient,
+			SpokeClient:          fakeSpokeClient,
+			Scheme:               scheme,
+			SpokeClusterName:     pr.ClusterName,
+			Logger:               utils.GetLogger(utils.GetZapLogger(true)),
+			HubOperatorNamespace: "openshift-operators",
 		}
 
 		req := ctrl.Request{
