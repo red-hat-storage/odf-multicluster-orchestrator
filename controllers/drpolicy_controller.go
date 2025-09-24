@@ -261,6 +261,10 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRCAndVGRC(ctx context
 						APIVersion: dp.APIVersion,
 					},
 				},
+				Labels: map[string]string{
+					utils.CreatedByLabelKey:  utils.CreatorMulticlusterOrchestrator,
+					utils.CreatedForClientID: cInfo.ClientID,
+				},
 			},
 		}
 
@@ -290,6 +294,10 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRCAndVGRC(ctx context
 						UID:        dp.UID,
 						APIVersion: dp.APIVersion,
 					},
+				},
+				Labels: map[string]string{
+					utils.CreatedByLabelKey:  utils.CreatorMulticlusterOrchestrator,
+					utils.CreatedForClientID: cInfo.ClientID,
 				},
 			},
 		}
@@ -348,7 +356,7 @@ func getTemplateForVRC(vrc replicationv1alpha1.VolumeReplicationClass, templateN
 	return vrcTemplateJson, nil
 }
 
-func getTemplateForVGRC(vgrc replicationv1alpha1.VolumeGroupReplicationClass, vgrcName string, templateNamespace string) ([]byte, error) {
+func getTemplateForVGRC(vgrc replicationv1alpha1.VolumeGroupReplicationClass, vgrcName, templateNamespace string) ([]byte, error) {
 	vgrc.Name = vgrcName
 	vgrcJson, err := json.Marshal(vgrc)
 	if err != nil {
