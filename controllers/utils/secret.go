@@ -23,6 +23,7 @@ const (
 	SecretLabelTypeKey                              = "multicluster.odf.openshift.io/secret-type"
 	CreatedByLabelKey                               = "multicluster.odf.openshift.io/created-by"
 	ObjectKindLabelKey                              = "multicluster.odf.openshift.io/object-kind"
+	CreatedForClientID                              = "multicluster.odf.openshift.io/client-id"
 	CreatorMulticlusterOrchestrator                 = "odf-multicluster-orchestrator"
 	NamespaceKey                                    = "namespace"
 	StorageClusterNameKey                           = "storage-cluster-name"
