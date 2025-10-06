@@ -189,6 +189,7 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRCAndVGRC(ctx context
 		vrcFlatten.Name = fmt.Sprintf(RBDFlattenVolumeReplicationClassNameTemplate, utils.FnvHash(dp.Spec.SchedulingInterval))
 		vrcFlatten.Labels = map[string]string{
 			RBDFlattenVolumeReplicationClassLabelKey: RBDFlattenVolumeReplicationClassLabelValue,
+			RamenMaintenanceModeLabelKey:             RamenMaintenanceModeLabelValue,
 		}
 		vrcFlatten.Annotations = map[string]string{}
 		vrcFlatten.Spec.Parameters["flattenMode"] = "force"
@@ -198,6 +199,7 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRCAndVGRC(ctx context
 		vgrcFlatten.Name = fmt.Sprintf(RBDFlattenVolumeGroupReplicationClassNameTemplate, utils.FnvHash(dp.Spec.SchedulingInterval))
 		vgrcFlatten.Labels = map[string]string{
 			RBDFlattenVolumeReplicationClassLabelKey: RBDFlattenVolumeReplicationClassLabelValue,
+			RamenMaintenanceModeLabelKey:             RamenMaintenanceModeLabelValue,
 		}
 		vgrcFlatten.Annotations = map[string]string{}
 		vgrcFlatten.Spec.Parameters["flattenMode"] = "force"
