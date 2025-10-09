@@ -187,33 +187,36 @@ func (r *ResourceDistributionReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 		for _, foundConsumer := range storageConsumerList.Items {
 			expectedConsumer := foundConsumer.DeepCopy()
-			vrc := ocsv1alpha1.VolumeReplicationClassSpec{Name: template.Name}
-			index := slices.Index(expectedConsumer.Spec.VolumeReplicationClasses, vrc)
-			if template.DeletionTimestamp.IsZero() {
-				if slices.Contains(addVRCToConsumers, foundConsumer.GetName()) {
-					logger.Info("Adding VRC to StorageConsumer", "VRC", vrc, "StorageConsumer", foundConsumer.GetName())
-					if index == -1 {
-						expectedConsumer.Spec.VolumeReplicationClasses = append(expectedConsumer.Spec.VolumeReplicationClasses, vrc)
+
+			if template.GetLabels()[utils.ObjectKindLabelKey] == "VolumeReplicationClass" {
+				vrc := ocsv1alpha1.VolumeReplicationClassSpec{Name: template.Name}
+				index := slices.Index(expectedConsumer.Spec.VolumeReplicationClasses, vrc)
+				if template.DeletionTimestamp.IsZero() {
+					if slices.Contains(addVRCToConsumers, foundConsumer.GetName()) {
+						logger.Info("Adding VRC to StorageConsumer", "VRC", vrc, "StorageConsumer", foundConsumer.GetName())
+						if index == -1 {
+							expectedConsumer.Spec.VolumeReplicationClasses = append(expectedConsumer.Spec.VolumeReplicationClasses, vrc)
+						}
+					} else {
+						logger.Info("StorageConsumer does not need this VRC. Removing VRC from StorageConsumer", "VRC", vrc, "StorageConsumer", foundConsumer.GetName())
+						if index != -1 {
+							expectedConsumer.Spec.VolumeReplicationClasses = slices.Delete(expectedConsumer.Spec.VolumeReplicationClasses, index, index+1)
+						}
 					}
 				} else {
-					logger.Info("StorageConsumer does not need this VRC. Removing VRC from StorageConsumer", "VRC", vrc, "StorageConsumer", foundConsumer.GetName())
+					logger.Info("Template is being deleted. Removing VRC from StorageConsumer", "VRC", vrc, "StorageConsumer", foundConsumer.GetName())
 					if index != -1 {
 						expectedConsumer.Spec.VolumeReplicationClasses = slices.Delete(expectedConsumer.Spec.VolumeReplicationClasses, index, index+1)
 					}
 				}
-			} else {
-				logger.Info("Template is being deleted. Removing VRC from StorageConsumer", "VRC", vrc, "StorageConsumer", foundConsumer.GetName())
-				if index != -1 {
-					expectedConsumer.Spec.VolumeReplicationClasses = slices.Delete(expectedConsumer.Spec.VolumeReplicationClasses, index, index+1)
+				if !reflect.DeepEqual(expectedConsumer.Spec.VolumeReplicationClasses, foundConsumer.Spec.VolumeReplicationClasses) {
+					err := r.SpokeClient.Update(ctx, expectedConsumer)
+					if err != nil {
+						return ctrl.Result{}, fmt.Errorf("unable to add VolumeReplicationClasses to StorageConsumer %q: %w", expectedConsumer.Name, err)
+					}
 				}
+				logger.Info("VolumeReplicationClass was updated on StorageConsumers.", "StorageConsumer", expectedConsumer.GetName())
 			}
-			if !reflect.DeepEqual(expectedConsumer.Spec.VolumeReplicationClasses, foundConsumer.Spec.VolumeReplicationClasses) {
-				err := r.SpokeClient.Update(ctx, expectedConsumer)
-				if err != nil {
-					return ctrl.Result{}, fmt.Errorf("unable to add VolumeReplicationClasses to StorageConsumer %q: %w", expectedConsumer.Name, err)
-				}
-			}
-			logger.Info("VolumeReplicationClass was updated on StorageConsumers.", "StorageConsumer", expectedConsumer.GetName())
 		}
 		if !template.DeletionTimestamp.IsZero() {
 			err = removeFinalizerFromObject(ctx, r.SpokeClient, &template, ResourceDistributionFinalizer)
