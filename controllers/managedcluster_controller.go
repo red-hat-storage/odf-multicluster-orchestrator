@@ -91,12 +91,26 @@ func (r *ManagedClusterReconciler) processManagedClusterViews(ctx context.Contex
 		BlockOwnerDeletion: &disabled,
 	}
 
-	mcv, operationResult, err := utils.CreateOrUpdateManagedClusterView(ctx, r.Client, odfInfoConfigMapNamespacedName.Name, odfInfoConfigMapNamespacedName.Namespace, resourceType, managedCluster.Name, mcvOwnerRef)
+	mcvName := utils.GetManagedClusterViewName(managedCluster.Name)
+	mcv, operationResult, err := utils.CreateOrUpdateManagedClusterView(ctx, r.Client, mcvName, odfInfoConfigMapNamespacedName.Name, odfInfoConfigMapNamespacedName.Namespace, resourceType, managedCluster.Name, mcvOwnerRef)
 	if err != nil {
 		return fmt.Errorf("failed to create or update ManagedClusterView. %w", err)
 
 	}
 	r.Logger.Info(fmt.Sprintf("ManagedClusterView was %s", operationResult), "ManagedClusterView", mcv.Name)
+
+	// Create ManagedClusterView for token-exchange-agent deployment running on managedclusters.
+	resourceType = "Deployment"
+	deploymentNamespace := odfInfoConfigMapNamespacedName.Namespace
+	deploymentName := utils.TokenExchangeDeployment
+	tokenExchangeMCVName := utils.GetTokenExchangeManagedClusterViewName(managedCluster.Name)
+
+	mcvDeployment, operationResult, err := utils.CreateOrUpdateManagedClusterView(ctx, r.Client, tokenExchangeMCVName, deploymentName, deploymentNamespace, resourceType, managedCluster.Name, mcvOwnerRef)
+	if err != nil {
+		return fmt.Errorf("failed to create or update ManagedClusterView. %w", err)
+
+	}
+	r.Logger.Info(fmt.Sprintf("ManagedClusterView was %s", operationResult), "ManagedClusterView", mcvDeployment.Name)
 
 	return nil
 }
