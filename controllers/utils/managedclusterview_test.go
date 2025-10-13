@@ -17,7 +17,8 @@ func TestCreateOrUpdateManagedClusterView(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(s).Build()
 
 	t.Run("Success", func(t *testing.T) {
-		mcv, _, err := CreateOrUpdateManagedClusterView(context.TODO(), client, "example-configmap", "default", "ConfigMap", "managed-cluster-1", nil)
+		mcvName := GetManagedClusterViewName("managed-cluster-1")
+		mcv, _, err := CreateOrUpdateManagedClusterView(context.TODO(), client, mcvName, "example-configmap", "default", "ConfigMap", "managed-cluster-1", nil)
 		assert.NoError(t, err)
 		assert.NotNil(t, mcv)
 		assert.Equal(t, GetManagedClusterViewName("managed-cluster-1"), mcv.Name)
