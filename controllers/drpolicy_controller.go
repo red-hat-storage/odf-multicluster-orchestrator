@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -121,9 +122,13 @@ func (r *DRPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	err = r.createOrUpdateManifestWorkForVRCAndVGRC(ctx, mirrorPeer, &drpolicy)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create VolumeReplicationClass via ManifestWork: %v", err)
+	if err = r.createOrUpdateManifestWorkForVRCAndVGRC(ctx, mirrorPeer, &drpolicy); err != nil {
+		if errors.Is(err, utils.ErrRequeueReconcile) {
+			return ctrl.Result{
+				RequeueAfter: 10 * time.Second,
+			}, nil
+		}
+		return ctrl.Result{}, fmt.Errorf("failed to create VolumeReplicationClass/VolumeGroupReplicationClass via ManifestWork: %v", err)
 	}
 
 	logger.Info("Successfully reconciled DRPolicy")
@@ -284,6 +289,22 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRCAndVGRC(ctx context
 			return err
 		}
 		logger.Info("ManifestWork created/updated successfully", "ManifestWorkName", manifestWorkName, "VolumeReplicationClassName", vrc.Name)
+
+		// Skip creation of VGRC template if ODF version is less than 4.20 on providers, as storageconsumer.spec doesn't support
+		// VolumeGroupReplicationClass type
+		lt, err := utils.CompareSemverMajorMinorVersions(cInfo.ProviderInfo.Version, "4.20.0", utils.Lt)
+		if err != nil {
+			return fmt.Errorf("validation: unable to parse versions: error: %w", err)
+		}
+		if lt {
+			logger.Info("ODF version in Managed Cluster doesn't support creation of VGRC templates, skipping creation of VGRC template", "Peer", pr.ClusterName, "error", err)
+			return nil
+		}
+
+		// Validate that the token-exchange-agent pods on managedclusters are updated properly before creating VGRC templates
+		if err = ValidateTokenExchangeAgentUpdated(ctx, r.HubClient, logger, cInfo.ProviderInfo.ProviderManagedClusterName, r.testEnvFile); err != nil {
+			return err
+		}
 
 		vgrcmw := workv1.ManifestWork{
 			ObjectMeta: metav1.ObjectMeta{

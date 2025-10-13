@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
@@ -10,17 +11,26 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-const MCVLabelKey = "multicluster.odf.openshift.io/cluster"
-const MCVNameTemplate = "odf-multicluster-mcv-%s"
+const (
+	MCVLabelKey             = "multicluster.odf.openshift.io/cluster"
+	MCVNameTemplate         = "odf-multicluster-mcv-%s"
+	TokenExchangeDeployment = "token-exchange-agent"
+)
+
+var ErrRequeueReconcile = errors.New("requeue reconcile request")
 
 func GetManagedClusterViewName(clusterName string) string {
 	return fmt.Sprintf(MCVNameTemplate, clusterName)
 }
 
-func CreateOrUpdateManagedClusterView(ctx context.Context, client ctrlClient.Client, resourceToFindName string, resourceToFindNamespace string, resourceToFindType string, clusterName string, ownerRef *metav1.OwnerReference) (*viewv1beta1.ManagedClusterView, controllerutil.OperationResult, error) {
+func GetTokenExchangeManagedClusterViewName(clusterName string) string {
+	return fmt.Sprintf("%s-%s", GetManagedClusterViewName(clusterName), TokenExchangeDeployment)
+}
+
+func CreateOrUpdateManagedClusterView(ctx context.Context, client ctrlClient.Client, mcvName, resourceToFindName string, resourceToFindNamespace string, resourceToFindType string, clusterName string, ownerRef *metav1.OwnerReference) (*viewv1beta1.ManagedClusterView, controllerutil.OperationResult, error) {
 	mcv := &viewv1beta1.ManagedClusterView{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetManagedClusterViewName(clusterName),
+			Name:      mcvName,
 			Namespace: clusterName,
 		},
 	}
