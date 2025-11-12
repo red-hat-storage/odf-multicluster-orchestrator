@@ -171,6 +171,14 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		os.Exit(1)
 	}
 
+	if err = (&DRPCReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		logger.Error("Failed to create DRPlacementControl controller", "error", err)
+		os.Exit(1)
+	}
+
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		err = console.InitConsole(ctx, mgr.GetClient(), o.MulticlusterConsolePort, currentNamespace)
 		if err != nil {
