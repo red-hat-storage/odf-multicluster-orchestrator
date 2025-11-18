@@ -254,7 +254,7 @@ func (r *ResourceDistributionReconciler) Reconcile(ctx context.Context, req ctrl
 				logger.Info("VolumeReplicationClass was updated on StorageConsumers.", "StorageConsumer", expectedConsumer.GetName())
 			}
 
-			if template.GetLabels()[utils.ObjectKindLabelKey] == "VolumeGroupReplicationClass" {
+			if utils.EnableCG && template.GetLabels()[utils.ObjectKindLabelKey] == "VolumeGroupReplicationClass" {
 				vgrc := ocsv1alpha1.VolumeGroupReplicationClassSpec{
 					CommonClassSpec: ocsv1alpha1.CommonClassSpec{
 						Name: template.Name,
