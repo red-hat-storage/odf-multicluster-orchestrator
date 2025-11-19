@@ -254,7 +254,7 @@ func (r *ResourceDistributionReconciler) Reconcile(ctx context.Context, req ctrl
 				logger.Info("VolumeReplicationClass was updated on StorageConsumers.", "StorageConsumer", expectedConsumer.GetName())
 			}
 
-			if utils.EnableCG && template.GetLabels()[utils.ObjectKindLabelKey] == "VolumeGroupReplicationClass" {
+			if template.GetLabels()[utils.ObjectKindLabelKey] == "VolumeGroupReplicationClass" {
 				vgrc := ocsv1alpha1.VolumeGroupReplicationClassSpec{
 					CommonClassSpec: ocsv1alpha1.CommonClassSpec{
 						Name: template.Name,
@@ -264,7 +264,7 @@ func (r *ResourceDistributionReconciler) Reconcile(ctx context.Context, req ctrl
 					return expectedVRC.Name == vgrc.CommonClassSpec.Name
 				})
 				if template.DeletionTimestamp.IsZero() {
-					if slices.Contains(addVRCToConsumers, foundConsumer.GetName()) {
+					if utils.EnableCG && slices.Contains(addVRCToConsumers, foundConsumer.GetName()) {
 						logger.Info("Adding VGRC to StorageConsumer", "VGRC", vgrc, "StorageConsumer", foundConsumer.GetName())
 						if index == -1 {
 							expectedConsumer.Spec.VolumeGroupReplicationClasses = append(expectedConsumer.Spec.VolumeGroupReplicationClasses, vgrc)
