@@ -128,7 +128,7 @@ func (r *DRPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				RequeueAfter: 10 * time.Second,
 			}, nil
 		}
-		return ctrl.Result{}, fmt.Errorf("failed to create VolumeReplicationClass/VolumeGroupReplicationClass via ManifestWork: %v", err)
+		return ctrl.Result{}, fmt.Errorf("failed to create VolumeReplicationClass via ManifestWork: %v", err)
 	}
 
 	logger.Info("Successfully reconciled DRPolicy")
@@ -306,40 +306,57 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRCAndVGRC(ctx context
 			return err
 		}
 
-		vgrcmw := workv1.ManifestWork{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      vgrcManifestWorkName,
-				Namespace: cInfo.ProviderInfo.ProviderManagedClusterName,
-				OwnerReferences: []metav1.OwnerReference{
-					{
-						Kind:       dp.Kind,
-						Name:       dp.Name,
-						UID:        dp.UID,
-						APIVersion: dp.APIVersion,
+		if utils.EnableCG {
+			vgrcmw := workv1.ManifestWork{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      vgrcManifestWorkName,
+					Namespace: cInfo.ProviderInfo.ProviderManagedClusterName,
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							Kind:       dp.Kind,
+							Name:       dp.Name,
+							UID:        dp.UID,
+							APIVersion: dp.APIVersion,
+						},
+					},
+					Labels: map[string]string{
+						utils.CreatedByLabelKey:  utils.CreatorMulticlusterOrchestrator,
+						utils.CreatedForClientID: cInfo.ClientID,
 					},
 				},
-				Labels: map[string]string{
-					utils.CreatedByLabelKey:  utils.CreatorMulticlusterOrchestrator,
-					utils.CreatedForClientID: cInfo.ClientID,
-				},
-			},
-		}
+			}
 
-		_, err = controllerutil.CreateOrUpdate(ctx, r.HubClient, &vgrcmw, func() error {
-			vgrcmw.Spec = workv1.ManifestWorkSpec{
-				Workload: workv1.ManifestsTemplate{
-					Manifests: vgrcManifestList,
+			_, err = controllerutil.CreateOrUpdate(ctx, r.HubClient, &vgrcmw, func() error {
+				vgrcmw.Spec = workv1.ManifestWorkSpec{
+					Workload: workv1.ManifestsTemplate{
+						Manifests: vgrcManifestList,
+					},
+				}
+				return nil
+			})
+
+			if err != nil {
+				logger.Error("Failed to create/update ManifestWork", "ManifestWorkName", vgrcManifestWorkName, "error", err)
+				return err
+			}
+
+			logger.Info("ManifestWork created/updated successfully", "ManifestWorkName", vgrcManifestWorkName, "VolumeGroupReplicationClassName", vgrc.Name)
+		} else {
+			// Delete the existing ManifestWorks from older versions, if CG is disabled
+			vgrcmw := workv1.ManifestWork{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      vgrcManifestWorkName,
+					Namespace: cInfo.ProviderInfo.ProviderManagedClusterName,
 				},
 			}
-			return nil
-		})
 
-		if err != nil {
-			logger.Error("Failed to create/update ManifestWork", "ManifestWorkName", vgrcManifestWorkName, "error", err)
-			return err
+			if err = r.HubClient.Delete(ctx, &vgrcmw); client.IgnoreNotFound(err) != nil {
+				logger.Error("Failed to delete existing ManifestWork for VolumeGroupReplicationClass", "ManifestWorkName", vgrcManifestWorkName, "error", err)
+				return err
+			}
+
+			logger.Info("ManifestWork deleted successfully", "ManifestWorkName", vgrcManifestWorkName, "VolumeGroupReplicationClassName", vgrc.Name)
 		}
-
-		logger.Info("ManifestWork created/updated successfully", "ManifestWorkName", vgrcManifestWorkName, "VolumeGroupReplicationClassName", vgrc.Name)
 	}
 
 	return nil

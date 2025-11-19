@@ -31,6 +31,7 @@ const (
 	SecretOriginKey                                 = "secret-origin"
 	MirrorPeerSecret                                = "mirrorpeersecret"
 	HubRecoveryLabel                                = "cluster.open-cluster-management.io/backup"
+	EnableCG                                        = false
 )
 
 type S3Token struct {
