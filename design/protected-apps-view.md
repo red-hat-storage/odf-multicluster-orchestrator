@@ -217,6 +217,12 @@ spec:
 
 This example illustrates a challenging scenario: a single logical application (the web application) has two subscriptions, each with its own placement, and potentially its own DRPC. When displaying this in the Protected Applications page, we need to decide whether to show this as one row or two, and if one row, which DRPC's information should be displayed.
 
+**Important Note:** In the proposed design, this multi-DRPC subscription scenario results in **two separate table rows** (one per DRPC):
+- Row 1: `web-app-frontend-drpc` (Subscription type) - protects frontend placement
+- Row 2: `web-app-backend-drpc` (Subscription type) - protects backend placement
+
+Each row represents one protection boundary (DRPC), making actions unambiguous. This is acceptable since Subscriptions are a deprecated API and this multi-DRPC pattern is rare.
+
 ### 2.2 The Placement Resource as the Bridge
 
 Throughout all three application types, the Placement resource (or its predecessor, PlacementRule) serves as the critical link between application deployment and disaster recovery. This is not accidental but by design. The Placement resource encodes the scheduling decision of where an application should run, and the DRPC needs to know this scheduling information to properly orchestrate disaster recovery operations.
@@ -484,19 +490,14 @@ Discovered hook: DRPlacementControls (openshift-dr-ops namespace - duplicate)
 Each watch maintains a websocket connection streaming all changes cluster-wide, creating significant API server load and network traffic.
 
 #### 3.1.2 Browser-Side Correlation Overhead
-React's useMemo re-runs correlation on every resource change:
-
-New ApplicationSet created → correlate all ApplicationSets
-Placement status changes → correlate all affected applications
-DRPC status updates → correlate all affected applications
-
-The correlation algorithm has O(N*M) complexity (N applications × M DRPCs). With 100 ApplicationSets, 50 Subscriptions, and 200 DRPCs, a single DRPC update triggers tens of thousands of comparisons, causing noticeable UI lag.
+The primary performance bottleneck is waiting for 10-20 simultaneous API calls to complete before displaying the UI. Each hook must establish watches and fetch initial data for multiple resource types. The page remains in loading state until all watches sync, typically 5-12 seconds in large clusters.
+While browser-side correlation (O(N*M) complexity with nested loops) does contribute overhead during updates especially during incident response when operations teams need immediate visibility.
 
 #### 3.1.3 Memory Consumption
-Each hook stores its own copy of watched resources. A Placement watched by three hooks exists three times in browser memory. Large clusters consume 50+ MB just for application data, contributing to browser crashes.
+While useK8sWatchResources shares Redux state and stores objects by reference (not deep copies), multiple hooks watching overlapping resource sets still increase memory footprint. In large clusters with hundreds of applications, the accumulated state from multiple active hooks contributes to console instances consuming over fifty megabytes just for application data, impacting performance on low-spec devices.
 
-#### 3.1.4 Lack of Shared Caching
-useK8sWatchResources maintains per-component state with no cross-component caching. Navigating between pages recreates all watches and refetches all data. Two components needing the same data (e.g., DRPolicies) independently watch and maintain it.
+#### 3.1.4 Watch Multiplicity
+While useK8sWatchResources shares Redux state across components (identical resource objects create single websocket connections), different hooks watch slightly different resource sets. The ApplicationSet hook watches Placements, while the Subscription hook watches both Placements and PlacementRules. This prevents full deduplication despite the shared state mechanism.it.
 
 ### 3.2 Code Maintainability Challenges
 Correlation logic for connecting Applications → Placements → DRPCs exists in multiple hooks with different implementations:
@@ -517,393 +518,418 @@ Limited Filtering: Client-side filtering requires fetching and correlating all a
 ## 4. Proposed Solution: Controller-Based Aggregation
 
 ### 4.1 Design Philosophy
-
-The proposed solution moves the correlation logic from the frontend to the backend, implementing it as Kubernetes controllers that maintain an aggregated view resource. This architectural shift is based on several key principles that address the limitations we've identified.
-
-Rather than having correlation logic scattered across multiple frontend hooks, we create a single authoritative source of truth: a new Custom Resource Definition called ProtectedApplicationView. This CRD represents the aggregated information about a protected application, regardless of its type. Every protected application gets one corresponding ProtectedApplicationView resource, and the frontend simply watches and displays these views.
-
-This approach provides strong consistency guarantees. When a user sees a ProtectedApplicationView resource, they know it reflects the current state of the underlying application and its DR configuration. There are no race conditions between multiple hooks trying to correlate the same data independently.
+The proposed solution moves the correlation logic from the frontend to the backend, implementing it as a Kubernetes controller that maintains an aggregated view resource. This architectural shift is based on several key principles that address the limitations we've identified.
+Single Source of Truth: Rather than having correlation logic scattered across multiple frontend hooks, we create a single authoritative source: a new Custom Resource Definition called ProtectedApplicationView. This CRD represents the aggregated information about a protected application. The frontend simply watches and displays these views.
+DRPC as Protection Boundary: Since disaster recovery protection is defined by the existence of a DRPlacementControl (DRPC), we use DRPC as the trigger for creating views. No DRPC means no protection, which means no view. This ensures we only show protected applications as required.
+One View Per DRPC: Each DRPC gets exactly one ProtectedApplicationView, providing a clear 1:1 mapping between protection resources and table rows. This eliminates ambiguity in actions—clicking Failover on a row acts on that row's DRPC.
 
 
 ### 4.2 Architecture Overview
 
-The proposed architecture introduces three new controllers and one new CRD. Let's examine each component and how they work together.
+## Architecture Diagram
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Frontend (React)                                               │
+│  - Watches ProtectedApplicationView CRs (new CRD)               │
+│  - Simple useK8sWatchResource hook                              │
+│  - No correlation logic                                         │
+└────────────────────┬────────────────────────────────────────────┘
+                     │
+                     │ Single watch
+                     ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Kubernetes API Server                                          │
+│                                                                 │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │  ProtectedApplicationView CRs (one per DRPC)               │ │
+│  │  ┌──────────────────────────────────────────────────────┐  │ │
+│  │  │ appset-payment-service (ApplicationSet type)         │  │ │
+│  │  ├──────────────────────────────────────────────────────┤  │ │
+│  │  │ subscription-web-frontend-drpc (Subscription type)   │  │ │
+│  │  ├──────────────────────────────────────────────────────┤  │ │
+│  │  │ subscription-web-backend-drpc (Subscription type)    │  │ │
+│  │  ├──────────────────────────────────────────────────────┤  │ │
+│  │  │ discovered-critical-db (Discovered type)             │  │ │
+│  │  └──────────────────────────────────────────────────────┘  │ │
+│  └────────────────────────────────────────────────────────────┘ │
+└──────────────────────┬──────────────────────────────────────────┘
+                       │
+                       │ Reconciled by
+                       ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  ODF MCO Operator (Backend)                                      │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │  DRPC Controller (Single Controller)                        │ │
+│  │                                                             │ │
+│  │  Watches: DRPlacementControl (all namespaces)               │ │
+│  │                                                             │ │
+│  │  For each DRPC:                                             │ │
+│  │    1. Get Placement from DRPC.spec.placementRef             │ │
+│  │    2. Reverse map to find application:                      │ │
+│  │       - Check namespace: openshift-dr-ops? → Discovered     │ │
+│  │       - Find ApplicationSet using this Placement?           │ │
+│  │       - Find Subscriptions using this Placement?            │ │
+│  │    3. Build ProtectedApplicationView                        │ │
+│  │    4. Set owner reference (ApplicationSet or DRPC)          │ │
+│  │    5. Create/update view                                    │ │
+│  │                                                             │ │
+│  │  Secondary watches:                                         │ │
+│  │    - ApplicationSet → find affected DRPCs → reconcile       │ │
+│  │    - Application (Subscription) → find affected DRPCs       │ │
+│  │    - Placement → find affected DRPCs → reconcile            │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────┘
+```
 
 #### 4.2.1 The ProtectedApplicationView CRD
 
-This new custom resource represents the aggregated view of a protected application. Its schema is designed to accommodate all three application types while making the common patterns easy to work with:
+This new custom resource represents the aggregated view of a protected application. Each DRPC gets one corresponding view.
 
 ```yaml
-apiVersion: ramendr.openshift.io/v1alpha1
+apiVersion: multicluster.odf.openshift.io/v1alpha1
 kind: ProtectedApplicationView
 metadata:
-  name: appset-payment-service  # Prefixed with type for uniqueness
-  namespace: openshift-gitops    # Same namespace as the source application
-  
-  # Owner reference ensures automatic cleanup
-  ownerReferences:
-    - apiVersion: argoproj.io/v1alpha1
-      kind: ApplicationSet
-      name: payment-service
-      uid: <applicationset-uid>
-      controller: true
-      blockOwnerDeletion: true
-  
-  # Labels enable efficient querying
+  name: applicationset-payment-service-drpc
+  namespace: payment-app
   labels:
     app.kubernetes.io/type: ApplicationSet
-    ramendr.openshift.io/dr-policy: metro-dr-policy
-    ramendr.openshift.io/protected: "true"
-
+    app.kubernetes.io/name: payment-service
+    ramendr.openshift.io/dr-policy: metro-dr
+  ownerReferences:
+  - apiVersion: ramendr.openshift.io/v1alpha1
+    kind: DRPlacementControl
+    name: payment-service-drpc
+    uid: 12345678-1234-1234-1234-123456789abc
+    controller: true
+    blockOwnerDeletion: true
 spec:
-  # The type determines which fields are populated
-  type: ApplicationSet  # or "Subscription" or "Discovered"
-  
-  # Reference back to the actual application resource
+  drpcRef:
+    name: payment-service-drpc
+    namespace: payment-app
   applicationRef:
     apiVersion: argoproj.io/v1alpha1
     kind: ApplicationSet
     name: payment-service
-    namespace: openshift-gitops
-    uid: <applicationset-uid>
-  
-  # Placement information (common to all types)
-  # An application can have multiple placements (common with Subscriptions)
+    namespace: payment-app
+    uid: abcdef12-3456-7890-abcd-ef1234567890
+status:
+  type: ApplicationSet 
   placements:
-    - name: payment-service-placement
-      namespace: openshift-gitops
-      kind: Placement
-      
-      # The clusters where this placement has scheduled the application
-      selectedClusters:
-        - primary-datacenter
-      
-      numberOfClusters: 1
-  
-  # Disaster recovery configuration (if protected)
-  # This is the most important section for the UI
+  - name: payment-placement
+    namespace: payment-app
+    kind: Placement
+    selectedClusters:
+    - cluster-east
+    - cluster-west
+    numberOfClusters: 2
+
   drInfo:
-    enabled: true
-    
-    # Reference to the DRPC providing protection
-    drpcRef:
-      name: payment-service-drpc
-      namespace: openshift-gitops
-    
-    # The DR policy defining the DR configuration
     drPolicyRef:
-      name: metro-dr-policy
-    
-    # The clusters involved in disaster recovery
+      name: metro-dr
     drClusters:
-      - primary-datacenter
-      - secondary-datacenter
-    
-    # Current primary (active) cluster
-    primaryCluster: primary-datacenter
-    
-    # Namespaces being protected
+    - cluster-east
+    - cluster-west
+    primaryCluster: cluster-east
     protectedNamespaces:
-      - payment-service
-      - payment-service-config
-    
-    # Current DR status
+    - payment-app
+    - payment-db
     status:
       phase: Relocated
       conditions:
-        - type: Available
-          status: "True"
-          lastTransitionTime: "2025-04-24T06:13:43Z"
-          reason: RecoveryCompleted
-          message: "Application successfully failed over to secondary datacenter"
-    
-    # For Subscription applications with multiple placements/DRPCs
-    additionalDRPCs:
-      - drpcRef:
-          name: payment-backend-drpc
-          namespace: openshift-gitops
-        drPolicyRef:
-          name: backup-policy
-        primaryCluster: backup-datacenter
+      - type: Available
+        status: "True"
+        lastTransitionTime: "2025-11-18T08:00:00Z"
+        reason: Healthy
+        message: Application is healthy on primary cluster
+      - type: PeerReady
+        status: "True"
+        lastTransitionTime: "2025-11-18T08:00:00Z"
+        reason: Ready
+        message: Peer cluster is ready
   
-  # Type-specific information for ApplicationSets
-  applicationSetInfo:
-    gitRepoURLs:
-      - https://github.com/example/payment-service
-    targetRevision: main
-    syncPolicy: automated
-    
-    # Sibling ApplicationSets sharing the same Placement
-    siblingApplicationSets:
-      - payment-service-canary
-
-status:
-  # Controller-maintained status
-  observedGeneration: 1
-  lastSyncTime: "2025-04-24T06:13:43Z"
+  observedGeneration: 3
+  lastSyncTime: "2025-11-18T08:05:23Z"
   
   conditions:
-    - type: Ready
-      status: "True"
-      lastTransitionTime: "2025-04-24T06:13:43Z"
-      reason: FullySynchronized
-      message: "View is up-to-date with source resources"
+  - type: Ready
+    status: "True"
+    lastTransitionTime: "2025-11-18T08:00:00Z"
+    reason: ViewSynced
+    message: Protected application view successfully synced
+```
+```yaml
+apiVersion: multicluster.odf.openshift.io/v1alpha1
+kind: ProtectedApplicationView
+metadata:
+  name: subscription-web-frontend-drpc
+  namespace: web-app
+spec:
+  drpcRef:
+    name: web-frontend-drpc
+    namespace: web-app
+  applicationRef:
+    apiVersion: apps.open-cluster-management.io/v1
+    kind: Application
+    name: web-frontend
+    namespace: web-app
+status:
+  type: Subscription
+  placements:
+  - name: web-placement
+    namespace: web-app
+    kind: PlacementRule
+    selectedClusters:
+    - prod-cluster
+    numberOfClusters: 1
+  drInfo:
+    drPolicyRef:
+      name: async-dr
+    drClusters:
+    - prod-cluster
+    - dr-cluster
+    primaryCluster: prod-cluster
+    status:
+      phase: FailedOver
+  subscriptionInfo:
+    subscriptionRefs:
+    - name: web-frontend-sub
+      namespace: web-app
+  lastSyncTime: "2025-11-18T08:10:15Z"
 ```
 
-The key design decisions in this CRD are worth highlighting. First, the owner reference to the source application ensures that when an ApplicationSet is deleted, its corresponding view is automatically garbage collected. This prevents orphaned view resources from accumulating.
+**Key Design Decisions:**
 
-Second, the labels enable efficient queries. The frontend can watch only ProtectedApplicationViews with the label `ramendr.openshift.io/protected: "true"`, ensuring we only show protected applications. The type label allows filtering by application type without examining the spec.
+**Owner Reference Strategy:**
+ApplicationSet type: Owner = DRPC CR (when DRPC deleted → view deleted)
+Subscription type: Owner = DRPC (deprecated API, DRPC is the stable resource)
+Discovered type: Owner = DRPC (DRPC is the application)
 
-Third, the `drInfo.additionalDRPCs` field handles the complex case of Subscription applications with multiple placements. The primary DRPC information is in the main `drInfo` section for easy display in the table, while additional DRPCs are available for drill-down views.
+**Labels for Efficient Querying:**
+app.kubernetes.io/type: Filter by application type
+ramendr.openshift.io/dr-policy: Filter by DR policy
 
-#### 4.2.2 The ApplicationSet Controller
+**No additionalDRPCs Field:**
+One view per DRPC means no need to track multiple DRPCs
+Subscriptions with multiple placements appear as multiple rows (one per DRPC)
 
-This controller is responsible for watching ApplicationSet resources and creating corresponding ProtectedApplicationView resources when they're protected by a DRPC. Here's the high-level reconciliation logic:
+#### 4.2.2 The DRPC Controller
+
+A single controller watches all DRPCs and performs reverse mapping to find the associated application.
 
 ```go
-// Reconcile is triggered whenever an ApplicationSet or related resource changes
-func (r *ApplicationSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+// DRPCReconciler watches DRPCs and creates ProtectedApplicationViews
+type DRPCReconciler struct {
+    client.Client
+    Scheme *runtime.Scheme
+}
+
+func (r *DRPCReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
     log := log.FromContext(ctx)
     
-    // Step 1: Fetch the ApplicationSet that triggered this reconciliation
-    appSet := &argov1alpha1.ApplicationSet{}
-    if err := r.Get(ctx, req.NamespacedName, appSet); err != nil {
+    // Step 1: Fetch DRPC
+    drpc := &multiclusterv1alpha1.DRPlacementControl{}
+    if err := r.Get(ctx, req.NamespacedName, drpc); err != nil {
         if apierrors.IsNotFound(err) {
-            // ApplicationSet was deleted - clean up the view if it exists
-            // (Actually, owner references handle this automatically, but we log it)
-            log.Info("ApplicationSet deleted, view will be garbage collected")
+            // DRPC deleted → view auto-deleted via owner reference
             return ctrl.Result{}, nil
         }
         return ctrl.Result{}, err
     }
     
-    // Step 2: Find the Placement that this ApplicationSet uses
-    // This implements the same logic as findPlacementFromArgoAppSet
-    // but on the server side where we can maintain efficient indexes
-    placement, err := r.findPlacementForApplicationSet(ctx, appSet)
+    // Step 2: Get Placement from DRPC
+    placement, err := r.getPlacement(ctx, drpc)
     if err != nil {
-        log.Error(err, "Failed to find Placement for ApplicationSet")
-        // Not having a Placement might be temporary, retry later
+        log.Error(err, "Failed to get Placement for DRPC")
         return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
     }
     
-    // Step 3: Find the DRPC that protects this Placement
-    drpc, err := r.findDRPCForPlacement(ctx, placement)
-    if err != nil || drpc == nil {
-        // No DRPC means this ApplicationSet is not protected
-        // Delete the view if it exists (app was unprotected)
-        return r.cleanupView(ctx, appSet), nil
+    // Step 3: Reverse map to find application type and reference
+    appType, appRef, typeSpecificInfo, err := r.findApplicationForDRPC(ctx, drpc, placement)
+    if err != nil {
+        log.Error(err, "Failed to find application for DRPC")
+        // Orphaned DRPC - no application found, skip view creation
+        return r.cleanupView(ctx, drpc), nil
     }
     
-    // Step 4: Gather additional information needed for the view
-    placementDecision, _ := r.findPlacementDecision(ctx, placement)
+    // Step 4: Get DR policy and cluster information
     drPolicy, drClusters, _ := r.getDRPolicyAndClusters(ctx, drpc)
-    siblings, _ := r.findSiblingApplicationSets(ctx, appSet, placement)
+    placementDecision, _ := r.getPlacementDecision(ctx, placement)
     
-    // Step 5: Build the ProtectedApplicationView resource
-    view := r.buildProtectedApplicationView(
-        appSet, placement, placementDecision,
-        drpc, drPolicy, drClusters, siblings,
-    )
+    // Step 5: Build ProtectedApplicationView
+    view := &multiclusterv1alpha1.ProtectedApplicationView{
+        ObjectMeta: metav1.ObjectMeta{
+            Name:      r.generateViewName(appType, appRef, drpc),
+            Namespace: drpc.Namespace,
+            Labels: map[string]string{
+                "app.kubernetes.io/type":           appType,
+                "ramendr.openshift.io/dr-policy":   drpc.Spec.DRPolicyRef.Name,
+            },
+        },
+        Spec: multiclusterv1alpha1.ProtectedApplicationViewSpec{
+            Type:           appType,
+            ApplicationRef: appRef,
+            Placements:     r.buildPlacementInfo(placement, placementDecision),
+            DRInfo:         r.buildDRInfo(drpc, drPolicy, drClusters),
+        },
+    }
     
-    // Step 6: Create or update the view resource
-    viewName := fmt.Sprintf("appset-%s", appSet.Name)
-    existingView := &ramendrv1alpha1.ProtectedApplicationView{}
+    // Add type-specific information
+    r.addTypeSpecificInfo(view, appType, typeSpecificInfo)
+    
+    // Step 6: Set owner reference
+    if err := r.setOwnerReference(view, appType, appRef, drpc); err != nil {
+        return ctrl.Result{}, err
+    }
+    
+    // Step 7: Create or update view
+    existingView := &multiclusterv1alpha1.ProtectedApplicationView{}
     err = r.Get(ctx, client.ObjectKey{
-        Name: viewName,
-        Namespace: appSet.Namespace,
+        Name: view.Name, Namespace: view.Namespace,
     }, existingView)
     
     if err != nil && apierrors.IsNotFound(err) {
-        // View doesn't exist, create it
-        view.Name = viewName
-        view.Namespace = appSet.Namespace
-        
-        // Set owner reference for automatic cleanup
-        if err := ctrl.SetControllerReference(appSet, view, r.Scheme); err != nil {
-            return ctrl.Result{}, err
-        }
-        
         if err := r.Create(ctx, view); err != nil {
-            log.Error(err, "Failed to create ProtectedApplicationView")
             return ctrl.Result{}, err
         }
-        
-        log.Info("Created ProtectedApplicationView", "name", viewName)
+        log.Info("Created ProtectedApplicationView", "name", view.Name)
     } else if err == nil {
-        // View exists, update it if changed
         existingView.Spec = view.Spec
         if err := r.Update(ctx, existingView); err != nil {
-            log.Error(err, "Failed to update ProtectedApplicationView")
             return ctrl.Result{}, err
         }
-        
-        log.Info("Updated ProtectedApplicationView", "name", viewName)
+        log.Info("Updated ProtectedApplicationView", "name", view.Name)
     } else {
-        // Unexpected error fetching view
         return ctrl.Result{}, err
     }
     
     return ctrl.Result{}, nil
+
+    
 }
 ```
 
+**Reverse Mapping Implementation:**
+```go
+func (r *DRPCReconciler) findApplicationForDRPC(
+    ctx context.Context,
+    drpc *ramendrv1alpha1.DRPlacementControl,
+    placement *placementv1beta1.Placement,
+) (appType string, appRef corev1.ObjectReference, typeInfo interface{}, err error) {
+    
+    // Try Case 1: ApplicationSet using this Placement
+    appSet, _ := r.findApplicationSetByPlacement(ctx, placement)
+    if appSet != nil {
+        return "ApplicationSet", corev1.ObjectReference{
+            Kind: appSet.Kind, Name: appSet.Name, Namespace: appSet.Namespace,
+        }, r.extractAppSetInfo(appSet), nil
+    }
+    
+    // Try Case 2: Subscriptions using this Placement
+    subscriptions, _ := r.findSubscriptionsByPlacement(ctx, placement)
+    if len(subscriptions) > 0 {
+        app, _ := r.findParentApplication(ctx, subscriptions)
+        return "Subscription", corev1.ObjectReference{
+            Kind: app.Kind, Name: app.Name, Namespace: app.Namespace,
+        }, r.extractSubscriptionInfo(subscriptions), nil
+    }
+    
+    // Case 3: No app found → Discovered
+    // DRPC itself is the application
+    return "Discovered", corev1.ObjectReference{
+        APIVersion: drpc.APIVersion,
+        Kind:       drpc.Kind,
+        Name:       drpc.Name,
+        Namespace:  drpc.Namespace,
+        UID:        drpc.UID,
+    }, nil, nil
+}
+```
 The controller also needs to watch not just ApplicationSets but also the related resources that might change:
 
+**Watch Configuration:**
+
 ```go
-func (r *ApplicationSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *DRPCReconciler) SetupWithManager(mgr ctrl.Manager) error {
     return ctrl.NewControllerManagedBy(mgr).
-        // Primary watch: trigger when ApplicationSets change
-        For(&argov1alpha1.ApplicationSet{}).
+        // Primary watch: ALL DRPCs trigger reconciliation
+        For(&ramendrv1alpha1.DRPlacementControl{}).
         
-        // Also watch DRPCs - when a DRPC is created or deleted,
-        // we need to reconcile affected ApplicationSets
+        // Secondary watches: application changes trigger DRPC reconciliation
         Watches(
-            &ramendrv1alpha1.DRPlacementControl{},
-            handler.EnqueueRequestsFromMapFunc(r.findApplicationSetsForDRPC),
+            &argov1alpha1.ApplicationSet{},
+            handler.EnqueueRequestsFromMapFunc(r.findDRPCsForApplicationSet),
         ).
-        
-        // Watch Placements - when placement cluster selection changes,
-        // we need to update the view
+        Watches(
+            &appv1beta1.Application{},  // Subscription parent
+            handler.EnqueueRequestsFromMapFunc(r.findDRPCsForApplication),
+        ).
         Watches(
             &placementv1beta1.Placement{},
-            handler.EnqueueRequestsFromMapFunc(r.findApplicationSetsForPlacement),
+            handler.EnqueueRequestsFromMapFunc(r.findDRPCsForPlacement),
         ).
-        
+        Watches(
+            &placementv1beta1.PlacementDecision{},
+            handler.EnqueueRequestsFromMapFunc(r.findDRPCsForPlacementDecision),
+        ).
         Complete(r)
+}
+```
+
+```go
+func (r *DRPCReconciler) setOwnerReference(
+    view *multiclusterv1alpha1.ProtectedApplicationView,
+    drpc *ramendrv1alpha1.DRPlacementControl,
+) error {
+    // Owner = DRPC for ALL types
+    // DRPC represents the protection boundary
+    // When DRPC deleted (protection removed) → view deleted
+    view.OwnerReferences = []metav1.OwnerReference{
+        {
+            APIVersion:         drpc.APIVersion,
+            Kind:               drpc.Kind,
+            Name:               drpc.Name,
+            UID:                drpc.UID,
+            Controller:         pointer.Bool(true),
+            BlockOwnerDeletion: pointer.Bool(true),
+        },
+    }
+    
+    return nil
 }
 ```
 
 The `EnqueueRequestsFromMapFunc` handlers are where the reverse mapping happens. When a DRPC changes, we need to find which ApplicationSets are affected:
 
 ```go
-func (r *ApplicationSetReconciler) findApplicationSetsForDRPC(
+func (r *DRPCReconciler) findDRPCsForApplicationSet(
     ctx context.Context,
-    drpc client.Object,
+    appSet client.Object,
 ) []reconcile.Request {
-    // Get the Placement this DRPC references
-    placement, err := r.getPlacementFromDRPC(ctx, drpc)
-    if err != nil {
+    // Find Placement this ApplicationSet uses
+    placement := r.extractPlacementFromApplicationSet(appSet)
+    if placement == nil {
         return nil
     }
     
-    // Find all ApplicationSets in the same namespace that use this Placement
-    // We could optimize this with an index, but for now, list and filter
-    appSetList := &argov1alpha1.ApplicationSetList{}
-    if err := r.List(ctx, appSetList, client.InNamespace(drpc.GetNamespace())); err != nil {
+    // Find DRPC that references this Placement
+    drpc := r.findDRPCByPlacement(ctx, placement)
+    if drpc == nil {
         return nil
     }
     
-    requests := []reconcile.Request{}
-    for _, appSet := range appSetList.Items {
-        // Check if this ApplicationSet uses the placement
-        if r.applicationSetUsesPlacement(appSet, placement) {
-            requests = append(requests, reconcile.Request{
-                NamespacedName: types.NamespacedName{
-                    Name:      appSet.Name,
-                    Namespace: appSet.Namespace,
-                },
-            })
-        }
-    }
-    
-    return requests
+    return []reconcile.Request{{
+        NamespacedName: types.NamespacedName{
+            Name:      drpc.Name,
+            Namespace: drpc.Namespace,
+        },
+    }}
 }
 ```
 
 This reverse mapping is more efficient in the controller than in the frontend because the controller maintains persistent state and can build indexes. The controller can also make intelligent decisions about when to reconcile based on what actually changed.
 
-#### 4.2.3 The Subscription Controller
-
-The Subscription controller follows a similar pattern but handles the additional complexity of grouping multiple Subscriptions and dealing with multiple placements:
-
-```go
-func (r *SubscriptionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-    // Fetch the Application resource
-    app := &appv1beta1.Application{}
-    if err := r.Get(ctx, req.NamespacedName, app); err != nil {
-        if apierrors.IsNotFound(err) {
-            return ctrl.Result{}, nil
-        }
-        return ctrl.Result{}, err
-    }
-    
-    // Find all Subscriptions that belong to this Application
-    subscriptions, err := r.findSubscriptionsForApplication(ctx, app)
-    if err != nil || len(subscriptions) == 0 {
-        // No subscriptions means this isn't a Subscription-based application
-        return r.cleanupView(ctx, app), nil
-    }
-    
-    // Group Subscriptions by their Placement
-    subscriptionGroups := r.groupSubscriptionsByPlacement(ctx, subscriptions)
-    
-    // Find DRPCs for each Placement group
-    drpcs := []*ramendrv1alpha1.DRPlacementControl{}
-    for _, group := range subscriptionGroups {
-        if drpc, _ := r.findDRPCForPlacement(ctx, group.Placement); drpc != nil {
-            drpcs = append(drpcs, drpc)
-        }
-    }
-    
-    // Only create a view if at least one DRPC exists (only show protected apps)
-    if len(drpcs) == 0 {
-        return r.cleanupView(ctx, app), nil
-    }
-    
-    // Build the view with multi-DRPC support
-    // The first DRPC is the "primary" shown in main fields
-    // Additional DRPCs go in additionalDRPCs array
-    view := r.buildProtectedApplicationView(app, subscriptionGroups, drpcs)
-    
-    // Create or update the view
-    // ... similar to ApplicationSet controller
-    
-    return ctrl.Result{}, nil
-}
-```
-
-The key difference is in how we handle multiple DRPCs. The view spec includes the primary DRPC information in the main `drInfo` section, and additional DRPCs are listed in `drInfo.additionalDRPCs`. This gives the frontend flexibility in how to display multi-DRPC applications.
-
-#### 4.2.4 The Discovered Controller
-
-The Discovered controller is the simplest because it has a direct one-to-one mapping from DRPC to view:
-
-```go
-func (r *DiscoveredReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-    // Only process DRPCs in the discovered apps namespace
-    if req.Namespace != "openshift-dr-ops" {
-        return ctrl.Result{}, nil
-    }
-    
-    // Fetch the DRPC
-    drpc := &ramendrv1alpha1.DRPlacementControl{}
-    if err := r.Get(ctx, req.NamespacedName, drpc); err != nil {
-        if apierrors.IsNotFound(err) {
-            return ctrl.Result{}, nil  // View will be garbage collected
-        }
-        return ctrl.Result{}, err
-    }
-    
-    // Get related resources
-    placement, _ := r.getPlacement(ctx, drpc)
-    drPolicy, drClusters, _ := r.getDRPolicyAndClusters(ctx, drpc)
-    
-    // Build the view (simpler than the other types)
-    view := r.buildProtectedApplicationView(drpc, placement, drPolicy, drClusters)
-    
-    // Create or update
-    // ... similar pattern
-    
-    return ctrl.Result{}, nil
-}
-```
-
-The Discovered controller only watches DRPCs in the `openshift-dr-ops` namespace, so it's very efficient. It doesn't need to do any correlation because the DRPC itself is the application.
-
-
 ### 4.3 Benefits of the Controller Approach
-
 
 The performance benefits are substantial and measurable. The frontend goes from establishing fifteen watch connections to establishing one. This reduces API server load and network traffic proportionally.
 
@@ -914,4 +940,14 @@ We estimate page load time will drop from the current five to twelve seconds for
 
 ## 5. Conclusion
 
-The controller-based aggregation approach addresses all the identified limitations of the current implementation while maintaining operational simplicity. By moving correlation logic to the backend as Kubernetes controllers, we achieve better performance, simpler frontend code, and a more maintainable architecture.
+The controller-based aggregation approach with a single DRPC controller addresses all identified limitations while maintaining operational simplicity. By using DRPC as the source of truth and performing reverse mapping to applications, we achieve:
+
+**Performance:** Sub-second page loads (from 5-12 seconds), single watch (from 10-20), instant filtering
+
+**Simplicity:** One controller, one CRD, clear 1:1 DRPC-to-row mapping, reusable frontend patterns
+
+**Correctness:** Strong consistency, automatic cleanup, no race conditions, proper owner references
+
+**Maintainability:** Centralized logic, standard Kubernetes patterns, easy testing with envtest
+
+This design positions the Protected Applications page to scale to hundreds of applications across all three types while providing a superior user experience for disaster recovery operations. The 3-week implementation timeline with incremental rollout minimizes risk and allows for validation at each stage.
