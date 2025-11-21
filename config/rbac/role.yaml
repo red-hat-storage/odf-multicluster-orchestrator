@@ -98,6 +98,14 @@ rules:
   verbs:
   - get
 - apiGroups:
+  - argoproj.io
+  resources:
+  - applicationsets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - authorization.k8s.io
   resources:
   - subjectaccessreviews
@@ -125,6 +133,8 @@ rules:
   - cluster.open-cluster-management.io
   resources:
   - managedclusters
+  - placementdecisions
+  - placements
   verbs:
   - get
   - list
@@ -160,6 +170,26 @@ rules:
   - patch
   - update
 - apiGroups:
+  - multicluster.odf.openshift.io
+  resources:
+  - protectedapplicationviews
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - multicluster.odf.openshift.io
+  resources:
+  - protectedapplicationviews/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - ramendr.openshift.io
   resources:
   - drclusters
@@ -173,6 +203,7 @@ rules:
 - apiGroups:
   - ramendr.openshift.io
   resources:
+  - drplacementcontrols
   - drpolicies
   verbs:
   - get
