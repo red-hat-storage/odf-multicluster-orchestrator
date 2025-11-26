@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"os"
 
+	argov1alpha1 "github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
 	"github.com/go-logr/zapr"
 	consolev1 "github.com/openshift/api/console/v1"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
@@ -22,7 +23,9 @@ import (
 	"open-cluster-management.io/addon-framework/pkg/addonmanager"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	placementv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	workv1 "open-cluster-management.io/api/work/v1"
+	appsubapis "open-cluster-management.io/multicloud-operators-subscription/pkg/apis"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -45,6 +48,9 @@ func init() {
 	utilruntime.Must(ramenv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(workv1.AddToScheme(mgrScheme))
 	utilruntime.Must(viewv1beta1.AddToScheme(mgrScheme))
+	utilruntime.Must(placementv1beta1.AddToScheme(mgrScheme))
+	utilruntime.Must(argov1alpha1.AddToScheme(mgrScheme))
+	utilruntime.Must(appsubapis.AddToScheme(mgrScheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -168,6 +174,24 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create ManagedClusterView controller", "error", err)
+		os.Exit(1)
+	}
+
+	if err = (&DRPlacementControlReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Logger: logger.With("controller", "DRPlacementControlReconciler"),
+	}).SetupWithManager(mgr); err != nil {
+		logger.Error("Failed to create DRPlacementControl controller", "error", err)
+		os.Exit(1)
+	}
+
+	if err = (&ProtectedApplicationViewReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Logger: logger.With("controller", "ProtectedApplicationViewReconciler"),
+	}).SetupWithManager(mgr); err != nil {
+		logger.Error("Failed to create ProtectedApplicationView controller", "error", err)
 		os.Exit(1)
 	}
 
