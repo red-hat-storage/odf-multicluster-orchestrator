@@ -36,7 +36,7 @@ metadata:
       ]
     capabilities: Seamless Upgrades
     console.openshift.io/plugins: '["odf-multicluster-console"]'
-    createdAt: "2025-06-18T05:39:14Z"
+    createdAt: "2025-11-27T13:58:02Z"
     olm.skipRange: ""
     operators.openshift.io/infrastructure-features: '["disconnected"]'
     operators.operatorframework.io/builder: operator-sdk-unknown
@@ -55,6 +55,9 @@ spec:
       displayName: Mirror Peer
       kind: MirrorPeer
       name: mirrorpeers.multicluster.odf.openshift.io
+      version: v1alpha1
+    - kind: ProtectedApplicationView
+      name: protectedapplicationviews.multicluster.odf.openshift.io
       version: v1alpha1
   description: |
     Orchestrator for OpenShift Data Foundation clusters running across multiple OpenShift clusters.
@@ -147,6 +150,14 @@ spec:
           - patch
           - update
         - apiGroups:
+          - app.k8s.io
+          resources:
+          - applications
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
           - apps
           resources:
           - deployments
@@ -160,6 +171,22 @@ spec:
           - replicasets
           verbs:
           - get
+        - apiGroups:
+          - apps.open-cluster-management.io
+          resources:
+          - subscriptions
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - argoproj.io
+          resources:
+          - applicationsets
+          verbs:
+          - get
+          - list
+          - watch
         - apiGroups:
           - authorization.k8s.io
           resources:
@@ -188,6 +215,8 @@ spec:
           - cluster.open-cluster-management.io
           resources:
           - managedclusters
+          - placementdecisions
+          - placements
           verbs:
           - get
           - list
@@ -223,6 +252,26 @@ spec:
           - patch
           - update
         - apiGroups:
+          - multicluster.odf.openshift.io
+          resources:
+          - protectedapplicationviews
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - multicluster.odf.openshift.io
+          resources:
+          - protectedapplicationviews/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
           - ramendr.openshift.io
           resources:
           - drclusters
@@ -236,6 +285,7 @@ spec:
         - apiGroups:
           - ramendr.openshift.io
           resources:
+          - drplacementcontrols
           - drpolicies
           verbs:
           - get
