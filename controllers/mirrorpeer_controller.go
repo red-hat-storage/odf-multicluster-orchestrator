@@ -101,6 +101,14 @@ const (
 
 // +kubebuilder:rbac:groups=console.openshift.io,resources=consoleplugins,verbs=get;create;update
 
+// +kubebuilder:rbac:groups=ramendr.openshift.io,resources=drplacementcontrols,verbs=get;list;watch
+// +kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=protectedapplicationviews,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=protectedapplicationviews/status,verbs=get;patch;update
+// +kubebuilder:rbac:groups=argoproj.io,resources=applicationsets,verbs=get;list;watch
+// +kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=placements;placementdecisions,verbs=get;list;watch
+// +kubebuilder:rbac:groups=apps.open-cluster-management.io,resources=subscriptions,verbs=get;list;watch
+// +kubebuilder:rbac:groups=app.k8s.io,resources=applications,verbs=get;list;watch
+
 // +kubebuilder:rbac:groups=ramendr.openshift.io,resources=drclusters,verbs=get;list;watch;create;update;delete
 // +kubebuilder:rbac:groups=ramendr.openshift.io,resources=drpolicies,verbs=get;list;watch
 
