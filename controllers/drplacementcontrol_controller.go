@@ -51,7 +51,12 @@ func (r *DRPlacementControlReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, pav, func() error {
-		if err := controllerutil.SetControllerReference(drpc, pav, r.Scheme); err != nil {
+		if err := controllerutil.SetControllerReference(
+			drpc,
+			pav,
+			r.Scheme,
+			controllerutil.WithBlockOwnerDeletion(false),
+		); err != nil {
 			return err
 		}
 
