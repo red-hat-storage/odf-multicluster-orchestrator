@@ -36,13 +36,14 @@ metadata:
       ]
     capabilities: Seamless Upgrades
     console.openshift.io/plugins: '["odf-multicluster-console"]'
-    createdAt: "2025-06-18T05:39:14Z"
+    createdAt: "2025-12-03T06:11:58Z"
     olm.skipRange: ""
     operators.openshift.io/infrastructure-features: '["disconnected"]'
     operators.operatorframework.io/builder: operator-sdk-unknown
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
   labels:
     operatorframework.io/arch.amd64: supported
+    operatorframework.io/arch.arm64: supported
     operatorframework.io/arch.ppc64le: supported
     operatorframework.io/arch.s390x: supported
   name: odf-multicluster-orchestrator.v0.0.1
