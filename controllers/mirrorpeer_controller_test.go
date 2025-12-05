@@ -175,6 +175,17 @@ func TestProcessManagedClusterAddons(t *testing.T) {
 		t.Error("Failed to create managed cluster addon")
 	}
 
+	clusterManagementAddOn := addonapiv1alpha1.ClusterManagementAddOn{}
+	if err := r.Get(ctx, types.NamespacedName{
+		Name: setup.TokenExchangeName,
+	}, &clusterManagementAddOn); err != nil {
+		t.Error("Failed to create ClusterManagementAddOn")
+	}
+	owner := clusterManagementAddOn.GetOwnerReferences()
+	if owner[0].Name != mirrorpeer.Name {
+		t.Error("Failed to add OwnerRefs to ClusterManagementAddOn")
+	}
+
 	for i := range mirrorpeer.Spec.Items {
 		managedClusterAddon := addonapiv1alpha1.ManagedClusterAddOn{}
 		if err := r.Get(ctx, types.NamespacedName{
