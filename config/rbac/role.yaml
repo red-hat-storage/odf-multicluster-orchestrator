@@ -76,6 +76,12 @@ rules:
 - apiGroups:
   - addon.open-cluster-management.io
   resources:
+  - clustermanagementaddons/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - addon.open-cluster-management.io
+  resources:
   - managedclusteraddons/finalizers
   - managedclusteraddons/status
   verbs:
