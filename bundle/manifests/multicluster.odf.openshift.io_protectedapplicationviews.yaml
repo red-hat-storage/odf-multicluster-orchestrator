@@ -160,6 +160,11 @@ spec:
                         type: string
                     type: object
                     x-kubernetes-map-type: atomic
+                  destinationNamespace:
+                    description: |-
+                      DestinationNamespace is the target namespace where the application workloads are deployed.
+                      For ApplicationSet, this is derived from spec.template.spec.destination.namespace
+                    type: string
                   subscriptionInfo:
                     description: SubscriptionInfo contains Subscription-specific information
                       which belong to this application

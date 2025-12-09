@@ -89,6 +89,11 @@ type ApplicationInfo struct {
 	// SubscriptionInfo contains Subscription-specific information which belong to this application
 	// +optional
 	SubscriptionInfo *SubscriptionInfo `json:"subscriptionInfo,omitempty"`
+
+	// DestinationNamespace is the target namespace where the application workloads are deployed.
+	// For ApplicationSet, this is derived from spec.template.spec.destination.namespace
+	// +optional
+	DestinationNamespace string `json:"destinationNamespace,omitempty"`
 }
 
 // SubscriptionInfo contains Subscription-specific information
