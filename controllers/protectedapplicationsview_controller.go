@@ -52,6 +52,13 @@ type ProtectedApplicationViewReconciler struct {
 	Logger *slog.Logger
 }
 
+type ApplicationResult struct {
+	Type                 multiclusterv1alpha1.ApplicationType
+	AppRef               corev1.ObjectReference
+	SubscriptionRefs     []corev1.ObjectReference
+	DestinationNamespace string
+}
+
 func (r *ProtectedApplicationViewReconciler) drpcStatusChangedPredicate() predicate.Predicate {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
@@ -163,7 +170,7 @@ func (r *ProtectedApplicationViewReconciler) Reconcile(ctx context.Context, req 
 		return ctrl.Result{RequeueAfter: requeueAfterSeconds}, err
 	}
 
-	appType, appRef, subRefs, err := r.findApplicationForDRPC(ctx, drpc, placement)
+	appResult, err := r.findApplicationForDRPC(ctx, drpc, placement)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -171,7 +178,7 @@ func (r *ProtectedApplicationViewReconciler) Reconcile(ctx context.Context, req 
 	if pav.Labels == nil {
 		pav.Labels = make(map[string]string)
 	}
-	pav.Labels[labelAppType] = string(appType)
+	pav.Labels[labelAppType] = string(appResult.Type)
 	pav.Labels[labelDRPolicy] = drpc.Spec.DRPolicyRef.Name
 
 	if err := r.Update(ctx, pav); err != nil {
@@ -179,7 +186,7 @@ func (r *ProtectedApplicationViewReconciler) Reconcile(ctx context.Context, req 
 		return ctrl.Result{}, err
 	}
 
-	return r.updatePAVStatus(ctx, pav, drpc, placement, appType, subRefs, appRef)
+	return r.updatePAVStatus(ctx, pav, drpc, placement, appResult)
 }
 
 // updatePAVStatus updates the status of the ProtectedApplicationView based on the DRPlacementControl and Placement information
@@ -188,9 +195,7 @@ func (r *ProtectedApplicationViewReconciler) updatePAVStatus(
 	pav *multiclusterv1alpha1.ProtectedApplicationView,
 	drpc *ramenv1alpha1.DRPlacementControl,
 	placement *placementv1beta1.Placement,
-	appType multiclusterv1alpha1.ApplicationType,
-	subscriptionRefs []corev1.ObjectReference,
-	appRef corev1.ObjectReference,
+	appResult ApplicationResult,
 ) (ctrl.Result, error) {
 	logger := r.Logger.With("ProtectedApplicationView", pav.Name)
 	selectedClusters, err := r.getPlacementDecision(ctx, placement)
@@ -209,8 +214,9 @@ func (r *ProtectedApplicationViewReconciler) updatePAVStatus(
 
 	pav.Status = multiclusterv1alpha1.ProtectedApplicationViewStatus{
 		ApplicationInfo: multiclusterv1alpha1.ApplicationInfo{
-			Type:           appType,
-			ApplicationRef: appRef,
+			Type:                 appResult.Type,
+			ApplicationRef:       appResult.AppRef,
+			DestinationNamespace: appResult.DestinationNamespace,
 		},
 		PlacementInfo: &multiclusterv1alpha1.PlacementInfo{
 			PlacementRef: corev1.ObjectReference{
@@ -240,9 +246,9 @@ func (r *ProtectedApplicationViewReconciler) updatePAVStatus(
 		LastSyncTime:       ptr.To(metav1.Now()),
 	}
 
-	if appType == multiclusterv1alpha1.SubscriptionType && len(subscriptionRefs) > 0 {
+	if appResult.Type == multiclusterv1alpha1.SubscriptionType && len(appResult.SubscriptionRefs) > 0 {
 		pav.Status.ApplicationInfo.SubscriptionInfo = &multiclusterv1alpha1.SubscriptionInfo{
-			SubscriptionRefs: subscriptionRefs,
+			SubscriptionRefs: appResult.SubscriptionRefs,
 		}
 	}
 
@@ -250,7 +256,7 @@ func (r *ProtectedApplicationViewReconciler) updatePAVStatus(
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("Updated ProtectedApplicationView status", "name", pav.Name, "type", appType)
+	logger.Info("Updated ProtectedApplicationView status", "name", pav.Name, "type", appResult.Type)
 	return ctrl.Result{}, nil
 }
 
@@ -259,42 +265,47 @@ func (r *ProtectedApplicationViewReconciler) findApplicationForDRPC(
 	ctx context.Context,
 	drpc *ramenv1alpha1.DRPlacementControl,
 	placement *placementv1beta1.Placement,
-) (multiclusterv1alpha1.ApplicationType, corev1.ObjectReference, []corev1.ObjectReference, error) {
+) (ApplicationResult, error) {
 	logger := r.Logger.With("DRPC", drpc.Name, "Namespace", drpc.Namespace)
 
 	appSet, err := r.findApplicationSetByPlacement(ctx, drpc, placement)
 	if err != nil {
 		logger.Error("Failed to search for ApplicationSet", "error", err)
-		return "", corev1.ObjectReference{}, nil, err
+		return ApplicationResult{}, err
 	}
 
 	if appSet != nil {
 		logger.Info("Found ApplicationSet for DRPC", "applicationSet", appSet.Name)
-		return multiclusterv1alpha1.ApplicationSetType, corev1.ObjectReference{
-			APIVersion: argov1alpha1.SchemeGroupVersion.String(),
-			Kind:       applicationSetKind,
-			Name:       appSet.Name,
-			Namespace:  appSet.Namespace,
-			UID:        appSet.UID,
-		}, nil, nil
+		return ApplicationResult{
+			Type: multiclusterv1alpha1.ApplicationSetType,
+			AppRef: corev1.ObjectReference{
+				APIVersion: argov1alpha1.SchemeGroupVersion.String(),
+				Kind:       applicationSetKind,
+				Name:       appSet.Name,
+				Namespace:  appSet.Namespace,
+				UID:        appSet.UID,
+			},
+			DestinationNamespace: appSet.Spec.Template.Spec.Destination.Namespace,
+		}, nil
 	}
 
 	subscriptions, err := r.findSubscriptionsByPlacement(ctx, placement)
 	if err != nil {
 		logger.Error("Failed to search for Subscriptions", "error", err)
-		return "", corev1.ObjectReference{}, nil, err
+		return ApplicationResult{}, err
 	}
 
 	if len(subscriptions) > 0 {
 		app, err := r.findParentApplication(ctx, subscriptions)
 		if err != nil {
 			logger.Error("Failed to find parent Application", "error", err)
-			return "", corev1.ObjectReference{}, nil, err
+			return ApplicationResult{}, err
 		}
 
-		var subRefs []corev1.ObjectReference
+		result := ApplicationResult{Type: multiclusterv1alpha1.SubscriptionType}
+
 		for _, sub := range subscriptions {
-			subRefs = append(subRefs, corev1.ObjectReference{
+			result.SubscriptionRefs = append(result.SubscriptionRefs, corev1.ObjectReference{
 				APIVersion: subscriptionAPIVersion,
 				Kind:       subscriptionKind,
 				Name:       sub.Name,
@@ -302,34 +313,31 @@ func (r *ProtectedApplicationViewReconciler) findApplicationForDRPC(
 			})
 		}
 
-		var appRef corev1.ObjectReference
 		if app != nil {
 			logger.Info("Found Subscription-based application for DRPC",
-				"application", app.Name,
-				"subscriptionCount", len(subscriptions))
-			appRef = corev1.ObjectReference{
+				"application", app.Name, "subscriptionCount", len(subscriptions))
+			result.AppRef = corev1.ObjectReference{
 				APIVersion: "app.k8s.io/v1beta1",
 				Kind:       "Application",
 				Name:       app.Name,
 				Namespace:  app.Namespace,
 				UID:        app.UID,
 			}
-		} else {
-			logger.Info("Subscriptions found but no parent Application",
-				"subscriptionCount", len(subscriptions))
 		}
 
-		return multiclusterv1alpha1.SubscriptionType, appRef, subRefs, nil
+		return result, nil
 	}
 
-	// No ApplicationSet or Subscription found - use Discovered type
 	logger.Info("No ApplicationSet or Subscription found, using Discovered type for DRPC")
-	return multiclusterv1alpha1.DiscoveredType, corev1.ObjectReference{
-		APIVersion: ramenAPIVersion,
-		Kind:       drpcKind,
-		Name:       drpc.Name,
-		Namespace:  drpc.Namespace,
-	}, nil, nil
+	return ApplicationResult{
+		Type: multiclusterv1alpha1.DiscoveredType,
+		AppRef: corev1.ObjectReference{
+			APIVersion: ramenAPIVersion,
+			Kind:       drpcKind,
+			Name:       drpc.Name,
+			Namespace:  drpc.Namespace,
+		},
+	}, nil
 }
 
 // findApplicationSetByPlacement finds the ApplicationSet associated with the given Placement
