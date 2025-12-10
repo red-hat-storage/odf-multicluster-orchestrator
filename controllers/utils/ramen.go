@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-func createOrUpdateRamenS3Secret(ctx context.Context, rc client.Client, scheme *runtime.Scheme, name string, data map[string][]byte, ramenHubNamespace string, mirrorPeer multiclusterv1alpha1.MirrorPeer, logger *slog.Logger) error {
+func createOrUpdateRamenS3Secret(ctx context.Context, rc client.Client, scheme *runtime.Scheme, name string, data map[string][]byte, ramenHubNamespace string, mirrorPeer multiclusterv1alpha1.MirrorPeer) error {
 
 	secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -47,6 +47,8 @@ func updateS3ProfileFields(expected *rmn.S3StoreProfile, found *rmn.S3StoreProfi
 	found.S3Region = expected.S3Region
 	found.S3CompatibleEndpoint = expected.S3CompatibleEndpoint
 	found.S3SecretRef.Name = expected.S3SecretRef.Name
+	found.VeleroNamespaceSecretKeyRef = expected.VeleroNamespaceSecretKeyRef
+	found.CACertificates = expected.CACertificates
 }
 
 func areS3ProfileFieldsEqual(expected rmn.S3StoreProfile, found rmn.S3StoreProfile) bool {
@@ -71,6 +73,16 @@ func areS3ProfileFieldsEqual(expected rmn.S3StoreProfile, found rmn.S3StoreProfi
 	}
 
 	return true
+}
+
+func mergeCustomS3ProfileFields(current *rmn.S3StoreProfile, expected *rmn.S3StoreProfile) {
+	if current.VeleroNamespaceSecretKeyRef != nil {
+		expected.VeleroNamespaceSecretKeyRef = current.VeleroNamespaceSecretKeyRef
+	}
+
+	if current.CACertificates != nil {
+		expected.CACertificates = current.CACertificates
+	}
 }
 
 func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret *corev1.Secret, data map[string][]byte, mirrorPeer multiclusterv1alpha1.MirrorPeer, ramenHubNamespace string, logger *slog.Logger) error {
@@ -128,6 +140,8 @@ func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret 
 	isUpdated := false
 	for i, currentS3Profile := range ramenConfig.S3StoreProfiles {
 		if currentS3Profile.S3ProfileName == expectedS3Profile.S3ProfileName {
+			// Merge any existing veleroNamespaceSecretKeyRef and caCertificates to the S3StoreProfile.
+			mergeCustomS3ProfileFields(&currentS3Profile, &expectedS3Profile)
 			if areS3ProfileFieldsEqual(expectedS3Profile, currentS3Profile) {
 				logger.Info("No change detected in S3 profile, skipping update", "S3ProfileName", expectedS3Profile.S3ProfileName)
 				return nil
@@ -187,7 +201,7 @@ func CreateOrUpdateSecretsFromInternalSecret(ctx context.Context, rc client.Clie
 			return err
 		}
 
-		if err := createOrUpdateRamenS3Secret(ctx, rc, scheme, secret.Name, data, currentNamespace, mirrorPeer, logger); err != nil {
+		if err := createOrUpdateRamenS3Secret(ctx, rc, scheme, secret.Name, data, currentNamespace, mirrorPeer); err != nil {
 			logger.Error("Failed to create or update Ramen S3 secret", "error", err, "SecretName", secret.Name, "Namespace", currentNamespace)
 			return err
 		}
