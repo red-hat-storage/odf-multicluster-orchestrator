@@ -179,6 +179,33 @@ func getRamenConfig(t *testing.T, ctx context.Context, fakeClient client.Client,
 	return ramenConfig
 }
 
+func updateRamenConfig(t *testing.T, ctx context.Context, fakeClient client.Client, ramenNamespace string) rmn.RamenConfig {
+	currentRamenConfigMap := corev1.ConfigMap{}
+	namespacedName := types.NamespacedName{
+		Name:      RamenHubOperatorConfigName,
+		Namespace: ramenNamespace,
+	}
+	err := fakeClient.Get(ctx, namespacedName, &currentRamenConfigMap)
+	assert.NoError(t, err)
+	ramenConfigData := currentRamenConfigMap.Data["ramen_manager_config.yaml"]
+	ramenConfig := rmn.RamenConfig{}
+	err = yaml.Unmarshal([]byte(ramenConfigData), &ramenConfig)
+	assert.NoError(t, err)
+
+	// Add custom VeleroSecretRef and CACertificates
+	for i := range ramenConfig.S3StoreProfiles {
+		ramenConfig.S3StoreProfiles[i].VeleroNamespaceSecretKeyRef = &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{
+				Name: "my-secret",
+			},
+			Key: "test",
+		}
+		ramenConfig.S3StoreProfiles[i].CACertificates = []byte("custom-cert")
+	}
+
+	return ramenConfig
+}
+
 func getRamenS3Secret(secretName string, ctx context.Context, fakeClient client.Client, ramenNamespace string) (corev1.Secret, error) {
 	ramenSecret := corev1.Secret{}
 	namespacedName := types.NamespacedName{
@@ -214,9 +241,52 @@ func getS3Profile(ramenNamespace string, sourceManagedClusterName string, destin
 	}
 }
 
+func getCustomS3Profile(ramenNamespace string, sourceManagedClusterName string, destinationManagedClusterName string) []rmn.S3StoreProfile {
+	return []rmn.S3StoreProfile{
+		{
+			S3ProfileName:        fmt.Sprintf("%s-%s-%s", S3ProfilePrefix, sourceManagedClusterName, StorageClusterName),
+			S3Bucket:             TestS3BucketName,
+			S3CompatibleEndpoint: TestS3RouteHost,
+			S3Region:             "",
+			S3SecretRef: corev1.SecretReference{
+				Name: CreateUniqueSecretName(sourceManagedClusterName, StorageClusterNamespace, StorageClusterName, S3ProfilePrefix),
+			},
+			VeleroNamespaceSecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "my-secret",
+				},
+				Key: "test",
+			},
+			CACertificates: []byte("custom-cert"),
+		},
+		{
+			S3ProfileName:        fmt.Sprintf("%s-%s-%s", S3ProfilePrefix, destinationManagedClusterName, StorageClusterName),
+			S3Bucket:             TestS3BucketName,
+			S3CompatibleEndpoint: TestS3RouteHost,
+			S3Region:             "",
+			S3SecretRef: corev1.SecretReference{
+				Name: CreateUniqueSecretName(destinationManagedClusterName, StorageClusterNamespace, StorageClusterName, S3ProfilePrefix),
+			},
+			VeleroNamespaceSecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "my-secret",
+				},
+				Key: "test",
+			},
+			CACertificates: []byte("custom-cert"),
+		},
+	}
+}
+
 func expectedRamenConfig(ramenNamespace string, source, destination string) rmn.RamenConfig {
 	return rmn.RamenConfig{
 		S3StoreProfiles: getS3Profile(ramenNamespace, source, destination),
+	}
+}
+
+func expectedCustomRamenConfig(ramenNamespace string, source, destination string) rmn.RamenConfig {
+	return rmn.RamenConfig{
+		S3StoreProfiles: getCustomS3Profile(ramenNamespace, source, destination),
 	}
 }
 
@@ -254,6 +324,12 @@ func TestCreateOrUpdateSecretsFromInternalSecret(t *testing.T) {
 		},
 		{
 			name:            "Updating existing S3 Profile in filled Ramen Config",
+			ramenNamespace:  "namespace2",
+			manageS3:        true,
+			ignoreS3Profile: false,
+		},
+		{
+			name:            "Updating existing S3 Profile in filled Ramen Config with user defined fields",
 			ramenNamespace:  "namespace2",
 			manageS3:        true,
 			ignoreS3Profile: false,
@@ -296,6 +372,20 @@ func TestCreateOrUpdateSecretsFromInternalSecret(t *testing.T) {
 			ramenSecret, err = getRamenS3Secret(TestDestinationManagedClusterWest, ctx, fakeClient, c.ramenNamespace)
 			assert.NoError(t, err)
 			assert.True(t, reflect.DeepEqual(expectedRamenSecretData(), ramenSecret.Data))
+
+			if c.name == "Updating existing S3 Profile in filled Ramen Config with user defined fields" {
+				updatedRamenConfig := updateRamenConfig(t, ctx, fakeClient, c.ramenNamespace)
+
+				err := CreateOrUpdateSecretsFromInternalSecret(ctx, fakeClient, scheme, c.ramenNamespace, fakeS3InternalSecret(t, TestSourceManagedClusterEast), fakeMirrorPeers(c.manageS3), fakeLogger)
+				assert.NoError(t, err)
+				err = CreateOrUpdateSecretsFromInternalSecret(ctx, fakeClient, scheme, c.ramenNamespace, fakeS3InternalSecret(t, TestDestinationManagedClusterWest), fakeMirrorPeers(c.manageS3), fakeLogger)
+				assert.NoError(t, err)
+
+				expectedUpdatedConfig := expectedCustomRamenConfig(c.ramenNamespace, TestSourceManagedClusterEast, TestDestinationManagedClusterWest)
+				t.Log(expectedUpdatedConfig)
+				t.Log(updatedRamenConfig)
+				assert.True(t, reflect.DeepEqual(expectedUpdatedConfig, updatedRamenConfig))
+			}
 		}
 	}
 }
