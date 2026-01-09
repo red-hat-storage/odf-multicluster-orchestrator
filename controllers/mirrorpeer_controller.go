@@ -664,27 +664,6 @@ func deleteManagedClusterAddon(ctx context.Context, client client.Client, scheme
 		return fmt.Errorf("failed to get managedclusteraddon config %w", err)
 	}
 
-	// Get the ClusterManagementAddOn
-	var clusterManagementAddOn addonapiv1alpha1.ClusterManagementAddOn
-
-	err = client.Get(ctx, types.NamespacedName{Name: setup.TokenExchangeName}, &clusterManagementAddOn)
-	if err != nil {
-		return err
-	}
-
-	CMARefs := []metav1.OwnerReference{
-		{
-			APIVersion:         AddonApiVersion,
-			Kind:               ClusterManagementAddOn,
-			Name:               clusterManagementAddOn.GetName(),
-			UID:                clusterManagementAddOn.GetUID(),
-			BlockOwnerDeletion: ptr.To(true),
-			Controller:         ptr.To(true),
-		},
-	}
-
-	deleteCMA := false
-
 	for _, config := range addonConfigs {
 		var managedClusterAddOn addonapiv1alpha1.ManagedClusterAddOn
 		namespacedName := types.NamespacedName{
@@ -725,28 +704,11 @@ func deleteManagedClusterAddon(ctx context.Context, client client.Client, scheme
 			return err
 		}
 
-		if len(managedClusterAddOn.GetOwnerReferences()) == 1 {
-			foundCMA, err := controllerutil.HasOwnerReference(CMARefs, &managedClusterAddOn, scheme)
+		if len(managedClusterAddOn.GetOwnerReferences()) == 0 {
+			err = client.Delete(ctx, &managedClusterAddOn)
 			if err != nil {
 				return err
 			}
-
-			if foundCMA {
-				deleteCMA = true
-				err = client.Delete(ctx, &managedClusterAddOn)
-				if err != nil {
-					return err
-				}
-			} else {
-				return fmt.Errorf("expected last ownerRef to be ClusterManagementAddons %q for ManagedClusterAddOn %q before deleting", clusterManagementAddOn.Name, managedClusterAddOn.Name)
-			}
-		}
-	}
-
-	// Delete the ClusterManagementAddOn, if the ManagedClusterAddons is deleted above
-	if deleteCMA {
-		if err = client.Delete(ctx, &clusterManagementAddOn); err != nil {
-			return err
 		}
 	}
 
@@ -779,7 +741,6 @@ func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, m
 		if clusterManagementAddOn.Annotations == nil {
 			clusterManagementAddOn.Annotations = make(map[string]string)
 		}
-		clusterManagementAddOn.Annotations[utils.DRModeAnnotationKey] = string(mirrorPeer.Spec.Type)
 		clusterManagementAddOn.Annotations[AddonVersionAnnotationKey] = version.Version
 		clusterManagementAddOn.Annotations[utils.HubOperatorNamespaceKey] = r.CurrentNamespace
 
