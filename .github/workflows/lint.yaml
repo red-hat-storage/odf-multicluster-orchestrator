@@ -14,22 +14,19 @@ defaults:
 
 jobs:
   golangci-lint:
-    name: Go ${{ matrix.go }} Lint
+    name: Go Lint
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go: [ '1.24' ]
     steps:
     - name: Checkout source
-      uses: actions/checkout@v3
+      uses: actions/checkout@v6
 
     - name: Setup go
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v6
       with:
-        go-version: ${{ matrix.go }}
+        go-version-file: go.mod
 
     - name: Lint
-      uses: golangci/golangci-lint-action@v3
+      uses: golangci/golangci-lint-action@v6
       with:
         version: v1.64.8
 
@@ -38,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout source
-      uses: actions/checkout@v3
+      uses: actions/checkout@v6
 
     - name: Lint
       uses: stackrox/kube-linter-action@v1.0.4
