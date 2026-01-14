@@ -214,6 +214,7 @@ func TestPAVReconcile_SubscriptionNoParentApp(t *testing.T) {
 func TestPAVReconcile_StatusUpdate(t *testing.T) {
 	pav := createTestPAV()
 	drpc := createTestDRPCForPAV()
+	drpc.Spec.PreferredCluster = pavTestCluster1
 	drpc.Status.Phase = ramenv1alpha1.Relocated
 	drpc.Status.PreferredDecision = ramenv1alpha1.PlacementDecision{
 		ClusterName: pavTestCluster1,
@@ -604,5 +605,152 @@ func getFakePAVReconciler(objects ...client.Object) *ProtectedApplicationViewRec
 		Client: fakeClient,
 		Scheme: scheme,
 		Logger: utils.GetLogger(utils.GetZapLogger(true)),
+	}
+}
+
+func TestPAVReconcile_FailedOverPrimaryCluster(t *testing.T) {
+	pav := createTestPAV()
+	drpc := createTestDRPCForPAV()
+	drpc.Spec.PreferredCluster = pavTestCluster1
+	drpc.Spec.FailoverCluster = pavTestCluster2
+	drpc.Status.Phase = ramenv1alpha1.FailedOver
+	drpc.Status.PreferredDecision = ramenv1alpha1.PlacementDecision{
+		ClusterName: pavTestCluster1,
+	}
+
+	placement := createTestPlacementForPAV()
+	drPolicy := createTestDRPolicyForPAV()
+	placementDecision := createTestPlacementDecisionForPAV()
+
+	r := getFakePAVReconciler(pav, drpc, placement, drPolicy, placementDecision)
+
+	ctx := context.TODO()
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      pavTestDRPCName,
+			Namespace: pavTestNamespace,
+		},
+	}
+
+	_, err := r.Reconcile(ctx, req)
+	if err != nil {
+		t.Fatalf("Reconcile failed: %v", err)
+	}
+
+	updatedPAV := &multiclusterv1alpha1.ProtectedApplicationView{}
+	err = r.Get(ctx, types.NamespacedName{
+		Name:      pavTestDRPCName,
+		Namespace: pavTestNamespace,
+	}, updatedPAV)
+	if err != nil {
+		t.Fatalf("Failed to get PAV: %v", err)
+	}
+
+	if updatedPAV.Status.DRInfo.Status.Phase != ramenv1alpha1.FailedOver {
+		t.Errorf("Expected phase %s, got %s", ramenv1alpha1.FailedOver, updatedPAV.Status.DRInfo.Status.Phase)
+	}
+
+	// Verify primaryCluster is failoverCluster, not PreferredDecision
+	if updatedPAV.Status.DRInfo.PrimaryCluster != pavTestCluster2 {
+		t.Errorf("Expected primary cluster %s (failoverCluster), got %s",
+			pavTestCluster2, updatedPAV.Status.DRInfo.PrimaryCluster)
+	}
+}
+
+func TestPAVReconcile_RelocatedPrimaryCluster(t *testing.T) {
+	pav := createTestPAV()
+	drpc := createTestDRPCForPAV()
+	drpc.Spec.PreferredCluster = pavTestCluster1
+	drpc.Spec.FailoverCluster = pavTestCluster2
+	drpc.Status.Phase = ramenv1alpha1.Relocated
+	drpc.Status.PreferredDecision = ramenv1alpha1.PlacementDecision{
+		ClusterName: pavTestCluster2, // Still points to failover cluster
+	}
+
+	placement := createTestPlacementForPAV()
+	drPolicy := createTestDRPolicyForPAV()
+	placementDecision := createTestPlacementDecisionForPAV()
+
+	r := getFakePAVReconciler(pav, drpc, placement, drPolicy, placementDecision)
+
+	ctx := context.TODO()
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      pavTestDRPCName,
+			Namespace: pavTestNamespace,
+		},
+	}
+
+	_, err := r.Reconcile(ctx, req)
+	if err != nil {
+		t.Fatalf("Reconcile failed: %v", err)
+	}
+
+	updatedPAV := &multiclusterv1alpha1.ProtectedApplicationView{}
+	err = r.Get(ctx, types.NamespacedName{
+		Name:      pavTestDRPCName,
+		Namespace: pavTestNamespace,
+	}, updatedPAV)
+	if err != nil {
+		t.Fatalf("Failed to get PAV: %v", err)
+	}
+
+	if updatedPAV.Status.DRInfo.Status.Phase != ramenv1alpha1.Relocated {
+		t.Errorf("Expected phase %s, got %s", ramenv1alpha1.Relocated, updatedPAV.Status.DRInfo.Status.Phase)
+	}
+
+	// Verify primaryCluster is preferredCluster
+	if updatedPAV.Status.DRInfo.PrimaryCluster != pavTestCluster1 {
+		t.Errorf("Expected primary cluster %s (preferredCluster), got %s",
+			pavTestCluster1, updatedPAV.Status.DRInfo.PrimaryCluster)
+	}
+}
+
+func TestPAVReconcile_DeployedPrimaryCluster(t *testing.T) {
+	pav := createTestPAV()
+	drpc := createTestDRPCForPAV()
+	drpc.Spec.PreferredCluster = pavTestCluster1
+	drpc.Spec.FailoverCluster = pavTestCluster2
+	drpc.Status.Phase = ramenv1alpha1.Deployed
+	drpc.Status.PreferredDecision = ramenv1alpha1.PlacementDecision{
+		ClusterName: pavTestCluster1,
+	}
+
+	placement := createTestPlacementForPAV()
+	drPolicy := createTestDRPolicyForPAV()
+	placementDecision := createTestPlacementDecisionForPAV()
+
+	r := getFakePAVReconciler(pav, drpc, placement, drPolicy, placementDecision)
+
+	ctx := context.TODO()
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      pavTestDRPCName,
+			Namespace: pavTestNamespace,
+		},
+	}
+
+	_, err := r.Reconcile(ctx, req)
+	if err != nil {
+		t.Fatalf("Reconcile failed: %v", err)
+	}
+
+	updatedPAV := &multiclusterv1alpha1.ProtectedApplicationView{}
+	err = r.Get(ctx, types.NamespacedName{
+		Name:      pavTestDRPCName,
+		Namespace: pavTestNamespace,
+	}, updatedPAV)
+	if err != nil {
+		t.Fatalf("Failed to get PAV: %v", err)
+	}
+
+	if updatedPAV.Status.DRInfo.Status.Phase != ramenv1alpha1.Deployed {
+		t.Errorf("Expected phase %s, got %s", ramenv1alpha1.Deployed, updatedPAV.Status.DRInfo.Status.Phase)
+	}
+
+	// Verify primaryCluster uses PreferredDecision for Deployed state
+	if updatedPAV.Status.DRInfo.PrimaryCluster != pavTestCluster1 {
+		t.Errorf("Expected primary cluster %s (preferredDecision), got %s",
+			pavTestCluster1, updatedPAV.Status.DRInfo.PrimaryCluster)
 	}
 }

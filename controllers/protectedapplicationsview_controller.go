@@ -88,6 +88,29 @@ func (r *ProtectedApplicationViewReconciler) drpcStatusChanged(old, new *ramenv1
 	return old.Status.PreferredDecision.ClusterName != new.Status.PreferredDecision.ClusterName
 }
 
+// getPrimaryClusterFromDRPC determines the actual primary cluster based on DRPC phase and spec.
+// This matches the logic used by odf-console to display the correct primary cluster in the UI.
+func (r *ProtectedApplicationViewReconciler) getPrimaryClusterFromDRPC(drpc *ramenv1alpha1.DRPlacementControl) string {
+	if drpc.Status.Phase == "" {
+		return ""
+	}
+
+	switch drpc.Status.Phase {
+	case ramenv1alpha1.FailedOver:
+		// After failover, primary is the failover cluster
+		return drpc.Spec.FailoverCluster
+
+	case ramenv1alpha1.Relocated:
+		// After relocate, primary is back to preferred cluster
+		return drpc.Spec.PreferredCluster
+
+	default:
+		// For other states (Deploying, Deployed, Initiating, etc.)
+		// Use PreferredDecision as the source of truth
+		return drpc.Status.PreferredDecision.ClusterName
+	}
+}
+
 func (r *ProtectedApplicationViewReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	ctx := context.Background()
 
@@ -210,7 +233,7 @@ func (r *ProtectedApplicationViewReconciler) updatePAVStatus(
 		// Continue with empty drClusters - partial status is better than no status
 	}
 
-	primaryCluster := drpc.Status.PreferredDecision.ClusterName
+	primaryCluster := r.getPrimaryClusterFromDRPC(drpc)
 
 	pav.Status = multiclusterv1alpha1.ProtectedApplicationViewStatus{
 		ApplicationInfo: multiclusterv1alpha1.ApplicationInfo{
