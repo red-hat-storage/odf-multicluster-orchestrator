@@ -340,6 +340,44 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
+	// Set rotation keyType on mirrorpeer for "async" DR type only
+	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async && mirrorPeer.Annotations[utils.KeyTypeAnnotation] != utils.KeyTypeAES256k {
+		// Get clients info from odf-client-info cm
+		mpItems := mirrorPeer.Spec.Items
+		ci1, err := utils.GetClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(mpItems[0].ClusterName, mpItems[0].StorageClusterRef.Name))
+		if err != nil {
+			logger.Error("Failed to get client info from ConfigMap for the first cluster")
+			return ctrl.Result{}, err
+		}
+
+		ci2, err := utils.GetClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(mpItems[1].ClusterName, mpItems[1].StorageClusterRef.Name))
+		if err != nil {
+			logger.Error("Failed to get client info from ConfigMap for the second cluster")
+			return ctrl.Result{}, err
+		}
+
+		logger.Info("Fetched client info for the clusters", "ClientInfo1", ci1, "ClientInfo2", ci2)
+
+		keyTypeAnnSpoke1 := fmt.Sprintf("%s.%s", ci1.ProviderInfo.ProviderManagedClusterName, addons.SpokeKeyTypeAnnotation)
+		keyTypeAnnSpoke2 := fmt.Sprintf("%s.%s", ci2.ProviderInfo.ProviderManagedClusterName, addons.SpokeKeyTypeAnnotation)
+		keyTypeAnnSpoke1Val := mirrorPeer.Annotations[keyTypeAnnSpoke1]
+		keyTypeAnnSpoke2Val := mirrorPeer.Annotations[keyTypeAnnSpoke2]
+
+		// Set keyType annotation on mirrorpeer based on the spoke annotations
+		hubAnnVal := utils.KeyTypeAES
+		if keyTypeAnnSpoke1Val == utils.KeyTypeAES256k && keyTypeAnnSpoke2Val == utils.KeyTypeAES256k {
+			hubAnnVal = utils.KeyTypeAES256k
+		}
+
+		if utils.AddAnnotation(mirrorPeerCopy, utils.KeyTypeAnnotation, hubAnnVal) {
+			logger.Info("Adding/Updating keyType annotation in mirrorpeer", "KeyType", hubAnnVal)
+			if err = r.Client.Update(ctx, mirrorPeerCopy); err != nil {
+				logger.Error("Failed to update mirrorpeer with keyType annotation", "error", err)
+				return checkK8sUpdateErrors(err, mirrorPeerCopy, logger)
+			}
+		}
+	}
+
 	if hasStorageClientRef && mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
 		result, err := createStorageClusterPeer(ctx, r.Client, logger, r.CurrentNamespace, mirrorPeer)
 		if err != nil {
