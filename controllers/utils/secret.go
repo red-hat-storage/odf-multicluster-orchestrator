@@ -86,6 +86,7 @@ func ValidateInternalSecret(internalSecret *corev1.Secret, expectedLabel SecretL
 	_, secretOriginKeyOk := internalSecret.Data[SecretOriginKey]
 	_, secretDataKeyOk := internalSecret.Data[SecretDataKey]
 
+	// nolint:staticcheck
 	if !(namespaceKeyOk && secretDataKeyOk && secretOriginKeyOk && scNameKeyOk) {
 		return errors.New("expected data map keys are not present")
 	}

@@ -14,17 +14,14 @@ jobs:
   clean-workdir:
     name: Ensure Clean Workdir
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go: [ '1.24' ]
     steps:
     - name: Checkout source
-      uses: actions/checkout@v3
+      uses: actions/checkout@v6
 
     - name: Setup go
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v6
       with:
-        go-version: ${{ matrix.go }}
+        go-version-file: go.mod
 
     - name: Scan for uncommitted changes
       run: make ensure-clean-workdir
@@ -33,17 +30,14 @@ jobs:
     name: Unit Tests
     needs: clean-workdir
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go: [ '1.24' ]
     steps:
     - name: Checkout source
-      uses: actions/checkout@v3
+      uses: actions/checkout@v6
 
     - name: Setup go
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v6
       with:
-        go-version: ${{ matrix.go }}
+        go-version-file: go.mod
 
     - name: Run unit tests
       run: make unit-test
@@ -52,17 +46,14 @@ jobs:
     name: Integration Tests
     needs: clean-workdir
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go: [ '1.24' ]
     steps:
     - name: Checkout source
-      uses: actions/checkout@v3
+      uses: actions/checkout@v6
 
     - name: Setup go
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v6
       with:
-        go-version: ${{ matrix.go }}
+        go-version-file: go.mod
 
     - name: Run integration tests
       run: make test
@@ -71,17 +62,14 @@ jobs:
     name: Build Operator Image
     needs: [unit-test,integration-test]
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go: [ '1.24' ]
     steps:
     - name: Checkout source
-      uses: actions/checkout@v3
+      uses: actions/checkout@v6
 
     - name: Setup go
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v6
       with:
-        go-version: ${{ matrix.go }}
+        go-version-file: go.mod
 
     - name: Build
       run: make operator-build
@@ -90,17 +78,14 @@ jobs:
     name: Validate Operator Bundle
     needs: clean-workdir
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go: [ '1.24' ]
     steps:
     - name: Checkout source
-      uses: actions/checkout@v3
+      uses: actions/checkout@v6
 
     - name: Setup go
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v6
       with:
-        go-version: ${{ matrix.go }}
+        go-version-file: go.mod
 
     - name: Validate
       run: make bundle
@@ -109,17 +94,14 @@ jobs:
     name: Build Bundle Image
     needs: validate-bundle
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go: [ '1.24' ]
     steps:
     - name: Checkout source
-      uses: actions/checkout@v3
+      uses: actions/checkout@v6
 
     - name: Setup go
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v6
       with:
-        go-version: ${{ matrix.go }}
+        go-version-file: go.mod
 
     - name: Build
       run: make bundle-build
