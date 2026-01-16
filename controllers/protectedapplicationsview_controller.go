@@ -38,7 +38,7 @@ const (
 	subscriptionKind                 = "Subscription"
 	drpcKind                         = "DRPlacementControl"
 	placementKind                    = "Placement"
-	requeueAfterSeconds              = 30 * time.Second
+	requeueAfterSeconds              = time.Duration(30 * time.Second)
 	subscriptionAnnotation           = "apps.open-cluster-management.io/subscriptions"
 	ramenAPIVersion                  = "ramendr.openshift.io/v1alpha1"
 	drPolicyKind                     = "DRPolicy"
