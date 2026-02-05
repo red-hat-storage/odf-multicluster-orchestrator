@@ -185,6 +185,10 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, managedCluste
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, c, configMap, func() error {
+		if configMap.Data == nil {
+			configMap.Data = make(map[string]string)
+		}
+
 		for clientKey, clientInfo := range clientInfoMap {
 			configMap.Data[clientKey] = clientInfo
 		}
