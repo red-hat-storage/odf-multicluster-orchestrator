@@ -571,8 +571,8 @@ func createStorageClusterPeer(ctx context.Context, client client.Client, logger 
 func fetchOnboardingTicket(ctx context.Context, client client.Client, clientInfo utils.ClientInfo, mirrorPeer *multiclusterv1alpha1.MirrorPeer) (string, error) {
 	secretName := string(mirrorPeer.GetUID())
 	secretNamespace := clientInfo.ProviderInfo.ProviderManagedClusterName
-	tokenSecret, err := utils.FetchSecretWithName(ctx, client, types.NamespacedName{Name: secretName, Namespace: secretNamespace})
-	if err != nil {
+	tokenSecret := &corev1.Secret{}
+	if err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: secretNamespace}, tokenSecret); err != nil {
 		if k8serrors.IsNotFound(err) {
 			return "", fmt.Errorf("secret %s not found in namespace %s", secretName, secretNamespace)
 		}
@@ -1139,8 +1139,8 @@ func checkS3ProfileStatus(ctx context.Context, client client.Client, logger *slo
 		}
 		logger.Info("Attempting to fetch S3 secret", "SecretName", s3SecretName, "Namespace", s3SecretNamespace)
 
-		_, err := utils.FetchSecretWithName(ctx, client, types.NamespacedName{Name: s3SecretName, Namespace: s3SecretNamespace})
-		if err != nil {
+		s3Secret := &corev1.Secret{}
+		if err := client.Get(ctx, types.NamespacedName{Name: s3SecretName, Namespace: s3SecretNamespace}, s3Secret); err != nil {
 			logger.Error("Failed to fetch S3 secret", "error", err, "SecretName", s3SecretName, "Namespace", s3SecretNamespace)
 			return false, err
 		}

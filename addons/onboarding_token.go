@@ -71,13 +71,14 @@ func requestStorageClusterPeerToken(ctx context.Context, proxyServiceNamespace s
 	return body, nil
 }
 
-func createStorageClusterPeerTokenSecret(ctx context.Context, client client.Client, scheme *runtime.Scheme, spokeClusterName string, odfOperatorNamespace string, mirrorPeer *multiclusterv1alpha1.MirrorPeer, storageClusterRef *multiclusterv1alpha1.StorageClusterRef) error {
+func createStorageClusterPeerTokenSecret(ctx context.Context, cl client.Client, scheme *runtime.Scheme, spokeClusterName string, odfOperatorNamespace string, mirrorPeer *multiclusterv1alpha1.MirrorPeer, storageClusterRef *multiclusterv1alpha1.StorageClusterRef) error {
 	uniqueSecretName := string(mirrorPeer.GetUID())
-	_, err := utils.FetchSecretWithName(ctx, client, types.NamespacedName{Namespace: spokeClusterName, Name: uniqueSecretName})
-	if err != nil && !errors.IsNotFound(err) {
+	tokenSecret := &corev1.Secret{}
+	if err := cl.Get(ctx, types.NamespacedName{Namespace: spokeClusterName, Name: uniqueSecretName}, tokenSecret); client.IgnoreNotFound(err) != nil {
 		return fmt.Errorf("failed to get secret %s/%s: %w", spokeClusterName, uniqueSecretName, err)
 	}
-	if err == nil {
+
+	if tokenSecret.UID != "" {
 		return errors.NewAlreadyExists(corev1.Resource("secret"), uniqueSecretName)
 	}
 
@@ -86,7 +87,7 @@ func createStorageClusterPeerTokenSecret(ctx context.Context, client client.Clie
 		return fmt.Errorf("unable to generate StorageClusterPeer token. %w", err)
 	}
 
-	tokenSecret := &corev1.Secret{
+	tokenSecret = &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      uniqueSecretName,
 			Namespace: spokeClusterName,
@@ -108,7 +109,7 @@ func createStorageClusterPeerTokenSecret(ctx context.Context, client client.Clie
 		return fmt.Errorf("failed to set owner reference for secret %s/%s: %w", spokeClusterName, uniqueSecretName, err)
 	}
 
-	return client.Create(ctx, tokenSecret)
+	return cl.Create(ctx, tokenSecret)
 }
 
 func deleteStorageClusterPeerTokenSecret(ctx context.Context, client client.Client, tokenNamespace string, tokenName string) error {

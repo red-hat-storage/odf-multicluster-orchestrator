@@ -16,7 +16,6 @@ import (
 )
 
 const (
-	ObjectBucketClaimKind     = "ObjectBucketClaim"
 	S3BucketName              = "BUCKET_NAME"
 	S3BucketRegion            = "BUCKET_REGION"
 	S3RouteName               = "s3"
@@ -28,20 +27,18 @@ const (
 func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name string, namespace string, mirrorPeerName string, obcType string) error {
 	// fetch obc secret
 	var secret corev1.Secret
-	err := r.SpokeClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &secret)
-	if err != nil {
+	if err := r.SpokeClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &secret); err != nil {
 		return fmt.Errorf("failed to retrieve the secret %q in namespace %q in managed cluster: %v", name, namespace, err)
 	}
 
 	// fetch obc config map
 	var configMap corev1.ConfigMap
-	err = r.SpokeClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &configMap)
-	if err != nil {
+	if err := r.SpokeClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &configMap); err != nil {
 		return fmt.Errorf("failed to retrieve the config map %q in namespace %q in managed cluster: %v", name, namespace, err)
 	}
 
-	mirrorPeer, err := utils.FetchMirrorPeerByName(ctx, r.HubClient, mirrorPeerName)
-	if err != nil {
+	mirrorPeer := &v1alpha1.MirrorPeer{}
+	if err := r.HubClient.Get(ctx, types.NamespacedName{Name: mirrorPeerName}, mirrorPeer); err != nil {
 		r.Logger.Error("Failed to fetch  mirrorpeer", "MirrorPeer", mirrorPeerName)
 		return err
 	}
@@ -49,6 +46,7 @@ func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name strin
 	var storagePeerRef *v1alpha1.PeerRef
 	var storageClusterRef *v1alpha1.StorageClusterRef
 	var s3ProfileName string
+	var err error
 
 	if obcType == string(CLUSTER) {
 		storagePeerRef, err = utils.GetPeerRefForSpokeCluster(mirrorPeer, r.SpokeClusterName)
@@ -83,8 +81,7 @@ func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name strin
 
 	// fetch s3 endpoint
 	route := &routev1.Route{}
-	err = r.SpokeClient.Get(ctx, types.NamespacedName{Name: S3RouteName, Namespace: namespace}, route)
-	if err != nil {
+	if err := r.SpokeClient.Get(ctx, types.NamespacedName{Name: S3RouteName, Namespace: namespace}, route); err != nil {
 		return fmt.Errorf("failed to retrieve the S3 endpoint in namespace %q in managed cluster: %v", namespace, err)
 	}
 
@@ -133,8 +130,7 @@ func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name strin
 	if err != nil {
 		return fmt.Errorf("failed to create secret from the managed cluster secret %q in namespace %q for the hub cluster in namespace %q: %v", secret.Name, secret.Namespace, r.SpokeClusterName, err)
 	}
-	err = r.HubClient.Create(ctx, newSecret, &client.CreateOptions{})
-	if err != nil {
+	if err = r.HubClient.Create(ctx, newSecret, &client.CreateOptions{}); err != nil {
 		if errors.IsAlreadyExists(err) {
 			// Log that the secret already exists and attempt to update it
 			r.Logger.Info("Secret already exists on hub cluster, attempting to update", "secret", newSecret.Name, "namespace", newSecret.Namespace)

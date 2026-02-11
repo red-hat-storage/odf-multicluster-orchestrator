@@ -5,12 +5,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
-
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -44,25 +41,9 @@ type S3Token struct {
 
 var OriginMap = map[string]string{"RookOrigin": "rook", "S3Origin": "S3"}
 
-func GetInternalLabel(secret *corev1.Secret) SecretLabelType {
-	return SecretLabelType(secret.Labels[SecretLabelTypeKey])
-}
-
-func isObjectASecretWithProvidedLabel(obj client.Object, label, value string) bool {
-	sec, ok := obj.(*corev1.Secret)
-	if !ok {
-		return false
-	}
-	lblVal, ok := sec.Labels[label]
-	// if 'ok' (ie; if provided label key is present) AND values match,
-	// then return true
-	return ok && (lblVal == value)
-}
-
-// IsSecretInternal returns true if the provided object is a secret with
-// Inernal label
+// IsSecretInternal returns true if the provided object has an Internal label
 func IsSecretInternal(obj client.Object) bool {
-	return isObjectASecretWithProvidedLabel(obj, SecretLabelTypeKey, string(InternalLabel))
+	return obj.GetLabels()[SecretLabelTypeKey] == string(InternalLabel)
 }
 
 func ValidateInternalSecret(internalSecret *corev1.Secret, expectedLabel SecretLabelType) error {
@@ -73,7 +54,7 @@ func ValidateInternalSecret(internalSecret *corev1.Secret, expectedLabel SecretL
 		return errors.New("an empty expected label provided. please provide 'IgnoreLabel' instead")
 	}
 	if expectedLabel != IgnoreLabel {
-		if expectedLabel != GetInternalLabel(internalSecret) {
+		if expectedLabel != SecretLabelType(internalSecret.Labels[SecretLabelTypeKey]) {
 			return errors.New("expected and secret's labels don't match")
 		}
 	}
@@ -91,10 +72,6 @@ func ValidateInternalSecret(internalSecret *corev1.Secret, expectedLabel SecretL
 		return errors.New("expected data map keys are not present")
 	}
 	return nil
-}
-
-func HasHubRecoveryLabels(secret *corev1.Secret) bool {
-	return secret.ObjectMeta.Labels[HubRecoveryLabel] == ""
 }
 
 func ValidateS3Secret(data map[string][]byte) bool {
@@ -142,24 +119,6 @@ func FetchAllMirrorPeers(ctx context.Context, rc client.Client) ([]multiclusterv
 		return nil, err
 	}
 	return mirrorPeerListObj.Items, nil
-}
-
-func FetchMirrorPeerByName(ctx context.Context, rc client.Client, name string) (*multiclusterv1alpha1.MirrorPeer, error) {
-	var mirrorPeer multiclusterv1alpha1.MirrorPeer
-	err := rc.Get(ctx, types.NamespacedName{Name: name}, &mirrorPeer)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch MirrorPeer %s: %w", name, err)
-	}
-	return &mirrorPeer, nil
-}
-
-func FetchSecretWithName(ctx context.Context, rc client.Client, secretName types.NamespacedName) (*corev1.Secret, error) {
-	var secret corev1.Secret
-	err := rc.Get(ctx, secretName, &secret)
-	if err != nil {
-		return nil, err
-	}
-	return &secret, nil
 }
 
 func UnmarshalS3Secret(s3Secret *corev1.Secret) (*S3Token, error) {
