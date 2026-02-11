@@ -71,7 +71,12 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	hasStorageClientRef, err := utils.IsStorageClientType(ctx, r.HubClient, mirrorPeer, r.HubOperatorNamespace)
+	cm, err := utils.FetchClientInfoConfigMap(ctx, r.HubClient, r.HubOperatorNamespace)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	hasStorageClientRef, err := utils.IsStorageClientType(&mirrorPeer, cm.Data)
 	logger.Info("MirrorPeer has client reference?", "True/False", hasStorageClientRef)
 
 	if err != nil {
@@ -120,11 +125,6 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 		// Remove finalizer if present from previous versions.
 		if err = removeFinalizerFromObject(ctx, r.SpokeClient, &addonDeletionlock, ResourceDistributionFinalizer); err != nil {
-			return ctrl.Result{}, err
-		}
-
-		cm, err := utils.FetchClientInfoConfigMap(ctx, r.HubClient, r.HubOperatorNamespace)
-		if err != nil {
 			return ctrl.Result{}, err
 		}
 

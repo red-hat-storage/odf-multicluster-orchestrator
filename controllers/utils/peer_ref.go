@@ -92,12 +92,8 @@ func GetClusterID(ctx context.Context, client client.Client, clusterName string)
 	return managedCluster.GetLabels()["clusterID"], nil
 }
 
-func getPeerRefType(ctx context.Context, c client.Client, peerRef multiclusterv1alpha1.PeerRef, operatorNs string) (PeerRefType, error) {
-	cm, err := FetchClientInfoConfigMap(ctx, c, operatorNs)
-	if err != nil {
-		return PeerRefTypeUnknown, err
-	}
-	cInfo, err := GetClientInfoFromConfigMap(cm.Data, GetKey(peerRef.ClusterName, peerRef.StorageClusterRef.Name))
+func getPeerRefType(peerRef multiclusterv1alpha1.PeerRef, clientInfoMap map[string]string) (PeerRefType, error) {
+	cInfo, err := GetClientInfoFromConfigMap(clientInfoMap, GetKey(peerRef.ClusterName, peerRef.StorageClusterRef.Name))
 	if err != nil {
 		return PeerRefTypeUnknown, err
 	}
@@ -108,9 +104,9 @@ func getPeerRefType(ctx context.Context, c client.Client, peerRef multiclusterv1
 }
 
 // IsStorageClientType checks if peerRefs on MirrorPeer is of type StorageClient or StorageCluster
-func IsStorageClientType(ctx context.Context, c client.Client, mirrorPeer *multiclusterv1alpha1.MirrorPeer, operatorNs string) (bool, error) {
+func IsStorageClientType(mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) (bool, error) {
 	for _, v := range mirrorPeer.Spec.Items {
-		peerRefType, err := getPeerRefType(ctx, c, v, operatorNs)
+		peerRefType, err := getPeerRefType(v, clientInfoMap)
 		if err != nil {
 			return false, err
 		}
