@@ -28,7 +28,7 @@ const (
 )
 
 // DoesAnotherMirrorPeerPointToPeerRef checks if another mirrorpeer is pointing to the provided peer ref
-func DoesAnotherMirrorPeerPointToPeerRef(ctx context.Context, rc client.Client, peerRef *multiclusterv1alpha1.PeerRef) (bool, error) {
+func DoesAnotherMirrorPeerPointToPeerRef(ctx context.Context, rc client.Client, peerRef multiclusterv1alpha1.PeerRef) (bool, error) {
 	mirrorPeers, err := FetchAllMirrorPeers(ctx, rc)
 	if err != nil {
 		return false, err
@@ -108,7 +108,7 @@ func getPeerRefType(ctx context.Context, c client.Client, peerRef multiclusterv1
 }
 
 // IsStorageClientType checks if peerRefs on MirrorPeer is of type StorageClient or StorageCluster
-func IsStorageClientType(ctx context.Context, c client.Client, mirrorPeer multiclusterv1alpha1.MirrorPeer, operatorNs string) (bool, error) {
+func IsStorageClientType(ctx context.Context, c client.Client, mirrorPeer *multiclusterv1alpha1.MirrorPeer, operatorNs string) (bool, error) {
 	for _, v := range mirrorPeer.Spec.Items {
 		peerRefType, err := getPeerRefType(ctx, c, v, operatorNs)
 		if err != nil {
