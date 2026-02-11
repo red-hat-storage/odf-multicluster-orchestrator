@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
@@ -186,9 +188,8 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	logger.Info("All validations for MirrorPeer passed")
 
 	if mirrorPeer.GetDeletionTimestamp().IsZero() {
-		if !utils.ContainsString(mirrorPeer.GetFinalizers(), mirrorPeerFinalizer) {
+		if controllerutil.AddFinalizer(mirrorPeer, mirrorPeerFinalizer) {
 			logger.Info("Finalizer not found on MirrorPeer. Adding Finalizer")
-			mirrorPeer.Finalizers = append(mirrorPeer.Finalizers, mirrorPeerFinalizer)
 		}
 	} else {
 		logger.Info("Deleting MirrorPeer")
@@ -199,41 +200,42 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{Requeue: true}, nil
 		}
 
-		if utils.ContainsString(mirrorPeer.GetFinalizers(), mirrorPeerFinalizer) {
-			var drpolicyList ramenv1alpha1.DRPolicyList
-			err := r.Client.List(ctx, &drpolicyList)
-			if err != nil {
-				logger.Error("Failed to delete resources", "error", err)
-				return reconcile.Result{}, err
-			}
+		var drpolicyList ramenv1alpha1.DRPolicyList
+		err := r.Client.List(ctx, &drpolicyList)
+		if err != nil {
+			logger.Error("Failed to delete resources", "error", err)
+			return reconcile.Result{}, err
+		}
 
-			for i := range drpolicyList.Items {
-				drClusters := drpolicyList.Items[i].Spec.DRClusters
-				if (mirrorPeer.Spec.Items[0].ClusterName == drClusters[0] &&
-					mirrorPeer.Spec.Items[1].ClusterName == drClusters[1]) ||
-					(mirrorPeer.Spec.Items[0].ClusterName == drClusters[1] &&
-						mirrorPeer.Spec.Items[1].ClusterName == drClusters[0]) {
-					return reconcile.Result{}, fmt.Errorf("DRPolicy '%s' exists and requires MirrorPeer '%s'. MirrorPeer can not be deleted",
-						drpolicyList.Items[i].Name, mirrorPeer.Name)
-				}
+		for i := range drpolicyList.Items {
+			drClusters := drpolicyList.Items[i].Spec.DRClusters
+			if (mirrorPeer.Spec.Items[0].ClusterName == drClusters[0] &&
+				mirrorPeer.Spec.Items[1].ClusterName == drClusters[1]) ||
+				(mirrorPeer.Spec.Items[0].ClusterName == drClusters[1] &&
+					mirrorPeer.Spec.Items[1].ClusterName == drClusters[0]) {
+				return reconcile.Result{}, fmt.Errorf("DRPolicy '%s' exists and requires MirrorPeer '%s'. MirrorPeer can not be deleted",
+					drpolicyList.Items[i].Name, mirrorPeer.Name)
 			}
+		}
 
-			if utils.ContainsSuffix(mirrorPeer.GetFinalizers(), addons.SpokeMirrorPeerFinalizer) {
-				logger.Info("Waiting for agent to delete resources")
-				return reconcile.Result{Requeue: true}, err
-			}
+		if slices.ContainsFunc(mirrorPeer.GetFinalizers(), func(finalizer string) bool {
+			return strings.HasSuffix(finalizer, addons.SpokeMirrorPeerFinalizer)
+		}) {
+			logger.Info("Waiting for agent to delete resources")
+			return reconcile.Result{Requeue: true}, err
+		}
 
-			if err := deleteManagedClusterAddon(ctx, r.Client, r.Scheme, r.CurrentNamespace, mirrorPeer, clientInfoMap.Data); err != nil {
-				logger.Error("Failed to delete ManagedClusterAddon", "error", err)
-				return reconcile.Result{}, err
-			}
+		if err := deleteManagedClusterAddon(ctx, r.Client, r.Scheme, mirrorPeer, clientInfoMap.Data); err != nil {
+			logger.Error("Failed to delete ManagedClusterAddon", "error", err)
+			return reconcile.Result{}, err
+		}
 
-			if err := r.deleteSecrets(ctx, mirrorPeer); err != nil {
-				logger.Error("Failed to delete resources", "error", err)
-				return reconcile.Result{Requeue: true}, err
-			}
+		if err := r.deleteSecrets(ctx, mirrorPeer); err != nil {
+			logger.Error("Failed to delete resources", "error", err)
+			return reconcile.Result{Requeue: true}, err
+		}
 
-			mirrorPeer.Finalizers = utils.RemoveString(mirrorPeer.Finalizers, mirrorPeerFinalizer)
+		if controllerutil.RemoveFinalizer(mirrorPeer, mirrorPeerFinalizer) {
 			if err := r.Client.Update(ctx, mirrorPeer); err != nil {
 				logger.Error("Failed to remove finalizer from MirrorPeer", "error", err)
 				return reconcile.Result{}, err
@@ -635,7 +637,7 @@ func getConfig(mp *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]str
 	return managedClusterAddonsConfig, nil
 }
 
-func deleteManagedClusterAddon(ctx context.Context, client client.Client, scheme *runtime.Scheme, currentNamespace string, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) error {
+func deleteManagedClusterAddon(ctx context.Context, client client.Client, scheme *runtime.Scheme, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) error {
 	addonConfigs, err := getConfig(mirrorPeer, clientInfoMap)
 	if err != nil {
 		return fmt.Errorf("failed to get managedclusteraddon config %w", err)

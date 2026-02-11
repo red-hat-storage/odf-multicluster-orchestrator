@@ -98,37 +98,18 @@ func (r *ResourceDistributionReconciler) SetupWithManager(mgr ctrl.Manager) erro
 		Complete(r)
 }
 
-func removeFinalizerFromObject(ctx context.Context, cl client.Client, o client.Object, finalizer string) error {
-	if controllerutil.RemoveFinalizer(o, finalizer) {
-		if err := cl.Update(ctx, o); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func addFinalizerToObject(ctx context.Context, cl client.Client, o client.Object, finalizer string) error {
-	if controllerutil.AddFinalizer(o, finalizer) {
-		if err := cl.Update(ctx, o); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (r *ResourceDistributionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := r.Logger.With("Request", req)
 	logger.Info("Distributing resources to all StorageConsumers.")
 
 	var err error
 
-	var addonDeletionlock corev1.ConfigMap
-	err = r.SpokeClient.Get(ctx, types.NamespacedName{Namespace: r.CurrentNamespace, Name: AddonDeletionlockName}, &addonDeletionlock)
-	if err != nil {
+	addonDeletionlock := &corev1.ConfigMap{}
+	if err = r.SpokeClient.Get(ctx, types.NamespacedName{Namespace: r.CurrentNamespace, Name: AddonDeletionlockName}, addonDeletionlock); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	var storageClientMapping *corev1.ConfigMap
+	storageClientMapping := &corev1.ConfigMap{}
 	storageClientMapping, err = utils.GetStorageClientMapping(ctx, r.SpokeClient, r.CurrentNamespace)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to distribute resources to StorageConsumers: %w", err)
@@ -136,31 +117,32 @@ func (r *ResourceDistributionReconciler) Reconcile(ctx context.Context, req ctrl
 
 	addVRCToConsumers := []string{}
 	storageConsumerList := ocsv1alpha1.StorageConsumerList{}
-	templateList := templatev1.TemplateList{}
+	templateList := &templatev1.TemplateList{}
 
-	err = r.SpokeClient.List(ctx, &storageConsumerList, client.InNamespace(r.CurrentNamespace))
-	if err != nil {
+	if err = r.SpokeClient.List(ctx, &storageConsumerList, client.InNamespace(r.CurrentNamespace)); err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to distribute resources to StorageConsumers: %w", err)
 	}
 	if len(storageConsumerList.Items) == 0 {
 		logger.Info("No StorageConsumer to add/remove resources.")
 		addonDeletionlock.Data = nil
-		if err = r.SpokeClient.Update(ctx, &addonDeletionlock); err != nil {
+		if err = r.SpokeClient.Update(ctx, addonDeletionlock); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
 
-	err = r.SpokeClient.List(ctx, &templateList, client.InNamespace(r.CurrentNamespace), client.MatchingLabels{
-		utils.CreatedByLabelKey: utils.CreatorMulticlusterOrchestrator,
-	})
-	if err != nil {
+	if err = r.SpokeClient.List(
+		ctx,
+		templateList,
+		client.InNamespace(r.CurrentNamespace),
+		client.MatchingLabels{utils.CreatedByLabelKey: utils.CreatorMulticlusterOrchestrator},
+	); err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to distribute resources to StorageConsumers: %w", err)
 	}
 	if len(templateList.Items) == 0 {
 		logger.Info("No resources to distribute to StorageConsumers.")
 		addonDeletionlock.Data = nil
-		if err = r.SpokeClient.Update(ctx, &addonDeletionlock); err != nil {
+		if err = r.SpokeClient.Update(ctx, addonDeletionlock); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -170,14 +152,14 @@ func (r *ResourceDistributionReconciler) Reconcile(ctx context.Context, req ctrl
 		addonDeletionlock.Data = make(map[string]string)
 	}
 
-	var manifestWorkList workv1.ManifestWorkList
+	manifestWorkList := &workv1.ManifestWorkList{}
 	listOpts := &client.ListOptions{
 		Namespace: r.SpokeClusterName,
 		LabelSelector: labels.SelectorFromSet(map[string]string{
 			utils.CreatedByLabelKey: utils.CreatorMulticlusterOrchestrator,
 		}),
 	}
-	if err = r.HubClient.List(ctx, &manifestWorkList, listOpts); err != nil {
+	if err = r.HubClient.List(ctx, manifestWorkList, listOpts); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -194,7 +176,7 @@ func (r *ResourceDistributionReconciler) Reconcile(ctx context.Context, req ctrl
 
 	if !reflect.DeepEqual(tmpAddonDeletionLockData, addonDeletionlock.Data) {
 		logger.Info("Updating addonDeletionLock cm with clientIDs to which resources are distributed")
-		if err = r.SpokeClient.Update(ctx, &addonDeletionlock); err != nil {
+		if err = r.SpokeClient.Update(ctx, addonDeletionlock); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -207,12 +189,14 @@ func (r *ResourceDistributionReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 	}
 
-	for _, template := range templateList.Items {
+	for i := range templateList.Items {
+		template := &templateList.Items[i]
 		logger.Info("Distributing template", "Template", template.GetName())
 		if template.DeletionTimestamp.IsZero() {
-			err = addFinalizerToObject(ctx, r.SpokeClient, &template, ResourceDistributionFinalizer)
-			if err != nil {
-				return ctrl.Result{}, err
+			if controllerutil.AddFinalizer(template, ResourceDistributionFinalizer) {
+				if err := r.SpokeClient.Update(ctx, template); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
 		}
 		for _, foundConsumer := range storageConsumerList.Items {
@@ -291,9 +275,10 @@ func (r *ResourceDistributionReconciler) Reconcile(ctx context.Context, req ctrl
 			}
 		}
 		if !template.DeletionTimestamp.IsZero() {
-			err = removeFinalizerFromObject(ctx, r.SpokeClient, &template, ResourceDistributionFinalizer)
-			if err != nil {
-				return ctrl.Result{}, err
+			if controllerutil.RemoveFinalizer(template, ResourceDistributionFinalizer) {
+				if err := r.SpokeClient.Update(ctx, template); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
 		}
 	}

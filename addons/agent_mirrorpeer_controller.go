@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"time"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
@@ -109,9 +110,8 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if mirrorPeer.GetDeletionTimestamp().IsZero() {
-		if !utils.ContainsString(mirrorPeer.GetFinalizers(), agentFinalizer) {
+		if controllerutil.AddFinalizer(mirrorPeer, agentFinalizer) {
 			logger.Info("Adding finalizer to MirrorPeer", "finalizer", agentFinalizer)
-			mirrorPeer.Finalizers = append(mirrorPeer.Finalizers, agentFinalizer)
 			if err := r.HubClient.Update(ctx, mirrorPeer); err != nil {
 				logger.Error("Failed to add finalizer to MirrorPeer", "error", err)
 				return ctrl.Result{}, err
@@ -124,8 +124,10 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 
 		// Remove finalizer if present from previous versions.
-		if err = removeFinalizerFromObject(ctx, r.SpokeClient, &addonDeletionlock, ResourceDistributionFinalizer); err != nil {
-			return ctrl.Result{}, err
+		if controllerutil.RemoveFinalizer(&addonDeletionlock, ResourceDistributionFinalizer) {
+			if err := r.SpokeClient.Update(ctx, &addonDeletionlock); err != nil {
+				return ctrl.Result{}, err
+			}
 		}
 
 		addonKey := ""
@@ -159,10 +161,10 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			logger.Error("Failed to retrieve MirrorPeer after deletion", "error", err)
 			return ctrl.Result{}, err
 		}
-
-		err = removeFinalizerFromObject(ctx, r.HubClient, mirrorPeer, agentFinalizer)
-		if err != nil {
-			return ctrl.Result{}, err
+		if controllerutil.RemoveFinalizer(mirrorPeer, agentFinalizer) {
+			if err := r.HubClient.Update(ctx, mirrorPeer); err != nil {
+				return ctrl.Result{}, err
+			}
 		}
 
 		logger.Info("MirrorPeer deletion complete")
