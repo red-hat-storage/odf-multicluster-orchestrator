@@ -71,7 +71,7 @@ func requestStorageClusterPeerToken(ctx context.Context, proxyServiceNamespace s
 	return body, nil
 }
 
-func createStorageClusterPeerTokenSecret(ctx context.Context, client client.Client, scheme *runtime.Scheme, spokeClusterName string, odfOperatorNamespace string, mirrorPeer multiclusterv1alpha1.MirrorPeer, storageClusterRef *multiclusterv1alpha1.StorageClusterRef) error {
+func createStorageClusterPeerTokenSecret(ctx context.Context, client client.Client, scheme *runtime.Scheme, spokeClusterName string, odfOperatorNamespace string, mirrorPeer *multiclusterv1alpha1.MirrorPeer, storageClusterRef *multiclusterv1alpha1.StorageClusterRef) error {
 	uniqueSecretName := string(mirrorPeer.GetUID())
 	_, err := utils.FetchSecretWithName(ctx, client, types.NamespacedName{Namespace: spokeClusterName, Name: uniqueSecretName})
 	if err != nil && !errors.IsNotFound(err) {
@@ -103,7 +103,7 @@ func createStorageClusterPeerTokenSecret(ctx context.Context, client client.Clie
 		},
 	}
 
-	err = controllerutil.SetOwnerReference(&mirrorPeer, tokenSecret, scheme)
+	err = controllerutil.SetOwnerReference(mirrorPeer, tokenSecret, scheme)
 	if err != nil {
 		return fmt.Errorf("failed to set owner reference for secret %s/%s: %w", spokeClusterName, uniqueSecretName, err)
 	}

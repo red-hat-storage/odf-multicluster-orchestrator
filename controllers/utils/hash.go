@@ -44,7 +44,7 @@ func CreateUniqueSecretNameForClient(providerKey, clientKey1, clientKey2 string)
 	return CreateUniqueName(providerKey, clientKey1, clientKey2)[0:39]
 }
 
-func GenerateUniqueIdForMirrorPeer(mirrorPeer multiclusterv1alpha1.MirrorPeer) string {
+func GenerateUniqueIdForMirrorPeer(mirrorPeer *multiclusterv1alpha1.MirrorPeer) string {
 	var checksum [20]byte
 	var peerAccumulator string
 	for _, peer := range mirrorPeer.Spec.Items {
