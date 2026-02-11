@@ -102,15 +102,12 @@ func (r *ResourceDistributionReconciler) Reconcile(ctx context.Context, req ctrl
 	logger := r.Logger.With("Request", req)
 	logger.Info("Distributing resources to all StorageConsumers.")
 
-	var err error
-
 	addonDeletionlock := &corev1.ConfigMap{}
-	if err = r.SpokeClient.Get(ctx, types.NamespacedName{Namespace: r.CurrentNamespace, Name: AddonDeletionlockName}, addonDeletionlock); err != nil {
+	if err := r.SpokeClient.Get(ctx, types.NamespacedName{Namespace: r.CurrentNamespace, Name: AddonDeletionlockName}, addonDeletionlock); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	storageClientMapping := &corev1.ConfigMap{}
-	storageClientMapping, err = utils.GetStorageClientMapping(ctx, r.SpokeClient, r.CurrentNamespace)
+	storageClientMapping, err := utils.GetStorageClientMapping(ctx, r.SpokeClient, r.CurrentNamespace)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to distribute resources to StorageConsumers: %w", err)
 	}

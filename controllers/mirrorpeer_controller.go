@@ -187,11 +187,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 	logger.Info("All validations for MirrorPeer passed")
 
-	if mirrorPeer.GetDeletionTimestamp().IsZero() {
-		if controllerutil.AddFinalizer(mirrorPeer, mirrorPeerFinalizer) {
-			logger.Info("Finalizer not found on MirrorPeer. Adding Finalizer")
-		}
-	} else {
+	if !mirrorPeer.GetDeletionTimestamp().IsZero() {
 		logger.Info("Deleting MirrorPeer")
 		mirrorPeer.Status.Phase = multiclusterv1alpha1.Deleting
 		statusErr := r.Client.Status().Update(ctx, mirrorPeer)
@@ -245,22 +241,24 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return reconcile.Result{}, nil
 	}
 
-	mirrorPeerCopy := mirrorPeer.DeepCopy()
-	if mirrorPeerCopy.Labels == nil {
-		mirrorPeerCopy.Labels = make(map[string]string)
+	updateRequired := false
+	if controllerutil.AddFinalizer(mirrorPeer, mirrorPeerFinalizer) {
+		logger.Info("Finalizer not found on MirrorPeer. Adding Finalizer")
+		updateRequired = true
+
+	}
+	if utils.AddLabel(mirrorPeer, utils.HubRecoveryLabel, "resource") {
+		logger.Info("Adding label to mirrorpeer for disaster recovery")
+		updateRequired = true
 	}
 
-	if val, ok := mirrorPeerCopy.Labels[utils.HubRecoveryLabel]; !ok || val != "resource" {
-		logger.Info("Adding label to mirrorpeer for disaster recovery")
-		mirrorPeerCopy.Labels[utils.HubRecoveryLabel] = "resource"
-		err = r.Client.Update(ctx, mirrorPeerCopy)
-
-		if err != nil {
-			logger.Error("Failed to update mirrorpeer with disaster recovery label", "error", err)
-			return checkK8sUpdateErrors(err, mirrorPeerCopy, logger)
+	if updateRequired {
+		if err := r.Client.Update(ctx, mirrorPeer); err != nil {
+			logger.Error("Failed to update mirror peer", "error", err)
+			return ctrl.Result{}, err
 		}
-		logger.Info("Successfully added label to mirrorpeer for disaster recovery. Requeing request...")
-		return ctrl.Result{Requeue: true}, nil
+		logger.Info("Successfully updated mirrorpeer. Re-queuing request...")
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
 	if mirrorPeer.Status.Phase == "" {
@@ -931,22 +929,6 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				utils.EventTypePredicate(true, true, true, true),
 			)).
 		Complete(r)
-}
-
-// CheckK8sUpdateErrors checks what type of error occurs when trying to update a k8s object
-// and logs according to the object
-func checkK8sUpdateErrors(err error, obj client.Object, logger *slog.Logger) (ctrl.Result, error) {
-	if k8serrors.IsConflict(err) {
-		logger.Info("Object is being updated by another process. Retrying", "Kind", obj.GetObjectKind().GroupVersionKind().Kind, "Name", obj.GetName())
-		return ctrl.Result{Requeue: true}, nil
-	} else if k8serrors.IsNotFound(err) {
-		logger.Info("Object no longer exists. Ignoring since object must have been deleted", "Kind", obj.GetObjectKind().GroupVersionKind().Kind, "Name", obj.GetName())
-		return ctrl.Result{}, nil
-	} else if err != nil {
-		logger.Error("Failed to update object", "error", err, "Name", obj.GetName())
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
 }
 
 func GetNamespacedNameForClientS3Secret(pr multiclusterv1alpha1.PeerRef, mp *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) (string, string, error) {
