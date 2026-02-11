@@ -31,12 +31,6 @@ type ManagedClusterViewReconciler struct {
 	CurrentNamespace string
 }
 
-const (
-	ODFInfoConfigMapName    = "odf-info"
-	ConfigMapResourceType   = "ConfigMap"
-	ClientInfoConfigMapName = "odf-client-info"
-)
-
 func (r *ManagedClusterViewReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Logger.Info("Setting up ManagedClusterViewReconciler with manager")
 	managedClusterViewPredicate := predicate.Funcs{
@@ -62,7 +56,7 @@ func (r *ManagedClusterViewReconciler) SetupWithManager(mgr ctrl.Manager) error 
 }
 
 func hasODFInfoInScope(mc *viewv1beta1.ManagedClusterView) bool {
-	if mc.Spec.Scope.Name == utils.ODFInfoConfigMapName && mc.Spec.Scope.Resource == ConfigMapResourceType {
+	if mc.Spec.Scope.Name == utils.ODFInfoConfigMapName && mc.Spec.Scope.Resource == utils.ConfigMapResourceType {
 		return true
 	}
 	return false
@@ -186,11 +180,11 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, operatorNames
 
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ClientInfoConfigMapName,
+			Name:      utils.ClientInfoConfigMapName,
 			Namespace: operatorNamespace,
 		},
 	}
-	err = c.Get(ctx, types.NamespacedName{Name: ClientInfoConfigMapName, Namespace: operatorNamespace}, configMap)
+	err = c.Get(ctx, types.NamespacedName{Name: utils.ClientInfoConfigMapName, Namespace: operatorNamespace}, configMap)
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("failed to get ConfigMap. %w", err)
 	}
@@ -236,7 +230,7 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, operatorNames
 		return fmt.Errorf("failed to create or update ConfigMap. %w", err)
 	}
 
-	logger.Info(fmt.Sprintf("ConfigMap %s in namespace %s has been %s", ClientInfoConfigMapName, operatorNamespace, op))
+	logger.Info(fmt.Sprintf("ConfigMap %s in namespace %s has been %s", utils.ClientInfoConfigMapName, operatorNamespace, op))
 
 	return nil
 }

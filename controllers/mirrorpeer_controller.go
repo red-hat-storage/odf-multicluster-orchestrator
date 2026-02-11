@@ -62,13 +62,11 @@ type MirrorPeerReconciler struct {
 }
 
 const (
-	mirrorPeerFinalizer         = "hub.multicluster.odf.openshift.io"
-	spokeClusterRoleBindingName = "spoke-clusterrole-bindings"
-	AddonVersionAnnotationKey   = "multicluster.odf.openshift.io/version"
-	MirrorPeer                  = "MirrorPeer"
-	ClusterManagementAddOn      = "ClusterManagementAddOn"
-	ManagedClusterAddOn         = "ManagedClusterAddOn"
-	AddonApiVersion             = "addon.open-cluster-management.io/v1alpha1"
+	mirrorPeerFinalizer       = "hub.multicluster.odf.openshift.io"
+	AddonVersionAnnotationKey = "multicluster.odf.openshift.io/version"
+	MirrorPeer                = "MirrorPeer"
+	ManagedClusterAddOn       = "ManagedClusterAddOn"
+	AddonApiVersion           = "addon.open-cluster-management.io/v1alpha1"
 )
 
 // +kubebuilder:rbac:groups=multicluster.odf.openshift.io,resources=mirrorpeers,verbs=get;list;watch;update;patch;delete

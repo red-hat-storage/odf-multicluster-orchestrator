@@ -10,14 +10,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type ClusterType string
-
 const (
-	CONVERGED                     ClusterType = "Converged"
-	EXTERNAL                      ClusterType = "External"
-	UNKNOWN                       ClusterType = "Unknown"
-	CephClusterReplicationIdLabel             = "replicationid.multicluster.openshift.io"
-	CephClusterNameTemplate                   = "%s-cephcluster"
+	CephClusterNameTemplate = "%s-cephcluster"
 )
 
 func FetchCephCluster(ctx context.Context, c client.Client, storageClusterNamespacedName types.NamespacedName) (*rookv1.CephCluster, error) {
