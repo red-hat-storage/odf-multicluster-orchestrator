@@ -8,7 +8,7 @@ import (
 )
 
 func TestGenerateBucketName(t *testing.T) {
-	mirrorPeer := multiclusterv1alpha1.MirrorPeer{
+	mirrorPeer := &multiclusterv1alpha1.MirrorPeer{
 		Spec: multiclusterv1alpha1.MirrorPeerSpec{
 			Items: []multiclusterv1alpha1.PeerRef{
 				{
@@ -31,7 +31,7 @@ func TestGenerateBucketName(t *testing.T) {
 	bucket := GenerateBucketName(mirrorPeer)
 	assert.Equal(t, "odrbucket-b1b922184baf", bucket)
 
-	mirrorPeer = multiclusterv1alpha1.MirrorPeer{
+	mirrorPeer = &multiclusterv1alpha1.MirrorPeer{
 		Spec: multiclusterv1alpha1.MirrorPeerSpec{
 			Items: []multiclusterv1alpha1.PeerRef{
 				{
@@ -52,7 +52,7 @@ func TestGenerateBucketName(t *testing.T) {
 	bucket = GenerateBucketName(mirrorPeer)
 	assert.Equal(t, "odrbucket-b1b922184baf", bucket)
 
-	mirrorPeer = multiclusterv1alpha1.MirrorPeer{
+	mirrorPeer = &multiclusterv1alpha1.MirrorPeer{
 		Spec: multiclusterv1alpha1.MirrorPeerSpec{
 			Items: []multiclusterv1alpha1.PeerRef{
 				{

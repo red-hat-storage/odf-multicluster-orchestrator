@@ -39,7 +39,7 @@ import (
 
 func TestMirrorPeerReconcilerReconcile(t *testing.T) {
 
-	mirrorpeer := multiclusterv1alpha1.MirrorPeer{
+	mirrorpeer := &multiclusterv1alpha1.MirrorPeer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "mirrorpeer",
 		},
@@ -88,7 +88,7 @@ func TestMirrorPeerReconcilerReconcile(t *testing.T) {
 	}
 }
 
-func getFakeMirrorPeerReconciler(mirrorpeer multiclusterv1alpha1.MirrorPeer) MirrorPeerReconciler {
+func getFakeMirrorPeerReconciler(mirrorpeer *multiclusterv1alpha1.MirrorPeer) MirrorPeerReconciler {
 	// Using the same scheme as manager to ensure consistency.
 	// Using a different scheme for test might cause issues like
 	// missing scheme in manager
@@ -130,8 +130,8 @@ func getFakeMirrorPeerReconciler(mirrorpeer multiclusterv1alpha1.MirrorPeer) Mir
 	}
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).
-		WithObjects(&mirrorpeer, &managedcluster1, &managedcluster2, odfClientInfoConfigMap).
-		WithStatusSubresource(&mirrorpeer).
+		WithObjects(mirrorpeer, &managedcluster1, &managedcluster2, odfClientInfoConfigMap).
+		WithStatusSubresource(mirrorpeer).
 		Build()
 
 	r := MirrorPeerReconciler{
@@ -145,7 +145,7 @@ func getFakeMirrorPeerReconciler(mirrorpeer multiclusterv1alpha1.MirrorPeer) Mir
 
 func TestProcessManagedClusterAddons(t *testing.T) {
 	ctx := context.TODO()
-	mirrorpeer := multiclusterv1alpha1.MirrorPeer{
+	mirrorpeer := &multiclusterv1alpha1.MirrorPeer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "mirrorpeer-test",
 		},
@@ -168,10 +168,30 @@ func TestProcessManagedClusterAddons(t *testing.T) {
 			},
 		},
 	}
+	odfClientInfoConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "odf-client-info",
+			Namespace: utils.GetEnv("POD_NAMESPACE"),
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: viewv1beta1.GroupVersion.String(),
+					Kind:       "ManagedClusterView",
+					Name:       "mcv-1",
+					UID:        "mcv-uid",
+				},
+			},
+		},
+		Data: map[string]string{
+			"cluster1_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
+			"cluster2_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
+			"cluster3_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
+			"cluster4_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
+		},
+	}
 	// Create fake k8s client
 	r := getFakeMirrorPeerReconciler(mirrorpeer)
 	// Create fake secrets somehow
-	if err := r.processManagedClusterAddon(ctx, mirrorpeer); err != nil {
+	if err := r.processManagedClusterAddon(ctx, mirrorpeer, odfClientInfoConfigMap.Data); err != nil {
 		t.Error("Failed to create managed cluster addon")
 	}
 
@@ -204,7 +224,7 @@ func TestProcessManagedClusterAddons(t *testing.T) {
 func TestDeleteResources(t *testing.T) {
 	ctx := context.TODO()
 
-	mirrorpeer := multiclusterv1alpha1.MirrorPeer{
+	mirrorpeer := &multiclusterv1alpha1.MirrorPeer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "mirrorpeer",
 		},
@@ -252,7 +272,7 @@ func TestDeleteResources(t *testing.T) {
 
 }
 
-func CreateFakeSecrets(mirrorPeer multiclusterv1alpha1.MirrorPeer, r MirrorPeerReconciler, ctx context.Context) error {
+func CreateFakeSecrets(mirrorPeer *multiclusterv1alpha1.MirrorPeer, r MirrorPeerReconciler, ctx context.Context) error {
 	for i := range mirrorPeer.Spec.Items {
 		internalSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{

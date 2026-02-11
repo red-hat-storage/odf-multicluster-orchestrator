@@ -106,7 +106,7 @@ storageCluster:
 		assert.NoError(t, err)
 
 		cm := &corev1.ConfigMap{}
-		err = c.Get(ctx, types.NamespacedName{Name: ClientInfoConfigMapName, Namespace: utils.GetEnv("POD_NAMESPACE")}, cm)
+		err = c.Get(ctx, types.NamespacedName{Name: utils.ClientInfoConfigMapName, Namespace: utils.GetEnv("POD_NAMESPACE")}, cm)
 		assert.NoError(t, err)
 		assert.NotNil(t, cm)
 
@@ -159,7 +159,7 @@ storageCluster:
 		assert.NoError(t, err)
 
 		cm := &corev1.ConfigMap{}
-		err = c.Get(ctx, types.NamespacedName{Name: ClientInfoConfigMapName, Namespace: utils.GetEnv("POD_NAMESPACE")}, cm)
+		err = c.Get(ctx, types.NamespacedName{Name: utils.ClientInfoConfigMapName, Namespace: utils.GetEnv("POD_NAMESPACE")}, cm)
 		assert.NoError(t, err)
 		assert.NotNil(t, cm)
 
