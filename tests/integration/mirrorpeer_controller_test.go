@@ -412,6 +412,10 @@ var _ = Describe("MirrorPeerReconciler Reconcile", func() {
 
 			newMirrorPeer := mirrorPeer.DeepCopy()
 			newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-create"
+			newMirrorPeer.Finalizers = []string{"hub.multicluster.odf.openshift.io"}
+			newMirrorPeer.Labels = map[string]string{
+				utils.HubRecoveryLabel: "resource",
+			}
 			newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
 				Type: "async",
 				Items: []multiclusterv1alpha1.PeerRef{

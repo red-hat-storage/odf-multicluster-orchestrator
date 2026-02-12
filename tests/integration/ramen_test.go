@@ -60,6 +60,12 @@ var _ = Describe("Ramen Resource Tests", func() {
 	fakeMirrorPeer := &multiclusterv1alpha1.MirrorPeer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "fake-mirror-peer-3",
+			Finalizers: []string{
+				"hub.multicluster.odf.openshift.io",
+			},
+			Labels: map[string]string{
+				utils.HubRecoveryLabel: "resource",
+			},
 		},
 		Spec: multiclusterv1alpha1.MirrorPeerSpec{
 			Type: "async",
