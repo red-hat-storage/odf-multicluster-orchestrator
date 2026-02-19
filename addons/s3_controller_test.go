@@ -93,7 +93,7 @@ var (
 			},
 		},
 	}
-	mirrorPeer = multiclusterv1alpha1.MirrorPeer{
+	mirrorPeer = &multiclusterv1alpha1.MirrorPeer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-mirrorpeer",
 		},
@@ -132,7 +132,7 @@ func TestS3SecretReconciler_Reconcile(t *testing.T) {
 		t.Error("failed to add ocsv1 scheme")
 	}
 
-	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorPeer).Build()
+	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mirrorPeer).Build()
 	fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(managedS3Secret, managedConfigMap, route, objectBucketClaim, storageClusterOnManagedCluster).Build()
 
 	logger := utils.GetLogger(utils.GetZapLogger(true))

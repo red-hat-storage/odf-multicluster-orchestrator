@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-func createOrUpdateRamenS3Secret(ctx context.Context, rc client.Client, scheme *runtime.Scheme, name string, data map[string][]byte, ramenHubNamespace string, mirrorPeer multiclusterv1alpha1.MirrorPeer) error {
+func createOrUpdateRamenS3Secret(ctx context.Context, rc client.Client, scheme *runtime.Scheme, name string, data map[string][]byte, ramenHubNamespace string, mirrorPeer *multiclusterv1alpha1.MirrorPeer) error {
 
 	secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -35,7 +35,7 @@ func createOrUpdateRamenS3Secret(ctx context.Context, rc client.Client, scheme *
 			AwsAccessKeyId:     data[AwsAccessKeyId],
 			AwsSecretAccessKey: data[AwsSecretAccessKey],
 		}
-		return controllerutil.SetControllerReference(&mirrorPeer, &secret, scheme)
+		return controllerutil.SetControllerReference(mirrorPeer, &secret, scheme)
 	})
 
 	return err
@@ -85,7 +85,7 @@ func mergeCustomS3ProfileFields(current *rmn.S3StoreProfile, expected *rmn.S3Sto
 	}
 }
 
-func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret *corev1.Secret, data map[string][]byte, mirrorPeer multiclusterv1alpha1.MirrorPeer, ramenHubNamespace string, logger *slog.Logger) error {
+func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret *corev1.Secret, data map[string][]byte, mirrorPeer *multiclusterv1alpha1.MirrorPeer, ramenHubNamespace string, logger *slog.Logger) error {
 	logger.Info("Starting to update Ramen Hub Operator config", "SecretName", secret.Name, "Namespace", secret.Namespace)
 
 	if _, ok := secret.Annotations[MirrorPeerNameAnnotationKey]; !ok {
@@ -177,7 +177,7 @@ func updateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret 
 	return nil
 }
 
-func CreateOrUpdateSecretsFromInternalSecret(ctx context.Context, rc client.Client, scheme *runtime.Scheme, currentNamespace string, secret *corev1.Secret, mirrorPeer multiclusterv1alpha1.MirrorPeer, logger *slog.Logger) error {
+func CreateOrUpdateSecretsFromInternalSecret(ctx context.Context, rc client.Client, scheme *runtime.Scheme, currentNamespace string, secret *corev1.Secret, mirrorPeer *multiclusterv1alpha1.MirrorPeer, logger *slog.Logger) error {
 	logger.Info("Validating internal secret", "SecretName", secret.Name, "Namespace", secret.Namespace)
 
 	if err := ValidateInternalSecret(secret, InternalLabel); err != nil {

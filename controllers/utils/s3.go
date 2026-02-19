@@ -27,8 +27,6 @@ const (
 	RamenHubOperatorConfigName = "ramen-hub-operator-config"
 
 	// handlers
-	RookSecretHandlerName       = "rook"
-	S3SecretHandlerName         = "s3"
 	DRModeAnnotationKey         = "multicluster.openshift.io/mode"
 	MirrorPeerNameAnnotationKey = "multicluster.odf.openshift.io/mirrorpeer"
 	HubOperatorNamespaceKey     = "hub.multicluster.odf.openshift.io/operator-namespace"
@@ -44,7 +42,7 @@ func GetCurrentStorageClusterRef(mp *multiclusterv1alpha1.MirrorPeer, spokeClust
 	return nil, fmt.Errorf("StorageClusterRef for cluster %s under mirrorpeer %s not found", spokeClusterName, mp.Name)
 }
 
-func GenerateBucketName(mirrorPeer multiclusterv1alpha1.MirrorPeer) string {
+func GenerateBucketName(mirrorPeer *multiclusterv1alpha1.MirrorPeer) string {
 	mirrorPeerId := GenerateUniqueIdForMirrorPeer(mirrorPeer)
 	return fmt.Sprintf("%s-%s", BucketGenerateName, mirrorPeerId)[0 : len(BucketGenerateName)+1+12]
 }

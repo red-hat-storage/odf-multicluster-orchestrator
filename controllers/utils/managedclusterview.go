@@ -12,7 +12,6 @@ import (
 )
 
 const (
-	MCVLabelKey             = "multicluster.odf.openshift.io/cluster"
 	MCVNameTemplate         = "odf-multicluster-mcv-%s"
 	TokenExchangeDeployment = "token-exchange-agent"
 )

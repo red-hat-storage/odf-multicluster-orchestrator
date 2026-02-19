@@ -55,8 +55,8 @@ var (
 	StorageClusterNamespace = "openshift-storage"
 )
 
-func fakeMirrorPeers(manageS3 bool) multiclusterv1alpha1.MirrorPeer {
-	return multiclusterv1alpha1.MirrorPeer{
+func fakeMirrorPeers(manageS3 bool) *multiclusterv1alpha1.MirrorPeer {
+	return &multiclusterv1alpha1.MirrorPeer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "mirrorpeer",
 		},

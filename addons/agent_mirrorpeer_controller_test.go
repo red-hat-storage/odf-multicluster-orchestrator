@@ -82,7 +82,7 @@ storageCluster:
 			},
 		},
 	}
-	mirrorpeer1 = multiclusterv1alpha1.MirrorPeer{
+	mirrorpeer1 = &multiclusterv1alpha1.MirrorPeer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "mirrorpeer-with-proper-scheduling-intervals",
 		},
@@ -244,7 +244,7 @@ func GetTestCephBlockPool() *rookv1.CephBlockPool {
 func TestMirrorPeerReconcile(t *testing.T) {
 	ctx := context.TODO()
 	scheme := mgrScheme
-	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer1, &mirrorpeer2, odfClientInfoConfigMap).Build()
+	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mirrorpeer1, &mirrorpeer2, odfClientInfoConfigMap).Build()
 	os.Setenv("POD_NAMESPACE", odfNamespace)
 
 	for _, pr := range mirrorpeer1.Spec.Items {
@@ -374,7 +374,7 @@ func TestDeleteS3(t *testing.T) {
 	bucketName := utils.GenerateBucketName(mirrorPeer)
 	ctx := context.TODO()
 	scheme := mgrScheme
-	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mirrorpeer1).Build()
+	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mirrorpeer1).Build()
 	for _, pr := range mirrorpeer1.Spec.Items {
 		obc := &v1alpha1.ObjectBucketClaim{
 			ObjectMeta: metav1.ObjectMeta{
