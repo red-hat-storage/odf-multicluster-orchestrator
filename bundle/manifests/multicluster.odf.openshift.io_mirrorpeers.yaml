@@ -14,7 +14,17 @@ spec:
     singular: mirrorpeer
   scope: Cluster
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: MirrorPeer is the Schema for the mirrorpeers API
@@ -80,13 +90,6 @@ spec:
               manageS3:
                 default: false
                 type: boolean
-              schedulingIntervals:
-                description: |-
-                  SchedulingIntervals is a list of intervals at which mirroring snapshots are taken.
-                   DEPRECATED :  Any changes to this field will not affect the cluster state. Use DRPolicy.Spec.SchedulingInterval instead.
-                items:
-                  type: string
-                type: array
               type:
                 default: async
                 description: Type represents the mode of DR operation (sync or async)
