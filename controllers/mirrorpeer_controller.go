@@ -370,7 +370,7 @@ func (r *MirrorPeerReconciler) reconcilePhases(ctx context.Context, logger *slog
 
 	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
 		if hasStorageClientRef {
-			providerModePeeringDone, err := isProviderModePeeringDone(ctx, r.Client, r.Logger, r.CurrentNamespace, mirrorPeer, clientInfoMap.Data)
+			providerModePeeringDone, err := isProviderModePeeringDone(ctx, r.Client, r.Logger, mirrorPeer, clientInfoMap.Data)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to check if provider mode peering is correctly done %w", err)
 			}
@@ -1006,7 +1006,7 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, name string
 	return err
 }
 
-func isProviderModePeeringDone(ctx context.Context, client client.Client, logger *slog.Logger, currentNamespace string, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) (bool, error) {
+func isProviderModePeeringDone(ctx context.Context, client client.Client, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) (bool, error) {
 	isStorageClusterPeerManifestWorkCreated, err := checkStorageClusterPeerStatus(ctx, client, logger, mirrorPeer, clientInfoMap)
 	if err != nil {
 		logger.Error("failed to check if StorageClusterPeer have been created")
@@ -1022,36 +1022,9 @@ func isProviderModePeeringDone(ctx context.Context, client client.Client, logger
 
 	logger.Info("Client pairing ConfigMap creation status", "isClientPairingConfigMapCreated", isClientPairingConfigMapCreated)
 
-	isOnboardingTicketCreated, err := checkOnboardingTicketStatus(ctx, client, logger, mirrorPeer, clientInfoMap)
-	if err != nil {
-		logger.Error("failed to check if onboarding tickets has been created")
-		return false, err
-	}
-
-	logger.Info("Onboarding ticket creation status", "isOnboardingTicketCreated", isOnboardingTicketCreated)
-
 	allChecksPassed := isStorageClusterPeerManifestWorkCreated &&
-		isClientPairingConfigMapCreated &&
-		isOnboardingTicketCreated
+		isClientPairingConfigMapCreated
 
 	logger.Info("Provider mode peering status", "AllChecksPassed", allChecksPassed)
 	return allChecksPassed, nil
-}
-
-func checkOnboardingTicketStatus(ctx context.Context, client client.Client, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) (bool, error) {
-	logger = logger.With("MirrorPeer", mirrorPeer.Name)
-	for _, item := range mirrorPeer.Spec.Items {
-		logger.Info("Fetching info for client", "ClientKey", utils.GetKey(item.ClusterName, item.StorageClusterRef.Name))
-		ci, err := utils.GetClientInfoFromConfigMap(clientInfoMap, utils.GetKey(item.ClusterName, item.StorageClusterRef.Name))
-		if err != nil {
-			return false, fmt.Errorf("failed to fetch client info from the config map %w", err)
-		}
-		logger.Info("Client Info found for checking onboarding ticket status", "ClientInfo", ci)
-		_, err = fetchOnboardingTicket(ctx, client, ci, mirrorPeer)
-		if err != nil {
-			return false, fmt.Errorf("failed to fetch onboarding token for provider %s. %w", ci.ProviderInfo.ProviderManagedClusterName, err)
-		}
-	}
-
-	return true, nil
 }
