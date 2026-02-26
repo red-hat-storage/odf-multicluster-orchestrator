@@ -16,7 +16,7 @@ linters:
       min-complexity: 15
     goheader:
       template: |
-        Copyright 2021 Red Hat OpenShift Data Foundation.
+        Copyright 2026 Red Hat OpenShift Data Foundation.
 
         Licensed under the Apache License, Version 2.0 (the "License");
         you may not use this file except in compliance with the License.
