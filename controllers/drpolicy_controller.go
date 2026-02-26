@@ -297,7 +297,7 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRCAndVGRC(ctx context
 			return fmt.Errorf("validation: unable to parse versions: error: %w", err)
 		}
 		if lt {
-			logger.Info("ODF version in Managed Cluster doesn't support creation of VGRC templates, skipping creation of VGRC template", "Peer", pr.ClusterName, "error", err)
+			logger.Info("DF version in Managed Cluster doesn't support creation of VGRC templates, skipping creation of VGRC template", "Peer", pr.ClusterName, "error", err)
 			return nil
 		}
 

@@ -74,11 +74,11 @@ func (a *Addons) Manifests(cluster *clusterv1.ManagedCluster, addon *addonapiv1a
 	if utils.HasRequiredODFKey(cluster) {
 		odfOperatorNamespacedName, err := utils.GetNamespacedNameForClusterInfo(*cluster)
 		if err != nil {
-			return objects, fmt.Errorf("error while getting ODF operator namespace on the spoke cluster %q. %w", cluster.Name, err)
+			return objects, fmt.Errorf("error while getting DF operator namespace on the spoke cluster %q. %w", cluster.Name, err)
 		}
 		odfOperatorNamespace = odfOperatorNamespacedName.Namespace
 	} else {
-		return objects, fmt.Errorf("error while getting ODF operator namespace on the spoke cluster %q. Expected ClusterClaim does not exist", cluster.Name)
+		return objects, fmt.Errorf("error while getting DF operator namespace on the spoke cluster %q. Expected ClusterClaim does not exist", cluster.Name)
 	}
 
 	manifestConfig := struct {

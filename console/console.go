@@ -35,7 +35,7 @@ var (
 	proxyServiceName      = "rbac-query-proxy"
 	proxyServiceNamespace = "open-cluster-management-observability"
 	proxyServicePort      = 8443
-	pluginDisplayName     = "ODF Multicluster Plugin"
+	pluginDisplayName     = "DF Multicluster Plugin"
 
 	servicePortName         = "console-port"
 	serviceSecretAnnotation = "service.alpha.openshift.io/serving-cert-secret-name"

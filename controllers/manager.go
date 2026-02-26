@@ -90,7 +90,7 @@ func NewManagerCommand() *cobra.Command {
 	mgrOpts := NewManagerOptions()
 	cmd := &cobra.Command{
 		Use:   "manager",
-		Short: "Multicluster Orchestrator for ODF",
+		Short: "Multicluster Orchestrator for DF",
 		Run: func(cmd *cobra.Command, args []string) {
 			mgrOpts.runManager(cmd.Context())
 		},

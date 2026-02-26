@@ -59,13 +59,13 @@ func GetPeerRefForProviderCluster(ctx context.Context, spokeClient, hubClient cl
 	operatorNamespace := GetEnv("POD_NAMESPACE")
 	cm, err := GetODFInfoConfigMap(ctx, spokeClient, operatorNamespace)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get ODF Info ConfigMap for namespace %s: %w", operatorNamespace, err)
+		return nil, fmt.Errorf("failed to get DF Info ConfigMap for namespace %s: %w", operatorNamespace, err)
 	}
 	var odfInfo ocsv1alpha1.OdfInfoData
 	for key, value := range cm.Data {
 		err := yaml.Unmarshal([]byte(value), &odfInfo)
 		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal ODF info data for key %s: %w", key, err)
+			return nil, fmt.Errorf("failed to unmarshal DF info data for key %s: %w", key, err)
 		}
 		for _, v := range mp.Spec.Items {
 			clusterID, err := GetClusterID(ctx, hubClient, v.ClusterName)
