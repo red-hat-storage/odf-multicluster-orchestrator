@@ -68,11 +68,6 @@ type MirrorPeerSpec struct {
 	// +listMapKey=clusterName
 	Items []PeerRef `json:"items"`
 
-	// SchedulingIntervals is a list of intervals at which mirroring snapshots are taken.
-	//  DEPRECATED :  Any changes to this field will not affect the cluster state. Use DRPolicy.Spec.SchedulingInterval instead.
-	// +kubebuilder:validation:Optional
-	SchedulingIntervals []string `json:"schedulingIntervals,omitempty" deprecated:"true"`
-
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=false
 	ManageS3 bool `json:"manageS3,omitempty"`
@@ -87,6 +82,9 @@ type MirrorPeerStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
+// +kubebuilder:printcolumn:name="Type",type=string,JSONPath=.spec.type
+// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=.status.phase
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=.metadata.creationTimestamp
 
 // MirrorPeer is the Schema for the mirrorpeers API
 type MirrorPeer struct {

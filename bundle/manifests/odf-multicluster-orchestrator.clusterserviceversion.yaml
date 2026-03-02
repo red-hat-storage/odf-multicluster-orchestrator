@@ -36,7 +36,7 @@ metadata:
       ]
     capabilities: Seamless Upgrades
     console.openshift.io/plugins: '["odf-multicluster-console"]'
-    createdAt: "2025-12-09T09:28:10Z"
+    createdAt: "2026-02-25T14:31:00Z"
     olm.skipRange: ""
     operators.openshift.io/infrastructure-features: '["disconnected"]'
     operators.operatorframework.io/builder: operator-sdk-unknown
