@@ -157,6 +157,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 func (r *MirrorPeerReconciler) reconcilePhases(ctx context.Context, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
+	mirrorPeer.Status.Phase = multiclusterv1alpha1.Initializing
 	clientInfoMap, err := utils.FetchClientInfoConfigMap(ctx, r.Client, r.CurrentNamespace)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -166,56 +167,26 @@ func (r *MirrorPeerReconciler) reconcilePhases(ctx context.Context, logger *slog
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("Validating MirrorPeer")
-	// Validate MirrorPeer
-	// MirrorPeer.Spec must be defined
-	if err := undefinedMirrorPeerSpec(mirrorPeer.Spec); err != nil {
-		logger.Error("MirrorPeer spec is undefined", "error", err)
-		mirrorPeer.Status.Message = err.Error()
+	if err = isMirrorPeerValid(ctx, r.Client, r.Logger, mirrorPeer, clientInfoMap.Data); err != nil {
+		logger.Error("MirrorPeer validation failed", "error", err)
+		mirrorPeer.Status.Phase = multiclusterv1alpha1.Failed
+		mirrorPeer.Status.Message = multiclusterv1alpha1.ValidationFailed
 		return ctrl.Result{}, err
 	}
-	// MirrorPeer.Spec.Items must be unique
-	if err := uniqueSpecItems(mirrorPeer.Spec); err != nil {
-		logger.Error("MirrorPeer spec items are not unique", "error", err)
-		mirrorPeer.Status.Message = err.Error()
-		return ctrl.Result{}, err
-	}
-	for i := range mirrorPeer.Spec.Items {
-		// MirrorPeer.Spec.Items must not have empty fields
-		if err := emptySpecItems(mirrorPeer.Spec.Items[i]); err != nil {
-			logger.Error("MirrorPeer spec items have empty fields", "error", err)
-			mirrorPeer.Status.Message = err.Error()
-			return ctrl.Result{}, err
-		}
-		// MirrorPeer.Spec.Items[*].ClusterName must be a valid ManagedCluster
-		if err := isManagedCluster(ctx, r.Client, mirrorPeer.Spec.Items[i].ClusterName); err != nil {
-			logger.Error("Invalid ManagedCluster", "ClusterName", mirrorPeer.Spec.Items[i].ClusterName, "error", err)
-			mirrorPeer.Status.Message = err.Error()
-			return ctrl.Result{}, err
-		}
-		// MirrorPeer.Spec.Items[*].StorageClusterRef must have a compatible version
-		if err := isVersionCompatible(mirrorPeer.Spec.Items[i], clientInfoMap.Data); err != nil {
-			logger.Error("Can not reconcile MirrorPeer", "error", err)
-			mirrorPeer.Status.Phase = multiclusterv1alpha1.IncompatibleVersion
-			mirrorPeer.Status.Message = err.Error()
-			return ctrl.Result{}, err
-		} else {
-			if mirrorPeer.Status.Phase == multiclusterv1alpha1.IncompatibleVersion {
-				mirrorPeer.Status.Phase = ""
-				mirrorPeer.Status.Message = ""
-			}
-		}
-	}
-	logger.Info("All validations for MirrorPeer passed")
+
+	mirrorPeer.Status.Phase = multiclusterv1alpha1.Configuring
+	mirrorPeer.Status.Message = "All validations passed"
 
 	if !mirrorPeer.GetDeletionTimestamp().IsZero() {
 		logger.Info("Deleting MirrorPeer")
 		mirrorPeer.Status.Phase = multiclusterv1alpha1.Deleting
+		mirrorPeer.Status.Message = "MirrorPeer is being deleted"
 
 		var drpolicyList ramenv1alpha1.DRPolicyList
 		err := r.Client.List(ctx, &drpolicyList)
 		if err != nil {
 			logger.Error("Failed to delete resources", "error", err)
+			mirrorPeer.Status.Message = multiclusterv1alpha1.DeletionFailed
 			return reconcile.Result{}, err
 		}
 
@@ -225,8 +196,10 @@ func (r *MirrorPeerReconciler) reconcilePhases(ctx context.Context, logger *slog
 				mirrorPeer.Spec.Items[1].ClusterName == drClusters[1]) ||
 				(mirrorPeer.Spec.Items[0].ClusterName == drClusters[1] &&
 					mirrorPeer.Spec.Items[1].ClusterName == drClusters[0]) {
-				return reconcile.Result{}, fmt.Errorf("DRPolicy '%s' exists and requires MirrorPeer '%s'. MirrorPeer can not be deleted",
+				err = fmt.Errorf("DRPolicy '%s' exists and requires MirrorPeer '%s'. MirrorPeer can not be deleted",
 					drpolicyList.Items[i].Name, mirrorPeer.Name)
+				mirrorPeer.Status.Message = multiclusterv1alpha1.DeletionFailed
+				return reconcile.Result{}, err
 			}
 		}
 
@@ -239,17 +212,20 @@ func (r *MirrorPeerReconciler) reconcilePhases(ctx context.Context, logger *slog
 
 		if err := deleteManagedClusterAddon(ctx, r.Client, r.Scheme, mirrorPeer, clientInfoMap.Data); err != nil {
 			logger.Error("Failed to delete ManagedClusterAddon", "error", err)
+			mirrorPeer.Status.Message = multiclusterv1alpha1.DeletionFailed
 			return reconcile.Result{}, err
 		}
 
 		if err := r.deleteSecrets(ctx, mirrorPeer); err != nil {
 			logger.Error("Failed to delete resources", "error", err)
+			mirrorPeer.Status.Message = multiclusterv1alpha1.DeletionFailed
 			return reconcile.Result{Requeue: true}, err
 		}
 
 		if controllerutil.RemoveFinalizer(mirrorPeer, mirrorPeerFinalizer) {
 			if err := r.Client.Update(ctx, mirrorPeer); err != nil {
 				logger.Error("Failed to remove finalizer from MirrorPeer", "error", err)
+				mirrorPeer.Status.Message = multiclusterv1alpha1.DeletionFailed
 				return reconcile.Result{}, err
 			}
 		}
@@ -277,27 +253,43 @@ func (r *MirrorPeerReconciler) reconcilePhases(ctx context.Context, logger *slog
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
-	if mirrorPeer.Status.Phase == "" {
-		if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
-			mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangingSecret
-		} else {
-			mirrorPeer.Status.Phase = multiclusterv1alpha1.S3ProfileSyncing
-		}
-		return ctrl.Result{RequeueAfter: time.Second}, err
-	}
-
 	// Check if the MirrorPeer contains StorageClient reference
 	hasStorageClientRef, err := utils.IsStorageClientType(mirrorPeer, clientInfoMap.Data)
 	if err != nil {
 		logger.Error("Failed to determine if MirrorPeer contains StorageClient reference", "error", err)
-		mirrorPeer.Status.Message = err.Error()
+		mirrorPeer.Status.Message = multiclusterv1alpha1.ConfigurationFailed
 		return ctrl.Result{}, err
 	}
 
 	if err := r.processManagedClusterAddon(ctx, mirrorPeer, clientInfoMap.Data); err != nil {
 		logger.Error("Failed to process managedclusteraddon", "error", err)
-		mirrorPeer.Status.Message = err.Error()
+		mirrorPeer.Status.Message = multiclusterv1alpha1.ConfigurationFailed
 		return ctrl.Result{}, err
+	}
+
+	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
+		if err := createStorageClusterPeer(ctx, r.Client, logger, mirrorPeer, clientInfoMap.Data); err != nil {
+			logger.Error("Failed to create StorageClusterPeer", "error", err)
+			mirrorPeer.Status.Message = multiclusterv1alpha1.ConfigurationFailed
+			return ctrl.Result{}, err
+		}
+
+		if err := createManifestWorkForClusterPairingConfigMap(ctx, r.Client, logger, mirrorPeer, clientInfoMap.Data); err != nil {
+			logger.Error("Failed to create ManifestWork for ClusterPairingConfigMap", "error", err)
+			mirrorPeer.Status.Message = multiclusterv1alpha1.ConfigurationFailed
+			return ctrl.Result{}, err
+		}
+
+		providerModePeeringDone, err := isProviderModePeeringDone(ctx, r.Client, r.Logger, mirrorPeer, clientInfoMap.Data)
+		if err != nil {
+			mirrorPeer.Status.Message = multiclusterv1alpha1.PeeringIncomplete
+			return ctrl.Result{}, fmt.Errorf("failed to check if provider mode peering is correctly done %w", err)
+		}
+
+		if !providerModePeeringDone {
+			mirrorPeer.Status.Message = multiclusterv1alpha1.PeeringIncomplete
+			return ctrl.Result{Requeue: true}, nil
+		}
 	}
 
 	// update s3 profile when MirrorPeer changes
@@ -330,14 +322,14 @@ func (r *MirrorPeerReconciler) reconcilePhases(ctx context.Context, logger *slog
 					return ctrl.Result{Requeue: true}, nil
 				}
 				logger.Error("Error in fetching s3 internal secret", "Cluster", peerRef.ClusterName, "error", err)
-				mirrorPeer.Status.Message = err.Error()
+				mirrorPeer.Status.Message = multiclusterv1alpha1.S3ConfigurationFailed
 				return ctrl.Result{}, err
 			}
 
 			err = utils.CreateOrUpdateSecretsFromInternalSecret(ctx, r.Client, r.Scheme, r.CurrentNamespace, &s3Secret, mirrorPeer, logger)
 			if err != nil {
 				logger.Error("Error in updating S3 profile", "Cluster", peerRef.ClusterName, "error", err)
-				mirrorPeer.Status.Message = err.Error()
+				mirrorPeer.Status.Message = multiclusterv1alpha1.S3ConfigurationFailed
 				return ctrl.Result{}, err
 			}
 
@@ -348,50 +340,17 @@ func (r *MirrorPeerReconciler) reconcilePhases(ctx context.Context, logger *slog
 					return ctrl.Result{Requeue: true}, nil
 				}
 				logger.Error("Failed to create DRClusters for MirrorPeer", "error", err)
-				mirrorPeer.Status.Message = err.Error()
+				mirrorPeer.Status.Message = multiclusterv1alpha1.DRClusterConfigurationFailed
 				return ctrl.Result{}, err
 			}
 		}
 	}
 
-	if hasStorageClientRef && mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
-		if err := createStorageClusterPeer(ctx, r.Client, logger, mirrorPeer, clientInfoMap.Data); err != nil {
-			logger.Error("Failed to create StorageClusterPeer", "error", err)
-			mirrorPeer.Status.Message = err.Error()
-			return ctrl.Result{}, err
-		}
+	logger.Info("Successfully reconciled MirrorPeer")
 
-		if err := createManifestWorkForClusterPairingConfigMap(ctx, r.Client, logger, mirrorPeer, clientInfoMap.Data); err != nil {
-			logger.Error("Failed to create ManifestWork for ClusterPairingConfigMap", "error", err)
-			mirrorPeer.Status.Message = err.Error()
-			return ctrl.Result{}, err
-		}
-	}
-
-	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
-		if hasStorageClientRef {
-			providerModePeeringDone, err := isProviderModePeeringDone(ctx, r.Client, r.Logger, mirrorPeer, clientInfoMap.Data)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to check if provider mode peering is correctly done %w", err)
-			}
-
-			if providerModePeeringDone {
-				logger.Info("Peering of clusters is completed", "MirrorPeer", mirrorPeer.Name)
-				mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangedSecret
-				mirrorPeer.Status.Message = ""
-				return ctrl.Result{}, nil
-			} else {
-				mirrorPeer.Status.Phase = multiclusterv1alpha1.ExchangingSecret
-				return ctrl.Result{Requeue: true}, nil
-			}
-		}
-	} else {
-		mirrorPeer.Status.Phase = multiclusterv1alpha1.S3ProfileSynced
-		mirrorPeer.Status.Message = ""
-		return ctrl.Result{}, nil
-	}
-
-	return ctrl.Result{Requeue: true}, nil
+	mirrorPeer.Status.Phase = multiclusterv1alpha1.Ready
+	mirrorPeer.Status.Message = multiclusterv1alpha1.MirrorPeerReady
+	return ctrl.Result{}, nil
 }
 
 func createManifestWorkForClusterPairingConfigMap(ctx context.Context, client client.Client, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) error {
@@ -1027,4 +986,40 @@ func isProviderModePeeringDone(ctx context.Context, client client.Client, logger
 
 	logger.Info("Provider mode peering status", "AllChecksPassed", allChecksPassed)
 	return allChecksPassed, nil
+}
+
+// isMirrorPeerValid validates the MirrorPeer CR
+func isMirrorPeerValid(ctx context.Context, client client.Client, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) error {
+	logger.Info("Validating MirrorPeer")
+	// MirrorPeer.Spec must be defined
+	if err := undefinedMirrorPeerSpec(mirrorPeer.Spec); err != nil {
+		logger.Error("MirrorPeer spec is undefined", "error", err)
+		return err
+	}
+	// MirrorPeer.Spec.Items must be unique
+	if err := uniqueSpecItems(mirrorPeer.Spec); err != nil {
+		logger.Error("MirrorPeer spec items are not unique", "error", err)
+		return err
+	}
+	for i := range mirrorPeer.Spec.Items {
+		// MirrorPeer.Spec.Items must not have empty fields
+		if err := emptySpecItems(mirrorPeer.Spec.Items[i]); err != nil {
+			logger.Error("MirrorPeer spec items have empty fields", "error", err)
+			return err
+		}
+		// MirrorPeer.Spec.Items[*].ClusterName must be a valid ManagedCluster
+		if err := isManagedCluster(ctx, client, mirrorPeer.Spec.Items[i].ClusterName); err != nil {
+			logger.Error("Invalid ManagedCluster", "ClusterName", mirrorPeer.Spec.Items[i].ClusterName, "error", err)
+			return err
+		}
+		// MirrorPeer.Spec.Items[*].StorageClusterRef must have a compatible version
+		if err := isVersionCompatible(mirrorPeer.Spec.Items[i], clientInfoMap); err != nil {
+			logger.Error("Can not reconcile MirrorPeer", "error", err)
+			return err
+		}
+	}
+
+	logger.Info("All validations for MirrorPeer passed")
+
+	return nil
 }
