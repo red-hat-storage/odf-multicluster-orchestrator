@@ -24,14 +24,14 @@ type PhaseType string
 type DRType string
 
 const (
-	IncompatibleVersion PhaseType = "IncompatibleVersion"
-	ExchangingSecret    PhaseType = "ExchangingSecret"
-	ExchangedSecret     PhaseType = "ExchangedSecret"
-	S3ProfileSynced     PhaseType = "S3ProfileSynced"
-	S3ProfileSyncing    PhaseType = "S3ProfileSyncing"
-	Deleting            PhaseType = "Deleting"
-	Sync                DRType    = "sync"
-	Async               DRType    = "async"
+	Initializing PhaseType = "Initializing"
+	Validating   PhaseType = "Validating"
+	Configuring  PhaseType = "Configuring"
+	Ready        PhaseType = "Ready"
+	Failed       PhaseType = "Failed"
+	Deleting     PhaseType = "Deleting"
+	Sync         DRType    = "sync"
+	Async        DRType    = "async"
 )
 
 // StorageClusterRef holds a reference to a StorageCluster
