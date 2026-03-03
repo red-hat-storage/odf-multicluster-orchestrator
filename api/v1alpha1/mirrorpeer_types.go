@@ -22,16 +22,23 @@ import (
 
 type PhaseType string
 type DRType string
+type PhaseMessage string
 
 const (
-	Initializing PhaseType = "Initializing"
-	Validating   PhaseType = "Validating"
-	Configuring  PhaseType = "Configuring"
-	Ready        PhaseType = "Ready"
-	Failed       PhaseType = "Failed"
-	Deleting     PhaseType = "Deleting"
-	Sync         DRType    = "sync"
-	Async        DRType    = "async"
+	Initializing                 PhaseType    = "Initializing"
+	Configuring                  PhaseType    = "Configuring"
+	Ready                        PhaseType    = "Ready"
+	Failed                       PhaseType    = "Failed"
+	Deleting                     PhaseType    = "Deleting"
+	Sync                         DRType       = "sync"
+	Async                        DRType       = "async"
+	ConfigurationFailed          PhaseMessage = "Configuration failed"
+	ValidationFailed             PhaseMessage = "Validation failed"
+	DeletionFailed               PhaseMessage = "Deletion failed"
+	PeeringIncomplete            PhaseMessage = "Peering not yet completed"
+	S3ConfigurationFailed        PhaseMessage = "S3 configuration failed"
+	DRClusterConfigurationFailed PhaseMessage = "DRCluster configuration failed"
+	MirrorPeerReady              PhaseMessage = "Setup is completed"
 )
 
 // StorageClusterRef holds a reference to a StorageCluster
@@ -75,8 +82,8 @@ type MirrorPeerSpec struct {
 
 // MirrorPeerStatus defines the observed state of MirrorPeer
 type MirrorPeerStatus struct {
-	Phase   PhaseType `json:"phase,omitempty"`
-	Message string    `json:"message,omitempty"`
+	Phase   PhaseType    `json:"phase,omitempty"`
+	Message PhaseMessage `json:"message,omitempty"`
 }
 
 // +kubebuilder:object:root=true

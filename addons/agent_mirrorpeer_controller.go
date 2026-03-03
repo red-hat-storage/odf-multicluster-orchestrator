@@ -20,8 +20,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
@@ -376,7 +377,7 @@ func (r *MirrorPeerReconciler) hasSpokeCluster(obj client.Object) bool {
 	if !ok {
 		return false
 	}
-	if mp.Status.Phase == multiclusterv1alpha1.IncompatibleVersion {
+	if mp.Status.Phase == multiclusterv1alpha1.Failed {
 		return false
 	}
 	for _, v := range mp.Spec.Items {
@@ -392,7 +393,7 @@ func (r *MirrorPeerReconciler) hasProviderSpokeCluster(obj client.Object) bool {
 	if !ok {
 		return false
 	}
-	if mp.Status.Phase == multiclusterv1alpha1.IncompatibleVersion {
+	if mp.Status.Phase == multiclusterv1alpha1.Failed {
 		return false
 	}
 	peerRefs, err := utils.GetPeerRefForProviderCluster(context.TODO(), r.SpokeClient, r.HubClient, mp)
@@ -432,7 +433,7 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return reqs
 		}
 		for _, mirrorpeer := range mirrorPeerList.Items {
-			if mirrorpeer.Status.Phase == multiclusterv1alpha1.IncompatibleVersion {
+			if mirrorpeer.Status.Phase == multiclusterv1alpha1.Failed {
 				continue
 			}
 			for _, peerRef := range mirrorpeer.Spec.Items {
