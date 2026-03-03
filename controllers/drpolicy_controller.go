@@ -122,6 +122,11 @@ func (r *DRPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
+	if mirrorPeer.Status.Phase != multiclusterv1alpha1.Ready {
+		logger.Info("MirrorPeer setup is not yet complete, requeuing after 5 seconds")
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
 	if err = r.createOrUpdateManifestWorkForVRCAndVGRC(ctx, mirrorPeer, &drpolicy); err != nil {
 		if errors.Is(err, utils.ErrRequeueReconcile) {
 			return ctrl.Result{
