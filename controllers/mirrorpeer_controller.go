@@ -370,7 +370,7 @@ func (r *MirrorPeerReconciler) reconcilePhases(ctx context.Context, logger *slog
 
 	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
 		if hasStorageClientRef {
-			providerModePeeringDone, err := isProviderModePeeringDone(ctx, r.Client, r.Logger, r.CurrentNamespace, mirrorPeer, clientInfoMap.Data)
+			providerModePeeringDone, err := isProviderModePeeringDone(ctx, r.Client, r.Logger, mirrorPeer, clientInfoMap.Data)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to check if provider mode peering is correctly done %w", err)
 			}
@@ -386,23 +386,9 @@ func (r *MirrorPeerReconciler) reconcilePhases(ctx context.Context, logger *slog
 			}
 		}
 	} else {
-		// Sync mode status update, same flow as async but for s3 profile
-		s3ProfileSynced, err := checkS3ProfileStatus(ctx, r.Client, logger, mirrorPeer, hasStorageClientRef, clientInfoMap.Data)
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				logger.Info("S3 secrets not found; Attempting to reconcile again", "MirrorPeer", mirrorPeer.Name)
-				return ctrl.Result{Requeue: true}, nil
-			}
-			logger.Error("Error while syncing S3 Profile", "error", err, "MirrorPeer", mirrorPeer.Name)
-			return ctrl.Result{}, err
-		}
-
-		if s3ProfileSynced {
-			logger.Info("S3 Profile synced to hub", "MirrorPeer", mirrorPeer.Name)
-			mirrorPeer.Status.Phase = multiclusterv1alpha1.S3ProfileSynced
-			mirrorPeer.Status.Message = ""
-			return ctrl.Result{}, nil
-		}
+		mirrorPeer.Status.Phase = multiclusterv1alpha1.S3ProfileSynced
+		mirrorPeer.Status.Message = ""
+		return ctrl.Result{}, nil
 	}
 
 	return ctrl.Result{Requeue: true}, nil
@@ -1020,14 +1006,7 @@ func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, name string
 	return err
 }
 
-func isProviderModePeeringDone(ctx context.Context, client client.Client, logger *slog.Logger, currentNamespace string, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) (bool, error) {
-	isS3SecretSynced, err := checkS3ProfileStatus(ctx, client, logger, mirrorPeer, true, clientInfoMap)
-	if err != nil {
-		logger.Error("failed to check if s3 secrets have been synced")
-		return false, err
-	}
-	logger.Info("S3 secrets sync status", "isS3SecretSynced", isS3SecretSynced)
-
+func isProviderModePeeringDone(ctx context.Context, client client.Client, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) (bool, error) {
 	isStorageClusterPeerManifestWorkCreated, err := checkStorageClusterPeerStatus(ctx, client, logger, mirrorPeer, clientInfoMap)
 	if err != nil {
 		logger.Error("failed to check if StorageClusterPeer have been created")
@@ -1043,69 +1022,9 @@ func isProviderModePeeringDone(ctx context.Context, client client.Client, logger
 
 	logger.Info("Client pairing ConfigMap creation status", "isClientPairingConfigMapCreated", isClientPairingConfigMapCreated)
 
-	isOnboardingTicketCreated, err := checkOnboardingTicketStatus(ctx, client, logger, mirrorPeer, clientInfoMap)
-	if err != nil {
-		logger.Error("failed to check if onboarding tickets has been created")
-		return false, err
-	}
-
-	logger.Info("Onboarding ticket creation status", "isOnboardingTicketCreated", isOnboardingTicketCreated)
-
-	allChecksPassed := isS3SecretSynced &&
-		isStorageClusterPeerManifestWorkCreated &&
-		isClientPairingConfigMapCreated &&
-		isOnboardingTicketCreated
+	allChecksPassed := isStorageClusterPeerManifestWorkCreated &&
+		isClientPairingConfigMapCreated
 
 	logger.Info("Provider mode peering status", "AllChecksPassed", allChecksPassed)
 	return allChecksPassed, nil
-}
-
-func checkOnboardingTicketStatus(ctx context.Context, client client.Client, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) (bool, error) {
-	logger = logger.With("MirrorPeer", mirrorPeer.Name)
-	for _, item := range mirrorPeer.Spec.Items {
-		logger.Info("Fetching info for client", "ClientKey", utils.GetKey(item.ClusterName, item.StorageClusterRef.Name))
-		ci, err := utils.GetClientInfoFromConfigMap(clientInfoMap, utils.GetKey(item.ClusterName, item.StorageClusterRef.Name))
-		if err != nil {
-			return false, fmt.Errorf("failed to fetch client info from the config map %w", err)
-		}
-		logger.Info("Client Info found for checking onboarding ticket status", "ClientInfo", ci)
-		_, err = fetchOnboardingTicket(ctx, client, ci, mirrorPeer)
-		if err != nil {
-			return false, fmt.Errorf("failed to fetch onboarding token for provider %s. %w", ci.ProviderInfo.ProviderManagedClusterName, err)
-		}
-	}
-
-	return true, nil
-}
-
-func checkS3ProfileStatus(ctx context.Context, client client.Client, logger *slog.Logger, mp *multiclusterv1alpha1.MirrorPeer, hasStorageClientRef bool, clientInfoMap map[string]string) (bool, error) {
-	logger.Info("Checking S3 profile status for each peer reference in the MirrorPeer", "MirrorPeerName", mp.Name)
-
-	for _, pr := range mp.Spec.Items {
-		var s3SecretName string
-		var s3SecretNamespace string
-		if hasStorageClientRef {
-			name, namespace, err := GetNamespacedNameForClientS3Secret(pr, mp, clientInfoMap)
-			if err != nil {
-				return false, err
-			}
-			s3SecretName = name
-			s3SecretNamespace = namespace
-		} else {
-			s3SecretNamespace = pr.ClusterName
-			s3SecretName = utils.GetSecretNameByPeerRef(pr, utils.S3ProfilePrefix)
-		}
-		logger.Info("Attempting to fetch S3 secret", "SecretName", s3SecretName, "Namespace", s3SecretNamespace)
-
-		s3Secret := &corev1.Secret{}
-		if err := client.Get(ctx, types.NamespacedName{Name: s3SecretName, Namespace: s3SecretNamespace}, s3Secret); err != nil {
-			logger.Error("Failed to fetch S3 secret", "error", err, "SecretName", s3SecretName, "Namespace", s3SecretNamespace)
-			return false, err
-		}
-
-		logger.Info("Successfully fetched S3 secret", "SecretName", s3SecretName, "Namespace", s3SecretNamespace)
-	}
-
-	logger.Info("Successfully verified S3 profile status for all peer references", "MirrorPeerName", mp.Name)
-	return true, nil
 }
