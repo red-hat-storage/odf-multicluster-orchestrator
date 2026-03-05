@@ -103,7 +103,7 @@ var _ = Describe("MirrorPeer Validations", func() {
 				newMirrorPeer := mirrorPeer.DeepCopy()
 				newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-1-item"
 				newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
-					Type: "async",
+					Type: "sync",
 					Items: []multiclusterv1alpha1.PeerRef{
 						{
 							ClusterName: "test-provider-cluster",
@@ -121,7 +121,7 @@ var _ = Describe("MirrorPeer Validations", func() {
 				newMirrorPeer := mirrorPeer.DeepCopy()
 				newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-without-clustername"
 				newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
-					Type: "async",
+					Type: "sync",
 					Items: []multiclusterv1alpha1.PeerRef{
 						{
 							StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
@@ -149,7 +149,7 @@ var _ = Describe("MirrorPeer Validations", func() {
 				newMirrorPeer := mirrorPeer.DeepCopy()
 				newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-without-storageclusterref"
 				newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
-					Type: "async",
+					Type: "sync",
 					Items: []multiclusterv1alpha1.PeerRef{
 						{
 							ClusterName: "test-provider-cluster1",
@@ -174,7 +174,7 @@ var _ = Describe("MirrorPeer Validations", func() {
 				newMirrorPeer := mirrorPeer.DeepCopy()
 				newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-all-fields"
 				newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
-					Type: "async",
+					Type: "sync",
 					Items: []multiclusterv1alpha1.PeerRef{
 						{
 							ClusterName: "test-provider-cluster1",
@@ -205,7 +205,7 @@ var _ = Describe("MirrorPeer Validations", func() {
 			newMirrorPeer := mirrorPeer.DeepCopy()
 			newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-update"
 			newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
-				Type: "async",
+				Type: "sync",
 				Items: []multiclusterv1alpha1.PeerRef{
 					{
 						ClusterName: "test-provider-cluster1",
@@ -320,7 +320,7 @@ var _ = Describe("MirrorPeer Validations", func() {
 			newMirrorPeer := mirrorPeer.DeepCopy()
 			newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-update1"
 			newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
-				Type: "async",
+				Type: "sync",
 				Items: []multiclusterv1alpha1.PeerRef{
 					{
 						ClusterName: "test-provider-clustera",
@@ -431,7 +431,7 @@ var _ = Describe("MirrorPeerReconciler Reconcile", func() {
 				utils.HubRecoveryLabel: "resource",
 			}
 			newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
-				Type: "async",
+				Type: "sync",
 				Items: []multiclusterv1alpha1.PeerRef{
 					{
 						ClusterName: "test-provider-cluster1",

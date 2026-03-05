@@ -67,7 +67,7 @@ var _ = Describe("ManagedClusterAddOn creation, updation and deletion", func() {
 			os.Setenv("POD_NAMESPACE", "openshift-operators")
 			newMirrorPeer := mirrorPeer1.DeepCopy()
 			newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
-				Type: "async",
+				Type: "sync",
 				Items: []multiclusterv1alpha1.PeerRef{
 					{
 						ClusterName: "cluster1",
@@ -163,12 +163,12 @@ var _ = Describe("ManagedClusterAddOn creation, updation and deletion", func() {
 				Eventually(func() string {
 					k8sClient.Get(context.TODO(), mcAddOn1LookupKey, &mcAddOn1)
 					return mcAddOn1.Annotations[utils.DRModeAnnotationKey]
-				}, 20*time.Second, 2*time.Second).Should(Equal("async"))
+				}, 20*time.Second, 2*time.Second).Should(Equal("sync"))
 
 				Eventually(func() string {
 					k8sClient.Get(context.TODO(), mcAddOn2LookupKey, &mcAddOn2)
 					return mcAddOn2.Annotations[utils.DRModeAnnotationKey]
-				}, 20*time.Second, 2*time.Second).Should(Equal("async"))
+				}, 20*time.Second, 2*time.Second).Should(Equal("sync"))
 			})
 		})
 	})
