@@ -68,7 +68,7 @@ var _ = Describe("Ramen Resource Tests", func() {
 			},
 		},
 		Spec: multiclusterv1alpha1.MirrorPeerSpec{
-			Type: "async",
+			Type: "sync",
 			Items: []multiclusterv1alpha1.PeerRef{
 				{
 					ClusterName: "mc-1",

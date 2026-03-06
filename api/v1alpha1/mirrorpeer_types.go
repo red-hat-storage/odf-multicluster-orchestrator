@@ -24,14 +24,20 @@ type PhaseType string
 type DRType string
 
 const (
-	IncompatibleVersion PhaseType = "IncompatibleVersion"
-	ExchangingSecret    PhaseType = "ExchangingSecret"
-	ExchangedSecret     PhaseType = "ExchangedSecret"
-	S3ProfileSynced     PhaseType = "S3ProfileSynced"
-	S3ProfileSyncing    PhaseType = "S3ProfileSyncing"
-	Deleting            PhaseType = "Deleting"
-	Sync                DRType    = "sync"
-	Async               DRType    = "async"
+	Initializing                 PhaseType = "Initializing"
+	Configuring                  PhaseType = "Configuring"
+	Ready                        PhaseType = "Ready"
+	Failed                       PhaseType = "Failed"
+	Deleting                     PhaseType = "Deleting"
+	Sync                         DRType    = "sync"
+	Async                        DRType    = "async"
+	ConfigurationFailed          string    = "MirrorPeer configuration failed"
+	ValidationFailed             string    = "MirrorPeer validation failed"
+	DeletionFailed               string    = "MirrorPeer deletion failed"
+	PeeringIncomplete            string    = "Peering not yet completed"
+	S3ConfigurationFailed        string    = "S3 configuration failed"
+	DRClusterConfigurationFailed string    = "DRCluster configuration failed"
+	MirrorPeerReady              string    = "MirrorPeer setup is completed"
 )
 
 // StorageClusterRef holds a reference to a StorageCluster

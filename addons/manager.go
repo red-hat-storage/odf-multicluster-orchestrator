@@ -91,7 +91,6 @@ type AddonAgentOptions struct {
 	KubeconfigFile       string
 	SpokeClusterName     string
 	OdfOperatorNamespace string
-	DRMode               string
 	DevMode              bool
 
 	testEnvFile string
@@ -108,7 +107,6 @@ func (o *AddonAgentOptions) AddFlags(cmd *cobra.Command) {
 	flags.StringVar(&o.KubeconfigFile, "kubeconfig", "", "Paths to a kubeconfig. Only required if out-of-cluster.")
 	flags.StringVar(&o.SpokeClusterName, "cluster-name", o.SpokeClusterName, "Name of spoke cluster.")
 	flags.StringVar(&o.OdfOperatorNamespace, "odf-operator-namespace", o.OdfOperatorNamespace, "Namespace of ODF operator on the spoke cluster.")
-	flags.StringVar(&o.DRMode, "mode", o.DRMode, "The DR mode of token exchange addon. Valid values are: 'sync', 'async'")
 	flags.BoolVar(&o.DevMode, "dev", false, "Set to true for dev environment (Text logging)")
 	flags.StringVar(&o.testEnvFile, "test-dotenv", "", "Path to a dotenv file for testing purpose only.")
 }
