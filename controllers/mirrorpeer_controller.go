@@ -744,7 +744,6 @@ func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, m
 		logger.Info("Installing agents on the namespace", "InstallNamespace", config.InstallNamespace)
 		_, err = controllerutil.CreateOrUpdate(ctx, r.Client, &managedClusterAddOn, func() error {
 			annotations := make(map[string]string)
-			annotations[utils.DRModeAnnotationKey] = string(mirrorPeer.Spec.Type)
 			annotations[AddonVersionAnnotationKey] = version.Version
 			annotations[utils.HubOperatorNamespaceKey] = r.CurrentNamespace
 
