@@ -88,7 +88,6 @@ func (a *Addons) Manifests(cluster *clusterv1.ManagedCluster, addon *addonapiv1a
 		OdfOperatorNamespace  string
 		HubOperatorNamespace  string
 		Image                 string
-		DRMode                string
 		Group                 string
 		User                  string
 	}{
@@ -98,7 +97,6 @@ func (a *Addons) Manifests(cluster *clusterv1.ManagedCluster, addon *addonapiv1a
 		HubOperatorNamespace:  addon.Annotations[utils.HubOperatorNamespaceKey],
 		ClusterName:           cluster.Name,
 		Image:                 a.AgentImage,
-		DRMode:                addon.Annotations[utils.DRModeAnnotationKey],
 		Group:                 groups[0],
 		User:                  user,
 	}

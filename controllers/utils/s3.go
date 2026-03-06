@@ -27,7 +27,6 @@ const (
 	RamenHubOperatorConfigName = "ramen-hub-operator-config"
 
 	// handlers
-	DRModeAnnotationKey         = "multicluster.openshift.io/mode"
 	MirrorPeerNameAnnotationKey = "multicluster.odf.openshift.io/mirrorpeer"
 	HubOperatorNamespaceKey     = "hub.multicluster.odf.openshift.io/operator-namespace"
 )
