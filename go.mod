@@ -1,8 +1,8 @@
 module github.com/red-hat-storage/odf-multicluster-orchestrator
 
-go 1.23.5
+go 1.23.7
 
-toolchain go1.23.6
+toolchain go1.23.10
 
 require (
 	github.com/blang/semver/v4 v4.0.0
@@ -195,5 +195,4 @@ exclude (
 	k8s.io/client-go v11.0.0+incompatible
 	k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible
 	k8s.io/client-go v12.0.0+incompatible
-
 )
