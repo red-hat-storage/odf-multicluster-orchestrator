@@ -50,6 +50,9 @@ func TestDRPolicyReconcile(t *testing.T) {
 				},
 			},
 		},
+		Status: multiclusterv1alpha1.MirrorPeerStatus{
+			Phase: multiclusterv1alpha1.Ready,
+		},
 	}
 
 	drpolicy := ramenv1alpha1.DRPolicy{
