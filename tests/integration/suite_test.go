@@ -20,6 +20,7 @@ limitations under the License.
 package integration_test
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -45,6 +46,8 @@ import (
 var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
+var ctx context.Context
+var ctxCancel context.CancelFunc
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -53,6 +56,8 @@ func TestAPIs(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
+	ctx, ctxCancel = context.WithCancel(ctrl.SetupSignalHandler())
+
 	var err error
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
@@ -111,7 +116,7 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	go func() {
-		err = mgr.Start(ctrl.SetupSignalHandler())
+		err = mgr.Start(ctx)
 		Expect(err).ToNot(HaveOccurred())
 	}()
 
@@ -119,6 +124,7 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
+	ctxCancel()
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 })
