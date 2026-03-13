@@ -14,7 +14,9 @@ import (
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
 	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v4/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/hub"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/spoke"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
@@ -189,14 +191,14 @@ func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.
 		os.Exit(1)
 	}
 
-	if err = (&MirrorPeerReconciler{
+	if err = (&hub.MirrorPeerReconciler{
 		Scheme:               mgr.GetScheme(),
 		HubClient:            mgr.GetClient(),
 		SpokeClient:          spokeClient,
 		SpokeClusterName:     options.SpokeClusterName,
 		OdfOperatorNamespace: options.OdfOperatorNamespace,
-		Logger:               logger.With("controller", "MirrorPeerReconciler"),
-		testEnvFile:          options.testEnvFile,
+		Logger:               logger.With("controller", "hub.MirrorPeerReconciler"),
+		TestEnvFile:          options.testEnvFile,
 		CurrentNamespace:     currentNamespace,
 		HubOperatorNamespace: hubOperatorNamespace,
 	}).SetupWithManager(mgr); err != nil {
@@ -244,7 +246,7 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slo
 		logger.Info("Starting lease updater")
 		leaseUpdater := lease.NewLeaseUpdater(
 			spokeKubeClient,
-			setup.TokenExchangeName,
+			utils.TokenExchangeName,
 			currentNamespace,
 		)
 		leaseUpdater.Start(ctx)
@@ -267,25 +269,25 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slo
 		os.Exit(1)
 	}
 
-	if err = (&S3SecretReconciler{
+	if err = (&spoke.S3SecretReconciler{
 		Scheme:           mgr.GetScheme(),
 		HubClient:        hubClient,
 		SpokeClient:      mgr.GetClient(),
 		SpokeClusterName: options.SpokeClusterName,
-		Logger:           logger.With("controller", "S3SecretReconciler"),
-		testEnvFile:      options.testEnvFile,
+		Logger:           logger.With("controller", "spoke.S3SecretReconciler"),
+		TestEnvFile:      options.testEnvFile,
 		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create S3Secret controller", "controller", "S3Secret", "error", err)
 		os.Exit(1)
 	}
 
-	if err = (&ResourceDistributionReconciler{
+	if err = (&spoke.ResourceDistributionReconciler{
 		Scheme:           mgr.GetScheme(),
 		HubClient:        hubClient,
 		SpokeClient:      mgr.GetClient(),
 		SpokeClusterName: options.SpokeClusterName,
-		Logger:           logger.With("controller", "ResourceDistributionReconciler"),
+		Logger:           logger.With("controller", "spoke.ResourceDistributionReconciler"),
 		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create ResourceDistributionReconciler controller", "controller", "ResourceDistributionReconciler", "error", err)
@@ -294,7 +296,7 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slo
 
 	addonDeletionLock := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      AddonDeletionlockName,
+			Name:      utils.AddonDeletionlockName,
 			Namespace: currentNamespace,
 		},
 	}
