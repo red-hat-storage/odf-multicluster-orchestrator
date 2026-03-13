@@ -9,10 +9,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 )
 
-const (
-	TokenExchangeName = "tokenexchange"
-)
-
 // ServeHealthProbes starts a server to check healthz and readyz probes
 func ServeHealthProbes(stop <-chan struct{}, healthProbeBindAddress string, configCheck healthz.Checker, logger *slog.Logger) {
 	healthzHandler := &healthz.Handler{Checks: map[string]healthz.Checker{
