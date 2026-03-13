@@ -17,14 +17,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package odf
 
 import (
 	"context"
 	"os"
 	"testing"
 
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
@@ -197,7 +196,7 @@ func TestProcessManagedClusterAddons(t *testing.T) {
 
 	clusterManagementAddOn := addonapiv1alpha1.ClusterManagementAddOn{}
 	if err := r.Get(ctx, types.NamespacedName{
-		Name: setup.TokenExchangeName,
+		Name: utils.TokenExchangeName,
 	}, &clusterManagementAddOn); err != nil {
 		t.Error("Failed to create ClusterManagementAddOn")
 	}
@@ -209,7 +208,7 @@ func TestProcessManagedClusterAddons(t *testing.T) {
 	for i := range mirrorpeer.Spec.Items {
 		managedClusterAddon := addonapiv1alpha1.ManagedClusterAddOn{}
 		if err := r.Get(ctx, types.NamespacedName{
-			Name:      setup.TokenExchangeName,
+			Name:      utils.TokenExchangeName,
 			Namespace: mirrorpeer.Spec.Items[i].ClusterName,
 		}, &managedClusterAddon); err != nil {
 			t.Error("Failed to create ManagedClusterAddon")

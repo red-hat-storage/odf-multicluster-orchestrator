@@ -6,6 +6,7 @@ import (
 
 	routev1 "github.com/openshift/api/route/v1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/odf"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -48,8 +49,8 @@ func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name strin
 	var s3ProfileName string
 	var err error
 
-	if obcType == string(CLUSTER) {
-		storagePeerRef, err = utils.GetPeerRefForSpokeCluster(mirrorPeer, r.SpokeClusterName)
+	if obcType == string(utils.OBCTypeCluster) {
+		storagePeerRef, err = odf.GetPeerRefForSpokeCluster(mirrorPeer, r.SpokeClusterName)
 		if err != nil {
 			return fmt.Errorf("failed to find storage cluster ref using spoke cluster name %s from mirrorpeers: %v", r.SpokeClusterName, err)
 		}
@@ -59,7 +60,7 @@ func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name strin
 		}
 		r.Logger.Info("Found peerRef for spoke cluseter", "Spoke", r.SpokeClusterName, "PeerRef", storagePeerRef)
 	} else {
-		storagePeerRefList, err := utils.GetPeerRefForProviderCluster(ctx, r.SpokeClient, r.HubClient, mirrorPeer)
+		storagePeerRefList, err := odf.GetPeerRefForProviderCluster(ctx, r.SpokeClient, r.HubClient, mirrorPeer)
 		if err != nil {
 			return fmt.Errorf("failed to find client peerRef for current provider cluster %s. %w", r.SpokeClusterName, err)
 		}
@@ -112,7 +113,7 @@ func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name strin
 	}
 
 	var secretName string
-	if obcType == string(CLUSTER) {
+	if obcType == string(utils.OBCTypeCluster) {
 		secretName = utils.CreateUniqueSecretName(r.SpokeClusterName, storageClusterRef.Namespace, storageClusterRef.Name, utils.S3ProfilePrefix)
 	} else {
 		pr1 := mirrorPeer.Spec.Items[0]
@@ -121,9 +122,9 @@ func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name strin
 	}
 
 	annotations := map[string]string{
-		OBCNameAnnotationKey:              name,
+		utils.OBCNameAnnotationKey:        name,
 		utils.MirrorPeerNameAnnotationKey: mirrorPeerName,
-		OBCTypeAnnotationKey:              obcType,
+		utils.OBCTypeAnnotationKey:        obcType,
 	}
 
 	newSecret, err := generateBlueSecret(s3Secret, utils.InternalLabel, secretName, storageClusterRef.Name, r.SpokeClusterName, customData, annotations)
@@ -132,7 +133,6 @@ func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name strin
 	}
 	if err = r.HubClient.Create(ctx, newSecret, &client.CreateOptions{}); err != nil {
 		if errors.IsAlreadyExists(err) {
-			// Log that the secret already exists and attempt to update it
 			r.Logger.Info("Secret already exists on hub cluster, attempting to update", "secret", newSecret.Name, "namespace", newSecret.Namespace)
 			err = r.HubClient.Update(ctx, newSecret, &client.UpdateOptions{})
 			if err != nil {
@@ -141,7 +141,6 @@ func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name strin
 			r.Logger.Info("Successfully updated existing secret on hub cluster", "secret", newSecret.Name, "namespace", newSecret.Namespace)
 			return nil
 		}
-		// If it's an error other than "already exists", log and return
 		return fmt.Errorf("failed to create secret %q in namespace %q on hub cluster: %w", newSecret.Name, newSecret.Namespace, err)
 	}
 

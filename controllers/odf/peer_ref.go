@@ -1,4 +1,4 @@
-package utils
+package odf
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 
 	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v4/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"gopkg.in/yaml.v2"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -29,13 +30,13 @@ const (
 
 // DoesAnotherMirrorPeerPointToPeerRef checks if another mirrorpeer is pointing to the provided peer ref
 func DoesAnotherMirrorPeerPointToPeerRef(ctx context.Context, rc client.Client, peerRef multiclusterv1alpha1.PeerRef) (bool, error) {
-	mirrorPeers, err := FetchAllMirrorPeers(ctx, rc)
+	mirrorPeers, err := utils.FetchAllMirrorPeers(ctx, rc)
 	if err != nil {
 		return false, err
 	}
 	count := 0
 	for i := range mirrorPeers {
-		if ContainsPeerRef(mirrorPeers[i].Spec.Items, peerRef) {
+		if utils.ContainsPeerRef(mirrorPeers[i].Spec.Items, peerRef) {
 			count++
 		}
 	}
@@ -50,13 +51,13 @@ func GetPeerRefForSpokeCluster(mp *multiclusterv1alpha1.MirrorPeer, spokeCluster
 			return &v, nil
 		}
 	}
-	return nil, fmt.Errorf("PeerRef for cluster %s under mirrorpeer %s not found", spokeClusterName, mp.Name)
+	return nil, fmt.Errorf("peerRef for cluster %s under mirrorpeer %s not found", spokeClusterName, mp.Name)
 }
 
 // GetPeerRefForProviderCluster returns the client peer ref for the current provider cluster
 func GetPeerRefForProviderCluster(ctx context.Context, spokeClient, hubClient client.Client, mp *multiclusterv1alpha1.MirrorPeer) ([]multiclusterv1alpha1.PeerRef, error) {
 	var peerRefList []multiclusterv1alpha1.PeerRef
-	operatorNamespace := GetEnv("POD_NAMESPACE")
+	operatorNamespace := utils.GetEnv("POD_NAMESPACE")
 	cm, err := GetODFInfoConfigMap(ctx, spokeClient, operatorNamespace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get DF Info ConfigMap for namespace %s: %w", operatorNamespace, err)
@@ -93,7 +94,7 @@ func GetClusterID(ctx context.Context, client client.Client, clusterName string)
 }
 
 func getPeerRefType(peerRef multiclusterv1alpha1.PeerRef, clientInfoMap map[string]string) (PeerRefType, error) {
-	cInfo, err := GetClientInfoFromConfigMap(clientInfoMap, GetKey(peerRef.ClusterName, peerRef.StorageClusterRef.Name))
+	cInfo, err := GetClientInfoFromConfigMap(clientInfoMap, utils.GetKey(peerRef.ClusterName, peerRef.StorageClusterRef.Name))
 	if err != nil {
 		return PeerRefTypeUnknown, err
 	}

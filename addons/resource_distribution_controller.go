@@ -9,6 +9,7 @@ import (
 
 	templatev1 "github.com/openshift/api/template/v1"
 	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v4/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/odf"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,7 +76,7 @@ func (r *ResourceDistributionReconciler) SetupWithManager(mgr ctrl.Manager) erro
 		return []ctrl.Request{reconcile.Request{
 			NamespacedName: types.NamespacedName{
 				Namespace: r.CurrentNamespace,
-				Name:      utils.StorageClientMappingConfigMapName,
+				Name:      odf.StorageClientMappingConfigMapName,
 			},
 		}}
 	})
@@ -85,7 +86,7 @@ func (r *ResourceDistributionReconciler) SetupWithManager(mgr ctrl.Manager) erro
 		For(&corev1.ConfigMap{}, builder.WithPredicates(
 			predicate.NewPredicateFuncs(
 				func(object client.Object) bool {
-					return object.GetName() == utils.StorageClientMappingConfigMapName && object.GetNamespace() == r.CurrentNamespace
+					return object.GetName() == odf.StorageClientMappingConfigMapName && object.GetNamespace() == r.CurrentNamespace
 				}),
 		)).
 		Watches(&templatev1.Template{}, eventHandler, builder.WithPredicates(labelSelectorPredicate)).
@@ -103,11 +104,11 @@ func (r *ResourceDistributionReconciler) Reconcile(ctx context.Context, req ctrl
 	logger.Info("Distributing resources to all StorageConsumers.")
 
 	addonDeletionlock := &corev1.ConfigMap{}
-	if err := r.SpokeClient.Get(ctx, types.NamespacedName{Namespace: r.CurrentNamespace, Name: AddonDeletionlockName}, addonDeletionlock); err != nil {
+	if err := r.SpokeClient.Get(ctx, types.NamespacedName{Namespace: r.CurrentNamespace, Name: utils.AddonDeletionlockName}, addonDeletionlock); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	storageClientMapping, err := utils.GetStorageClientMapping(ctx, r.SpokeClient, r.CurrentNamespace)
+	storageClientMapping, err := odf.GetStorageClientMapping(ctx, r.SpokeClient, r.CurrentNamespace)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to distribute resources to StorageConsumers: %w", err)
 	}
@@ -190,7 +191,7 @@ func (r *ResourceDistributionReconciler) Reconcile(ctx context.Context, req ctrl
 		template := &templateList.Items[i]
 		logger.Info("Distributing template", "Template", template.GetName())
 		if template.DeletionTimestamp.IsZero() {
-			if controllerutil.AddFinalizer(template, ResourceDistributionFinalizer) {
+			if controllerutil.AddFinalizer(template, utils.ResourceDistributionFinalizer) {
 				if err := r.SpokeClient.Update(ctx, template); err != nil {
 					return ctrl.Result{}, err
 				}
@@ -272,7 +273,7 @@ func (r *ResourceDistributionReconciler) Reconcile(ctx context.Context, req ctrl
 			}
 		}
 		if !template.DeletionTimestamp.IsZero() {
-			if controllerutil.RemoveFinalizer(template, ResourceDistributionFinalizer) {
+			if controllerutil.RemoveFinalizer(template, utils.ResourceDistributionFinalizer) {
 				if err := r.SpokeClient.Update(ctx, template); err != nil {
 					return ctrl.Result{}, err
 				}

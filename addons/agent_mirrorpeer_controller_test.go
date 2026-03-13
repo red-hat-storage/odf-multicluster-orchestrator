@@ -1,3 +1,6 @@
+//go:build unit
+// +build unit
+
 package addons
 
 import (
@@ -6,18 +9,19 @@ import (
 	"os"
 	"testing"
 
-	"github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
+	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
-
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
-	storagev1 "k8s.io/api/storage/v1"
 
 	snapv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/odf"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/testutil"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -27,11 +31,15 @@ import (
 var (
 	storageClusterName = "test-storagecluster"
 	odfNamespace       = "test-namespace"
+)
 
+var testSchemeInstance = testutil.TestScheme
+
+var (
 	odfInfoConfigMap = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "odf-info",
-			Namespace: odfNamespace, // Use a generic namespace
+			Namespace: odfNamespace,
 			UID:       types.UID("268e6cdb-54fc-4f10-afab-67b106880be3"),
 		},
 		Data: map[string]string{
@@ -91,7 +99,6 @@ storageCluster:
 			Items: mpItems,
 		},
 	}
-	// Validating webhooks in place won't allow for this to be created
 	mirrorpeer2 = multiclusterv1alpha1.MirrorPeer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "mirrorpeer-with-invalid-scheduling-intervals",
@@ -110,6 +117,16 @@ storageCluster:
 	cephfsVolumeSnapshotClass = GetTestCephFSVolumeSnapshotClass()
 
 	cephblockpool = GetTestCephBlockPool()
+
+	mirrorPeer = multiclusterv1alpha1.MirrorPeer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-mirrorpeer",
+		},
+		Spec: multiclusterv1alpha1.MirrorPeerSpec{
+			Type:  "async",
+			Items: mpItems,
+		},
+	}
 )
 
 func GetTestCephRBDStorageClass() *storagev1.StorageClass {
@@ -117,7 +134,7 @@ func GetTestCephRBDStorageClass() *storagev1.StorageClass {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: fmt.Sprintf("%s-ceph-rbd", storageClusterName),
 		},
-		Provisioner:          fmt.Sprintf(RBDProvisionerTemplate, odfNamespace),
+		Provisioner:          fmt.Sprintf(utils.RBDProvisionerTemplate, odfNamespace),
 		ReclaimPolicy:        &[]corev1.PersistentVolumeReclaimPolicy{corev1.PersistentVolumeReclaimDelete}[0],
 		AllowVolumeExpansion: &[]bool{true}[0],
 		VolumeBindingMode:    &[]storagev1.VolumeBindingMode{storagev1.VolumeBindingImmediate}[0],
@@ -133,7 +150,7 @@ func GetTestCephRBDVirtStorageClass() *storagev1.StorageClass {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: fmt.Sprintf("%s-ceph-rbd-virtualization", storageClusterName),
 		},
-		Provisioner:          fmt.Sprintf(RBDProvisionerTemplate, odfNamespace),
+		Provisioner:          fmt.Sprintf(utils.RBDProvisionerTemplate, odfNamespace),
 		ReclaimPolicy:        &[]corev1.PersistentVolumeReclaimPolicy{corev1.PersistentVolumeReclaimDelete}[0],
 		AllowVolumeExpansion: &[]bool{true}[0],
 		VolumeBindingMode:    &[]storagev1.VolumeBindingMode{storagev1.VolumeBindingImmediate}[0],
@@ -152,7 +169,7 @@ func GetTestCephFSStorageClass() *storagev1.StorageClass {
 				"description": "Provides RWO and RWX Filesystem volumes",
 			},
 		},
-		Provisioner:          fmt.Sprintf(CephFSProvisionerTemplate, odfNamespace),
+		Provisioner:          fmt.Sprintf(utils.CephFSProvisionerTemplate, odfNamespace),
 		ReclaimPolicy:        &[]corev1.PersistentVolumeReclaimPolicy{corev1.PersistentVolumeReclaimDelete}[0],
 		AllowVolumeExpansion: &[]bool{true}[0],
 		VolumeBindingMode:    &[]storagev1.VolumeBindingMode{storagev1.VolumeBindingImmediate}[0],
@@ -168,7 +185,7 @@ func GetTestCephFSVolumeSnapshotClass() *snapv1.VolumeSnapshotClass {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: fmt.Sprintf("%s-cephfsplugin-snapclass", storageClusterName),
 		},
-		Driver:         fmt.Sprintf(CephFSProvisionerTemplate, odfNamespace),
+		Driver:         fmt.Sprintf(utils.CephFSProvisionerTemplate, odfNamespace),
 		DeletionPolicy: "Delete",
 		Parameters: map[string]string{
 			"clusterID": odfNamespace,
@@ -181,7 +198,7 @@ func GetTestRBDVolumeSnapshotClass() *snapv1.VolumeSnapshotClass {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: fmt.Sprintf("%s-rbdplugin-snapclass", storageClusterName),
 		},
-		Driver:         fmt.Sprintf(RBDProvisionerTemplate, odfNamespace),
+		Driver:         fmt.Sprintf(utils.RBDProvisionerTemplate, odfNamespace),
 		DeletionPolicy: "Delete",
 		Parameters: map[string]string{
 			"clusterID": odfNamespace,
@@ -243,7 +260,7 @@ func GetTestCephBlockPool() *rookv1.CephBlockPool {
 
 func TestMirrorPeerReconcile(t *testing.T) {
 	ctx := context.TODO()
-	scheme := mgrScheme
+	scheme := testSchemeInstance
 	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mirrorpeer1, &mirrorpeer2, odfClientInfoConfigMap).Build()
 	os.Setenv("POD_NAMESPACE", odfNamespace)
 
@@ -283,12 +300,12 @@ func TestMirrorPeerReconcile(t *testing.T) {
 }
 
 func TestDeleteS3(t *testing.T) {
-	bucketName := utils.GenerateBucketName(mirrorPeer)
+	bucketName := odf.GenerateBucketName(&mirrorPeer)
 	ctx := context.TODO()
-	scheme := mgrScheme
+	scheme := testSchemeInstance
 	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mirrorpeer1).Build()
 	for _, pr := range mirrorpeer1.Spec.Items {
-		obc := &v1alpha1.ObjectBucketClaim{
+		obc := &obv1alpha1.ObjectBucketClaim{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      bucketName,
 				Namespace: pr.StorageClusterRef.Namespace,

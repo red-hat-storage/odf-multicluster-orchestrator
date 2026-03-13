@@ -1,4 +1,4 @@
-package controllers
+package ramen
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	templatev1 "github.com/openshift/api/template/v1"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/odf"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -49,7 +50,7 @@ type DRPolicyReconciler struct {
 	Scheme    *runtime.Scheme
 	Logger    *slog.Logger
 
-	testEnvFile      string
+	TestEnvFile      string
 	CurrentNamespace string
 }
 
@@ -83,7 +84,7 @@ func (r *DRPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(cmToDRPolicyMapFunc),
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(object client.Object) bool {
 				cm, ok := object.(*corev1.ConfigMap)
-				if !ok || cm.Name != utils.ClientInfoConfigMapName || cm.Namespace != r.CurrentNamespace {
+				if !ok || cm.Name != odf.ClientInfoConfigMapName || cm.Namespace != r.CurrentNamespace {
 					return false
 				}
 				return true
@@ -108,7 +109,7 @@ func (r *DRPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	// Find MirrorPeer for clusterset for the storagecluster namespaces
-	mirrorPeer, err := utils.GetMirrorPeerForClusterSet(ctx, r.HubClient, drpolicy.Spec.DRClusters)
+	mirrorPeer, err := odf.GetMirrorPeerForClusterSet(ctx, r.HubClient, drpolicy.Spec.DRClusters)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.Info("MirrorPeer not found. Requeuing", "DRClusters", drpolicy.Spec.DRClusters)
@@ -216,7 +217,7 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRCAndVGRC(ctx context
 		vgrcList = append(vgrcList, vgrcFlatten)
 	}
 
-	cm, err := utils.FetchClientInfoConfigMap(ctx, r.HubClient, r.CurrentNamespace)
+	cm, err := odf.GetClientInfoConfigMap(ctx, r.HubClient, r.CurrentNamespace)
 	if err != nil {
 		return err
 	}
@@ -224,7 +225,7 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRCAndVGRC(ctx context
 	manifestWorkName := fmt.Sprintf("vrc-%v", utils.FnvHash(dp.Name))
 	vgrcManifestWorkName := fmt.Sprintf("vgrc-%v", utils.FnvHash(dp.Name))
 	for _, pr := range mp.Spec.Items {
-		cInfo, err := utils.GetClientInfoFromConfigMap(cm.Data, utils.GetKey(pr.ClusterName, pr.StorageClusterRef.Name))
+		cInfo, err := odf.GetClientInfoFromConfigMap(cm.Data, utils.GetKey(pr.ClusterName, pr.StorageClusterRef.Name))
 		if err != nil {
 			return err
 		}
@@ -307,7 +308,7 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRCAndVGRC(ctx context
 		}
 
 		// Validate that the token-exchange-agent pods on managedclusters are updated properly before creating VGRC templates
-		if err = ValidateTokenExchangeAgentUpdated(ctx, r.HubClient, logger, cInfo.ProviderInfo.ProviderManagedClusterName, r.testEnvFile); err != nil {
+		if err = odf.ValidateTokenExchangeAgentUpdated(ctx, r.HubClient, logger, cInfo.ProviderInfo.ProviderManagedClusterName, r.TestEnvFile); err != nil {
 			return err
 		}
 

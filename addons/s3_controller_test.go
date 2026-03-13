@@ -68,7 +68,7 @@ var (
 			Name:      s3SecretName,
 			Namespace: s3SecretNamespace,
 			Annotations: map[string]string{
-				OBCTypeAnnotationKey:              "cluster",
+				utils.OBCTypeAnnotationKey:        "cluster",
 				utils.MirrorPeerNameAnnotationKey: "test-mirrorpeer",
 			},
 		},
@@ -93,7 +93,7 @@ var (
 			},
 		},
 	}
-	mirrorPeer = &multiclusterv1alpha1.MirrorPeer{
+	s3MirrorPeer = &multiclusterv1alpha1.MirrorPeer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-mirrorpeer",
 		},
@@ -132,7 +132,7 @@ func TestS3SecretReconciler_Reconcile(t *testing.T) {
 		t.Error("failed to add ocsv1 scheme")
 	}
 
-	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mirrorPeer).Build()
+	fakeHubClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(s3MirrorPeer).Build()
 	fakeSpokeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(managedS3Secret, managedConfigMap, route, objectBucketClaim, storageClusterOnManagedCluster).Build()
 
 	logger := utils.GetLogger(utils.GetZapLogger(true))
@@ -150,16 +150,14 @@ func TestS3SecretReconciler_Reconcile(t *testing.T) {
 		},
 	}
 
-	// Test cases
 	tests := []struct {
 		name    string
 		req     ctrl.Request
 		wantErr bool
 	}{
 		{
-			name: "Reconcile OBC successfully",
-			req:  req,
-
+			name:    "Reconcile OBC successfully",
+			req:     req,
 			wantErr: false,
 		},
 	}

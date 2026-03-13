@@ -1,4 +1,7 @@
-package controllers
+//go:build unit
+// +build unit
+
+package ramen
 
 import (
 	"context"
