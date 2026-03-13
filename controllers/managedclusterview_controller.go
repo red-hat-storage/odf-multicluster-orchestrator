@@ -113,7 +113,7 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, operatorNames
 		var odfInfo ocsv1alpha1.OdfInfoData
 		err := yaml.Unmarshal([]byte(yamlContent), &odfInfo)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal ODF info data for key %s: %w", key, err)
+			return fmt.Errorf("failed to unmarshal DF info data for key %s: %w", key, err)
 		}
 
 		providerPublicEndpoint := odfInfo.StorageCluster.Annotations[ocsv1alpha1.ApiServerExportedAddressAnnotationName]

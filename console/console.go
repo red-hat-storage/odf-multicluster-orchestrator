@@ -1,5 +1,5 @@
 /*
-Copyright 2021 Red Hat OpenShift Data Foundation.
+Copyright 2021 Red Hat Data Foundation.
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -35,7 +35,7 @@ var (
 	proxyServiceName      = "rbac-query-proxy"
 	proxyServiceNamespace = "open-cluster-management-observability"
 	proxyServicePort      = 8443
-	pluginDisplayName     = "ODF Multicluster Plugin"
+	pluginDisplayName     = "DF Multicluster Plugin"
 
 	servicePortName         = "console-port"
 	serviceSecretAnnotation = "service.alpha.openshift.io/serving-cert-secret-name"
