@@ -29,7 +29,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/odf"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -474,7 +474,7 @@ var _ = Describe("MirrorPeerReconciler Reconcile", func() {
 		It("should be able to read ManagedCluster object", func() {
 			By("providing valid ManagedCluster names", func() {
 
-				r := controllers.MirrorPeerReconciler{
+				r := odf.MirrorPeerReconciler{
 					Client:           k8sClient,
 					Scheme:           k8sClient.Scheme(),
 					Logger:           utils.GetLogger(utils.GetZapLogger(true)),

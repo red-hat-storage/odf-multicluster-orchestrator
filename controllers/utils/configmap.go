@@ -11,14 +11,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	ODFInfoConfigMapName                = "odf-info"
-	ConfigMapResourceType               = "ConfigMap"
-	ClientInfoConfigMapName             = "odf-client-info"
-	StorageClientMappingConfigMapName   = "storage-client-mapping"
-	StorageClusterPeerNameAnnotationKey = "ocs.openshift.io/storage-cluster-peer"
-)
-
 // FetchConfigMap fetches a ConfigMap with a given name from a given namespace
 func FetchConfigMap(ctx context.Context, c client.Client, name, namespace string) (*corev1.ConfigMap, error) {
 	configMap := &corev1.ConfigMap{}
@@ -33,19 +25,6 @@ func FetchConfigMap(ctx context.Context, c client.Client, name, namespace string
 		return nil, fmt.Errorf("failed to fetch ConfigMap %s in namespace %s: %v", name, namespace, err)
 	}
 	return configMap, nil
-}
-
-// GetODFInfoConfigMap fetches the odf-info ConfigMap from the given namespace. This will only work on the managed cluster
-func GetODFInfoConfigMap(ctx context.Context, c client.Client, namespace string) (*corev1.ConfigMap, error) {
-	return FetchConfigMap(ctx, c, ODFInfoConfigMapName, namespace)
-}
-
-func FetchClientInfoConfigMap(ctx context.Context, c client.Client, currentNamespace string) (*corev1.ConfigMap, error) {
-	return FetchConfigMap(ctx, c, ClientInfoConfigMapName, currentNamespace)
-}
-
-func GetStorageClientMapping(ctx context.Context, c client.Client, currentNamespace string) (*corev1.ConfigMap, error) {
-	return FetchConfigMap(ctx, c, StorageClientMappingConfigMapName, currentNamespace)
 }
 
 func DecodeConfigMap(objJson []byte) (*corev1.ConfigMap, error) {
