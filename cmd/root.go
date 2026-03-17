@@ -13,7 +13,7 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "odfx",
-	Short: "Multicluster Orchestrator for ODF",
+	Short: "Multicluster Orchestrator for DF",
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := cmd.Usage(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
