@@ -1,4 +1,4 @@
-package controllers
+package acm
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v4/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/odf"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -27,9 +28,13 @@ import (
 type ManagedClusterViewReconciler struct {
 	Client           client.Client
 	Logger           *slog.Logger
-	testEnvFile      string
+	TestEnvFile      string
 	CurrentNamespace string
 }
+
+const (
+	configMapResourceType = "ConfigMap"
+)
 
 func (r *ManagedClusterViewReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Logger.Info("Setting up ManagedClusterViewReconciler with manager")
@@ -56,7 +61,7 @@ func (r *ManagedClusterViewReconciler) SetupWithManager(mgr ctrl.Manager) error 
 }
 
 func hasODFInfoInScope(mc *viewv1beta1.ManagedClusterView) bool {
-	if mc.Spec.Scope.Name == utils.ODFInfoConfigMapName && mc.Spec.Scope.Resource == utils.ConfigMapResourceType {
+	if mc.Spec.Scope.Name == odf.ODFInfoConfigMapName && mc.Spec.Scope.Resource == configMapResourceType {
 		return true
 	}
 	return false
@@ -120,14 +125,14 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, operatorNames
 		if providerPublicEndpoint == "" {
 			logger.Info("StorageProviderPublicEndpoint is not available.")
 		}
-		cephblockPoolsInfo := []utils.InfoCephBlockPool{}
+		cephblockPoolsInfo := []odf.InfoCephBlockPool{}
 		for _, cephblockpool := range odfInfo.StorageCluster.InfoCephBlockPools {
-			cephblockPoolsInfo = append(cephblockPoolsInfo, utils.InfoCephBlockPool{
+			cephblockPoolsInfo = append(cephblockPoolsInfo, odf.InfoCephBlockPool{
 				Name:          cephblockpool.Name,
 				MirrorEnabled: cephblockpool.MirrorEnabled,
 			})
 		}
-		providerInfo := utils.ProviderInfo{
+		providerInfo := odf.ProviderInfo{
 			Version:                       odfInfo.Version,
 			DeploymentType:                odfInfo.DeploymentType,
 			CephClusterFSID:               odfInfo.StorageCluster.CephClusterFSID,
@@ -142,7 +147,7 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, operatorNames
 		}
 
 		if len(odfInfo.Clients) == 0 {
-			clientInfo := utils.ClientInfo{
+			clientInfo := odf.ClientInfo{
 				ClusterID:                "",
 				Name:                     "",
 				ProviderInfo:             providerInfo,
@@ -161,7 +166,7 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, operatorNames
 				if err != nil {
 					return err
 				}
-				clientInfo := utils.ClientInfo{
+				clientInfo := odf.ClientInfo{
 					ClusterID:                client.ClusterID,
 					Name:                     client.Name,
 					ProviderInfo:             providerInfo,
@@ -180,11 +185,11 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, operatorNames
 
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      utils.ClientInfoConfigMapName,
+			Name:      odf.ClientInfoConfigMapName,
 			Namespace: operatorNamespace,
 		},
 	}
-	err = c.Get(ctx, types.NamespacedName{Name: utils.ClientInfoConfigMapName, Namespace: operatorNamespace}, configMap)
+	err = c.Get(ctx, types.NamespacedName{Name: odf.ClientInfoConfigMapName, Namespace: operatorNamespace}, configMap)
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("failed to get ConfigMap. %w", err)
 	}
@@ -230,7 +235,7 @@ func createOrUpdateConfigMap(ctx context.Context, c client.Client, operatorNames
 		return fmt.Errorf("failed to create or update ConfigMap. %w", err)
 	}
 
-	logger.Info(fmt.Sprintf("ConfigMap %s in namespace %s has been %s", utils.ClientInfoConfigMapName, operatorNamespace, op))
+	logger.Info(fmt.Sprintf("ConfigMap %s in namespace %s has been %s", odf.ClientInfoConfigMapName, operatorNamespace, op))
 
 	return nil
 }

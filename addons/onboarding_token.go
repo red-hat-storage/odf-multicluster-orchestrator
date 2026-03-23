@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
@@ -92,7 +91,7 @@ func createStorageClusterPeerTokenSecret(ctx context.Context, cl client.Client, 
 			Name:      uniqueSecretName,
 			Namespace: spokeClusterName,
 			Labels: map[string]string{
-				utils.CreatedByLabelKey:  setup.TokenExchangeName,
+				utils.CreatedByLabelKey:  utils.TokenExchangeName,
 				utils.SecretLabelTypeKey: string(utils.ProviderLabel),
 				utils.HubRecoveryLabel:   "",
 			},

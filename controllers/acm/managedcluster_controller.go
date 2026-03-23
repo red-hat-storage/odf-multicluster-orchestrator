@@ -1,4 +1,4 @@
-package controllers
+package acm
 
 import (
 	"context"
@@ -21,7 +21,7 @@ import (
 type ManagedClusterReconciler struct {
 	Client           client.Client
 	Logger           *slog.Logger
-	testEnvFile      string
+	TestEnvFile      string
 	CurrentNamespace string
 }
 
