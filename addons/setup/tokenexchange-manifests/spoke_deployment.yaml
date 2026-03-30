@@ -56,3 +56,8 @@ spec:
               fieldPath: metadata.namespace
         - name: HUB_OPERATOR_NAMESPACE
           value: {{ .HubOperatorNamespace }}
+        tolerations:
+          - effect: NoSchedule
+            key: node.ocs.openshift.io/storage
+            operator: Equal
+            value: "true"
