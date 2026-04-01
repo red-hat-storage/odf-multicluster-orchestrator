@@ -1,7 +1,7 @@
 //go:build unit
 // +build unit
 
-package controllers
+package acm
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/odf"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	"github.com/stretchr/testify/assert"
@@ -106,7 +107,7 @@ storageCluster:
 		assert.NoError(t, err)
 
 		cm := &corev1.ConfigMap{}
-		err = c.Get(ctx, types.NamespacedName{Name: utils.ClientInfoConfigMapName, Namespace: utils.GetEnv("POD_NAMESPACE")}, cm)
+		err = c.Get(ctx, types.NamespacedName{Name: odf.ClientInfoConfigMapName, Namespace: utils.GetEnv("POD_NAMESPACE")}, cm)
 		assert.NoError(t, err)
 		assert.NotNil(t, cm)
 
@@ -159,7 +160,7 @@ storageCluster:
 		assert.NoError(t, err)
 
 		cm := &corev1.ConfigMap{}
-		err = c.Get(ctx, types.NamespacedName{Name: utils.ClientInfoConfigMapName, Namespace: utils.GetEnv("POD_NAMESPACE")}, cm)
+		err = c.Get(ctx, types.NamespacedName{Name: odf.ClientInfoConfigMapName, Namespace: utils.GetEnv("POD_NAMESPACE")}, cm)
 		assert.NoError(t, err)
 		assert.NotNil(t, cm)
 

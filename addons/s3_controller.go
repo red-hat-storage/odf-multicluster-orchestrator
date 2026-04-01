@@ -7,6 +7,7 @@ import (
 	"time"
 
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/odf"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -27,16 +28,16 @@ type S3SecretReconciler struct {
 	SpokeClusterName string
 	Logger           *slog.Logger
 
-	testEnvFile      string
+	TestEnvFile      string
 	CurrentNamespace string
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *S3SecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	isOurOBC := func(obj interface{}) bool {
-		s3MatchString := utils.GetEnv("S3_EXCHANGE_SOURCE_SECRET_STRING_MATCH", r.testEnvFile)
+		s3MatchString := utils.GetEnv("S3_EXCHANGE_SOURCE_SECRET_STRING_MATCH", r.TestEnvFile)
 		if s3MatchString == "" {
-			s3MatchString = utils.BucketGenerateName
+			s3MatchString = odf.BucketGenerateName
 		}
 		if obc, ok := obj.(*obv1alpha1.ObjectBucketClaim); ok {
 			return strings.Contains(obc.Name, s3MatchString)
@@ -84,7 +85,7 @@ func (r *S3SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	if obc.Status.Phase != obv1alpha1.ObjectBucketClaimStatusPhaseBound {
-		logger.Info("OBC is not in 'Bound' status, requeuing", "st,atus", obc.Status.Phase)
+		logger.Info("OBC is not in 'Bound' status, requeuing", "status", obc.Status.Phase)
 		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 	}
 
@@ -93,13 +94,13 @@ func (r *S3SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	if _, ok := obc.Annotations[OBCTypeAnnotationKey]; !ok {
+	if _, ok := obc.Annotations[utils.OBCTypeAnnotationKey]; !ok {
 		logger.Error("Failed to find OBC type on OBC")
 		return ctrl.Result{}, err
 	}
 
 	mirrorPeerName := obc.Annotations[utils.MirrorPeerNameAnnotationKey]
-	obcType := obc.Annotations[OBCTypeAnnotationKey]
+	obcType := obc.Annotations[utils.OBCTypeAnnotationKey]
 
 	err = r.syncBlueSecretForS3(ctx, obc.Name, obc.Namespace, mirrorPeerName, obcType)
 	if err != nil {

@@ -196,7 +196,7 @@ func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.
 		SpokeClusterName:     options.SpokeClusterName,
 		OdfOperatorNamespace: options.OdfOperatorNamespace,
 		Logger:               logger.With("controller", "MirrorPeerReconciler"),
-		testEnvFile:          options.testEnvFile,
+		TestEnvFile:          options.testEnvFile,
 		CurrentNamespace:     currentNamespace,
 		HubOperatorNamespace: hubOperatorNamespace,
 	}).SetupWithManager(mgr); err != nil {
@@ -244,7 +244,7 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slo
 		logger.Info("Starting lease updater")
 		leaseUpdater := lease.NewLeaseUpdater(
 			spokeKubeClient,
-			setup.TokenExchangeName,
+			utils.TokenExchangeName,
 			currentNamespace,
 		)
 		leaseUpdater.Start(ctx)
@@ -273,7 +273,7 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slo
 		SpokeClient:      mgr.GetClient(),
 		SpokeClusterName: options.SpokeClusterName,
 		Logger:           logger.With("controller", "S3SecretReconciler"),
-		testEnvFile:      options.testEnvFile,
+		TestEnvFile:      options.testEnvFile,
 		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create S3Secret controller", "controller", "S3Secret", "error", err)
@@ -294,7 +294,7 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slo
 
 	addonDeletionLock := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      AddonDeletionlockName,
+			Name:      utils.AddonDeletionlockName,
 			Namespace: currentNamespace,
 		},
 	}

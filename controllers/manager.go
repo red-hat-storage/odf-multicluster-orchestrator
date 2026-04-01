@@ -12,6 +12,9 @@ import (
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/console"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/acm"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/odf"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/ramen"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
 	"github.com/spf13/cobra"
@@ -145,11 +148,11 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		os.Exit(1)
 	}
 
-	if err = (&MirrorPeerReconciler{
+	if err = (&odf.MirrorPeerReconciler{
 		Client:           mgr.GetClient(),
 		Scheme:           mgr.GetScheme(),
-		Logger:           logger.With("controller", "MirrorPeerReconciler"),
-		testEnvFile:      o.testEnvFile,
+		Logger:           logger.With("controller", "odf.MirrorPeerReconciler"),
+		TestEnvFile:      o.testEnvFile,
 		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create MirrorPeer controller", "error", err)
@@ -157,39 +160,39 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 	}
 	// +kubebuilder:scaffold:builder
 
-	if err = (&ManagedClusterReconciler{
+	if err = (&acm.ManagedClusterReconciler{
 		Client:           mgr.GetClient(),
-		Logger:           logger.With("controller", "ManagedClusterReconciler"),
-		testEnvFile:      o.testEnvFile,
+		Logger:           logger.With("controller", "acm.ManagedClusterReconciler"),
+		TestEnvFile:      o.testEnvFile,
 		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create ManagedCluster controller", "error", err)
 		os.Exit(1)
 	}
 
-	if err = (&ManagedClusterViewReconciler{
+	if err = (&acm.ManagedClusterViewReconciler{
 		Client:           mgr.GetClient(),
-		Logger:           logger.With("controller", "ManagedClusterViewReconciler"),
-		testEnvFile:      o.testEnvFile,
+		Logger:           logger.With("controller", "acm.ManagedClusterViewReconciler"),
+		TestEnvFile:      o.testEnvFile,
 		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create ManagedClusterView controller", "error", err)
 		os.Exit(1)
 	}
 
-	if err = (&DRPlacementControlReconciler{
+	if err = (&ramen.DRPlacementControlReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Logger: logger.With("controller", "DRPlacementControlReconciler"),
+		Logger: logger.With("controller", "ramen.DRPlacementControlReconciler"),
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create DRPlacementControl controller", "error", err)
 		os.Exit(1)
 	}
 
-	if err = (&ProtectedApplicationViewReconciler{
+	if err = (&ramen.ProtectedApplicationViewReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Logger: logger.With("controller", "ProtectedApplicationViewReconciler"),
+		Logger: logger.With("controller", "ramen.ProtectedApplicationViewReconciler"),
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create ProtectedApplicationView controller", "error", err)
 		os.Exit(1)
@@ -221,7 +224,7 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 	tokenExchangeAddon := setup.Addons{
 		Client:     mgr.GetClient(),
 		AgentImage: utils.GetEnv("TOKEN_EXCHANGE_IMAGE", o.testEnvFile),
-		AddonName:  setup.TokenExchangeName,
+		AddonName:  utils.TokenExchangeName,
 	}
 
 	logger.Info("Creating addon manager")
@@ -234,11 +237,11 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		logger.Error("Failed to add token exchange addon to addon manager", "error", err)
 	}
 
-	if err = (&DRPolicyReconciler{
+	if err = (&ramen.DRPolicyReconciler{
 		HubClient:        mgr.GetClient(),
 		Scheme:           mgr.GetScheme(),
-		Logger:           logger.With("controller", "DRPolicyReconciler"),
-		testEnvFile:      o.testEnvFile,
+		Logger:           logger.With("controller", "ramen.DRPolicyReconciler"),
+		TestEnvFile:      o.testEnvFile,
 		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create DRPolicy controller", "error", err)
