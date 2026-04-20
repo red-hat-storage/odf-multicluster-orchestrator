@@ -2,6 +2,7 @@ package addons
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -62,7 +63,7 @@ func (r *S3SecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("s3secret_controller").
 		Watches(&obv1alpha1.ObjectBucketClaim{}, &handler.EnqueueRequestForObject{},
-			builder.WithPredicates(predicate.GenerationChangedPredicate{}, s3BucketPredicate)).
+			builder.WithPredicates(s3BucketPredicate)).
 		Complete(r)
 }
 
@@ -88,12 +89,12 @@ func (r *S3SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	if _, ok := obc.Annotations[utils.MirrorPeerNameAnnotationKey]; !ok {
 		logger.Error("Failed to find MirrorPeer name on OBC")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to find mirrorpeer annotation on OBC")
 	}
 
 	if _, ok := obc.Annotations[OBCTypeAnnotationKey]; !ok {
 		logger.Error("Failed to find OBC type on OBC")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to find obc-type annotation on OBC")
 	}
 
 	mirrorPeerName := obc.Annotations[utils.MirrorPeerNameAnnotationKey]
