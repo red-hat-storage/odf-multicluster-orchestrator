@@ -1,8 +1,8 @@
 module github.com/red-hat-storage/odf-multicluster-orchestrator
 
-go 1.23.7
+go 1.24.0
 
-toolchain go1.23.10
+toolchain go1.24.13
 
 require (
 	github.com/csi-addons/kubernetes-csi-addons v0.8.0
