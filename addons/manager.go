@@ -259,7 +259,7 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slo
 				var crd extv1.CustomResourceDefinition
 				readErr := mgr.GetAPIReader().Get(ctx, types.NamespacedName{Name: "maintenancemodes.ramendr.openshift.io"}, &crd)
 				if readErr != nil {
-					logger.Error("Unable to get MaintenanceMode CRD", readErr)
+					logger.Error("Unable to get MaintenanceMode CRD", "Error", readErr.Error())
 					// Do not initialize err as we want to retry.
 					// err!=nil or done==true will end polling.
 					done = false

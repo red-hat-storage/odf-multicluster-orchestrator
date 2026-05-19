@@ -88,7 +88,7 @@ func (r *S3SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	err = r.syncBlueSecretForS3(ctx, obc.Name, obc.Namespace)
 	if err != nil {
-		logger.Error("Failed to sync Blue Secret for S3", "OBC", "error", err)
+		logger.Error("Failed to sync Blue Secret for S3", "error", err.Error())
 		return ctrl.Result{}, err
 	}
 
