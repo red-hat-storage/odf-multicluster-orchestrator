@@ -1,6 +1,6 @@
 module github.com/red-hat-storage/odf-multicluster-orchestrator
 
-go 1.21
+go 1.25.0
 
 require (
 	github.com/csi-addons/kubernetes-csi-addons v0.8.0
@@ -96,7 +96,7 @@ require (
 	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63 // indirect
 	golang.org/x/net v0.19.0 // indirect
 	golang.org/x/oauth2 v0.15.0 // indirect
-	golang.org/x/sys v0.20.0 // indirect
+	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/term v0.17.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
@@ -170,5 +170,4 @@ exclude (
 	k8s.io/client-go v11.0.0+incompatible
 	k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible
 	k8s.io/client-go v12.0.0+incompatible
-
 )
