@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 
@@ -103,22 +104,30 @@ func UpdateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret 
 		return err
 	}
 
-	ramenConfig := rmn.RamenConfig{}
-	err = yaml.Unmarshal([]byte(ramenConfigData), &ramenConfig)
-	if err != nil {
+	// Unmarshal into an unstructured map so that fields unknown to our
+	// version of the RamenConfig struct are preserved across the
+	// read-modify-write cycle.
+	rawConfig := map[string]interface{}{}
+	if err := yaml.Unmarshal([]byte(ramenConfigData), &rawConfig); err != nil {
 		logger.Error("Failed to unmarshal DR hub operator config data", "error", err)
 		return err
 	}
 
+	existingProfiles, err := extractS3Profiles(rawConfig)
+	if err != nil {
+		logger.Error("Failed to extract S3 profiles from config", "error", err)
+		return err
+	}
+
 	isUpdated := false
-	for i, currentS3Profile := range ramenConfig.S3StoreProfiles {
+	for i, currentS3Profile := range existingProfiles {
 		if currentS3Profile.S3ProfileName == expectedS3Profile.S3ProfileName {
 			mergeCustomS3ProfileFields(&currentS3Profile, &expectedS3Profile)
 			if areS3ProfileFieldsEqual(expectedS3Profile, currentS3Profile) {
 				logger.Info("No change detected in S3 profile, skipping update", "S3ProfileName", expectedS3Profile.S3ProfileName)
 				return nil
 			}
-			updateS3ProfileFields(&expectedS3Profile, &ramenConfig.S3StoreProfiles[i])
+			updateS3ProfileFields(&expectedS3Profile, &existingProfiles[i])
 			isUpdated = true
 			logger.Info("S3 profile updated", "S3ProfileName", expectedS3Profile.S3ProfileName)
 			break
@@ -126,11 +135,16 @@ func UpdateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret 
 	}
 
 	if !isUpdated {
-		ramenConfig.S3StoreProfiles = append(ramenConfig.S3StoreProfiles, expectedS3Profile)
+		existingProfiles = append(existingProfiles, expectedS3Profile)
 		logger.Info("New S3 profile added", "S3ProfileName", expectedS3Profile.S3ProfileName)
 	}
 
-	ramenConfigDataStr, err := yaml.Marshal(ramenConfig)
+	if err := setS3Profiles(rawConfig, existingProfiles); err != nil {
+		logger.Error("Failed to set S3 profiles in config", "error", err)
+		return err
+	}
+
+	ramenConfigDataStr, err := yaml.Marshal(rawConfig)
 	if err != nil {
 		logger.Error("Failed to marshal Ramen config", "error", err)
 		return err
@@ -146,5 +160,43 @@ func UpdateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret 
 	}
 
 	logger.Info("Ramen Hub Operator config updated successfully", "ConfigMapName", namespacedName)
+	return nil
+}
+
+// extractS3Profiles reads the s3StoreProfiles key from an unstructured config
+// map and returns typed S3StoreProfile values.
+func extractS3Profiles(rawConfig map[string]interface{}) ([]rmn.S3StoreProfile, error) {
+	raw, ok := rawConfig["s3StoreProfiles"]
+	if !ok || raw == nil {
+		return nil, nil
+	}
+
+	jsonBytes, err := json.Marshal(raw)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal s3StoreProfiles to JSON: %w", err)
+	}
+
+	var profiles []rmn.S3StoreProfile
+	if err := json.Unmarshal(jsonBytes, &profiles); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal s3StoreProfiles from JSON: %w", err)
+	}
+
+	return profiles, nil
+}
+
+// setS3Profiles writes the given S3StoreProfile slice back into the
+// unstructured config map under the s3StoreProfiles key.
+func setS3Profiles(rawConfig map[string]interface{}, profiles []rmn.S3StoreProfile) error {
+	jsonBytes, err := json.Marshal(profiles)
+	if err != nil {
+		return fmt.Errorf("failed to marshal s3StoreProfiles to JSON: %w", err)
+	}
+
+	var raw interface{}
+	if err := json.Unmarshal(jsonBytes, &raw); err != nil {
+		return fmt.Errorf("failed to unmarshal s3StoreProfiles from JSON: %w", err)
+	}
+
+	rawConfig["s3StoreProfiles"] = raw
 	return nil
 }
