@@ -310,6 +310,62 @@ func createOrUpdateSecretsFromInternalSecret(ctx context.Context, rc client.Clie
 	return utils.UpdateRamenHubOperatorConfig(ctx, rc, secret, data, mirrorPeer, currentNamespace, logger)
 }
 
+func TestUpdateRamenConfigPreservesUnknownFields(t *testing.T) {
+	scheme := runtime.NewScheme()
+	err := corev1.AddToScheme(scheme)
+	assert.NoError(t, err)
+	err = multiclusterv1alpha1.AddToScheme(scheme)
+	assert.NoError(t, err)
+
+	configYAML := `retainNamespaceSCCAcrossPeers: true
+volumeUnprotectionEnabled: true
+ramenOpsNamespace: ramen-ops
+maxConcurrentReconciles: 10
+`
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(
+		&corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      utils.RamenHubOperatorConfigName,
+				Namespace: ramenNamespace,
+			},
+			Data: map[string]string{
+				"ramen_manager_config.yaml": configYAML,
+			},
+		},
+	).Build()
+
+	fakeLogger := utils.GetLogger(utils.GetZapLogger(true))
+	ctx := context.TODO()
+	os.Setenv("POD_NAMESPACE", ramenNamespace)
+
+	err = createOrUpdateSecretsFromInternalSecret(
+		ctx, fakeClient, scheme, ramenNamespace,
+		fakeS3InternalSecret(t, TestSourceManagedClusterEast),
+		fakeMirrorPeers(true), fakeLogger,
+	)
+	assert.NoError(t, err)
+
+	updatedCM := corev1.ConfigMap{}
+	err = fakeClient.Get(ctx, types.NamespacedName{
+		Name:      utils.RamenHubOperatorConfigName,
+		Namespace: ramenNamespace,
+	}, &updatedCM)
+	assert.NoError(t, err)
+
+	var rawConfig map[string]interface{}
+	err = yaml.Unmarshal([]byte(updatedCM.Data["ramen_manager_config.yaml"]), &rawConfig)
+	assert.NoError(t, err)
+
+	assert.Equal(t, true, rawConfig["retainNamespaceSCCAcrossPeers"],
+		"retainNamespaceSCCAcrossPeers must survive the update")
+	assert.Equal(t, true, rawConfig["volumeUnprotectionEnabled"],
+		"volumeUnprotectionEnabled must survive the update")
+	assert.Equal(t, "ramen-ops", rawConfig["ramenOpsNamespace"],
+		"ramenOpsNamespace must survive the update")
+	assert.NotNil(t, rawConfig["s3StoreProfiles"],
+		"s3StoreProfiles must be present after the update")
+}
+
 func TestCreateOrUpdateSecretsFromInternalSecret(t *testing.T) {
 	cases := []struct {
 		name            string
