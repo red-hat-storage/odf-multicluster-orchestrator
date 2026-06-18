@@ -14,23 +14,22 @@ limitations under the License.
 package console
 
 import (
-	"context"
 	"fmt"
+	"strings"
 
 	consolev1 "github.com/openshift/api/console/v1"
-	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+)
+
+const (
+	MAIN_BASE_PATH          = "/"
+	COMPATIBILITY_BASE_PATH = "/compatibility/"
+	PluginName              = "odf-multicluster-console"
 )
 
 var (
-	odfMulticlusterPluginName = "odf-multicluster-console"
-	pluginBasePath            = "/"
-
 	proxyAlias            = "acm-thanos-querier"
 	proxyServiceName      = "rbac-query-proxy"
 	proxyServiceNamespace = "open-cluster-management-observability"
@@ -42,7 +41,7 @@ var (
 	serviceLabelKey         = "app.kubernetes.io/name"
 )
 
-func getService(serviceName string, port int, deploymentNamespace string) apiv1.Service {
+func GetService(serviceName string, port int, deploymentNamespace string) apiv1.Service {
 	return apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      serviceName,
@@ -51,7 +50,7 @@ func getService(serviceName string, port int, deploymentNamespace string) apiv1.
 				serviceSecretAnnotation: fmt.Sprintf("%s-serving-cert", serviceName),
 			},
 			Labels: map[string]string{
-				serviceLabelKey: odfMulticlusterPluginName,
+				serviceLabelKey: PluginName,
 			},
 		},
 		Spec: apiv1.ServiceSpec{
@@ -64,16 +63,16 @@ func getService(serviceName string, port int, deploymentNamespace string) apiv1.
 				},
 			},
 			Selector: map[string]string{
-				serviceLabelKey: odfMulticlusterPluginName,
+				serviceLabelKey: PluginName,
 			},
 		},
 	}
 }
 
-func getConsolePluginCR(consolePort int, serviceName string, deploymentNamespace string) consolev1.ConsolePlugin {
+func GetConsolePluginCR(consolePort int, serviceName string, deploymentNamespace string) consolev1.ConsolePlugin {
 	return consolev1.ConsolePlugin{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: odfMulticlusterPluginName,
+			Name: PluginName,
 		},
 		Spec: consolev1.ConsolePluginSpec{
 			DisplayName: pluginDisplayName,
@@ -82,7 +81,7 @@ func getConsolePluginCR(consolePort int, serviceName string, deploymentNamespace
 					Name:      serviceName,
 					Namespace: deploymentNamespace,
 					Port:      int32(consolePort),
-					BasePath:  pluginBasePath,
+					BasePath:  MAIN_BASE_PATH,
 				},
 				Type: consolev1.Service,
 			},
@@ -104,28 +103,10 @@ func getConsolePluginCR(consolePort int, serviceName string, deploymentNamespace
 	}
 }
 
-func InitConsole(ctx context.Context, client client.Client, odfPort int, deploymentNamespace string) error {
-	deployment := appsv1.Deployment{}
-	if err := client.Get(context.TODO(), types.NamespacedName{
-		Name:      odfMulticlusterPluginName,
-		Namespace: deploymentNamespace,
-	}, &deployment); err != nil {
-		return err
-	}
-	// Create core ODF multicluster console service
-	odfService := getService(odfMulticlusterPluginName, odfPort, deploymentNamespace)
-	if _, err := controllerutil.CreateOrUpdate(ctx, client, &odfService, func() error {
-		return nil
-	}); err != nil {
-		return err
-	}
-	// Create core ODF multicluster plugin
-	odfConsolePlugin := getConsolePluginCR(odfPort, odfService.ObjectMeta.Name, deploymentNamespace)
-	if _, err := controllerutil.CreateOrUpdate(ctx, client, &odfConsolePlugin, func() error {
-		return nil
-	}); err != nil {
-		return err
+func GetBasePath(clusterVersion string) string {
+	if strings.Contains(clusterVersion, "4.23") || strings.Contains(clusterVersion, "5.0") {
+		return COMPATIBILITY_BASE_PATH
 	}
 
-	return nil
+	return MAIN_BASE_PATH
 }
