@@ -7,11 +7,11 @@ import (
 
 	argov1alpha1 "github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
 	"github.com/go-logr/zapr"
+	configv1 "github.com/openshift/api/config/v1"
 	consolev1 "github.com/openshift/api/console/v1"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/console"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/acm"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/odf"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/ramen"
@@ -31,7 +31,6 @@ import (
 	appsubapis "open-cluster-management.io/multicloud-operators-subscription/pkg/apis"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
@@ -47,6 +46,7 @@ func init() {
 	utilruntime.Must(multiclusterv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(addonapiv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(consolev1.AddToScheme(mgrScheme))
+	utilruntime.Must(configv1.AddToScheme(mgrScheme))
 
 	utilruntime.Must(ramenv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(workv1.AddToScheme(mgrScheme))
@@ -198,15 +198,14 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		os.Exit(1)
 	}
 
-	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-		err = console.InitConsole(ctx, mgr.GetClient(), o.MulticlusterConsolePort, currentNamespace)
-		if err != nil {
-			logger.Error("Failed to initialize multicluster console to manager", "error", err)
-			return err
-		}
-		return nil
-	})); err != nil {
-		logger.Error("Failed to add multicluster console to manager", "error", err)
+	if err = (&ClusterVersionReconciler{
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		Logger:            logger.With("controller", "ClusterVersionReconciler"),
+		ConsolePort:       o.MulticlusterConsolePort,
+		OperatorNamespace: currentNamespace,
+	}).SetupWithManager(mgr); err != nil {
+		logger.Error("Failed to create ClusterVersion controller", "error", err)
 		os.Exit(1)
 	}
 
