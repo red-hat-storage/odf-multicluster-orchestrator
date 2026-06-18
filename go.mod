@@ -1,6 +1,6 @@
 module github.com/red-hat-storage/odf-multicluster-orchestrator
 
-go 1.25.5
+go 1.25.6
 
 require (
 	github.com/argoproj/argo-cd/v3 v3.3.10
