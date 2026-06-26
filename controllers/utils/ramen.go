@@ -9,11 +9,36 @@ import (
 	rmn "github.com/ramendr/ramen/api/v1alpha1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
 )
+
+func CreateOrUpdateRamenS3Secret(ctx context.Context, rc client.Client, scheme *runtime.Scheme, name string, data map[string][]byte, namespace string, mirrorPeer *multiclusterv1alpha1.MirrorPeer) error {
+	secret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+	}
+
+	_, err := controllerutil.CreateOrUpdate(ctx, rc, &secret, func() error {
+		secret.Labels = map[string]string{
+			CreatedByLabelKey: MirrorPeerSecret,
+		}
+		secret.Type = corev1.SecretTypeOpaque
+		secret.Data = map[string][]byte{
+			AwsAccessKeyId:     data[AwsAccessKeyId],
+			AwsSecretAccessKey: data[AwsSecretAccessKey],
+		}
+		return controllerutil.SetControllerReference(mirrorPeer, &secret, scheme)
+	})
+
+	return err
+}
 
 func updateS3ProfileFields(expected *rmn.S3StoreProfile, found *rmn.S3StoreProfile) {
 	found.S3ProfileName = expected.S3ProfileName
