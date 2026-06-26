@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package odf
+package mirrorpeer
 
 import (
 	"context"
@@ -24,6 +24,7 @@ import (
 
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/odf"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -68,7 +69,7 @@ func isManagedCluster(ctx context.Context, client client.Client, clusterName str
 }
 
 func isVersionCompatible(peerRef multiclusterv1alpha1.PeerRef, clientInfoMap map[string]string) error {
-	clientInfo, err := GetClientInfoFromConfigMap(clientInfoMap, utils.GetKey(peerRef.ClusterName, peerRef.StorageClusterRef.Name))
+	clientInfo, err := odf.GetClientInfoFromConfigMap(clientInfoMap, utils.GetKey(peerRef.ClusterName, peerRef.StorageClusterRef.Name))
 	if err != nil {
 		return fmt.Errorf("validation: unable to get client info: error: %v", err)
 	}
@@ -89,10 +90,10 @@ func checkStorageClusterPeerStatus(ctx context.Context, client client.Client, lo
 
 	// Collect client information for each cluster in the MirrorPeer
 	items := mirrorPeer.Spec.Items
-	clientInfos := make([]ClientInfo, 0, len(items))
+	clientInfos := make([]odf.ClientInfo, 0, len(items))
 	for _, item := range items {
 		clientKey := utils.GetKey(item.ClusterName, item.StorageClusterRef.Name)
-		ci, err := GetClientInfoFromConfigMap(clientInfoMap, clientKey)
+		ci, err := odf.GetClientInfoFromConfigMap(clientInfoMap, clientKey)
 		if err != nil {
 			logger.Error("Failed to get client info from ConfigMap", "ClientKey", clientKey)
 			return false, err
@@ -157,10 +158,10 @@ func checkClientPairingConfigMapStatus(ctx context.Context, client client.Client
 
 	// Collect client information for each cluster in the MirrorPeer
 	items := mirrorPeer.Spec.Items
-	clientInfos := make([]ClientInfo, 0, len(items))
+	clientInfos := make([]odf.ClientInfo, 0, len(items))
 	for _, item := range items {
 		clientKey := utils.GetKey(item.ClusterName, item.StorageClusterRef.Name)
-		ci, err := GetClientInfoFromConfigMap(clientInfoMap, clientKey)
+		ci, err := odf.GetClientInfoFromConfigMap(clientInfoMap, clientKey)
 		if err != nil {
 			logger.Error("Failed to get client info from ConfigMap", "ClientKey", clientKey)
 			return false, err
