@@ -263,29 +263,8 @@ func (r *MirrorPeerReconciler) reconcilePhases(ctx context.Context, logger *slog
 		return ctrl.Result{}, err
 	}
 
-	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
-		if err := createStorageClusterPeer(ctx, r.Client, logger, mirrorPeer, clientInfoMap.Data); err != nil {
-			logger.Error("Failed to create StorageClusterPeer", "error", err)
-			mirrorPeer.Status.Message = multiclusterv1alpha1.ConfigurationFailed
-			return ctrl.Result{}, err
-		}
-
-		if err := createManifestWorkForClusterPairingConfigMap(ctx, r.Client, logger, mirrorPeer, clientInfoMap.Data); err != nil {
-			logger.Error("Failed to create ManifestWork for ClusterPairingConfigMap", "error", err)
-			mirrorPeer.Status.Message = multiclusterv1alpha1.ConfigurationFailed
-			return ctrl.Result{}, err
-		}
-
-		providerModePeeringDone, err := isProviderModePeeringDone(ctx, r.Client, r.Logger, mirrorPeer, clientInfoMap.Data)
-		if err != nil {
-			mirrorPeer.Status.Message = multiclusterv1alpha1.PeeringIncomplete
-			return ctrl.Result{}, fmt.Errorf("failed to check if provider mode peering is correctly done %w", err)
-		}
-
-		if !providerModePeeringDone {
-			mirrorPeer.Status.Message = multiclusterv1alpha1.PeeringIncomplete
-			return ctrl.Result{Requeue: true}, nil
-		}
+	if result, err := r.ensureReplicationReady(ctx, logger, mirrorPeer, clientInfoMap.Data); err != nil || result.Requeue {
+		return result, err
 	}
 
 	// update s3 profile when MirrorPeer changes
@@ -352,6 +331,37 @@ func (r *MirrorPeerReconciler) reconcilePhases(ctx context.Context, logger *slog
 
 	mirrorPeer.Status.Phase = multiclusterv1alpha1.Ready
 	mirrorPeer.Status.Message = multiclusterv1alpha1.MirrorPeerReady
+	return ctrl.Result{}, nil
+}
+
+func (r *MirrorPeerReconciler) ensureReplicationReady(ctx context.Context, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) (ctrl.Result, error) {
+	if mirrorPeer.Spec.Type != multiclusterv1alpha1.Async {
+		return ctrl.Result{}, nil
+	}
+
+	if err := createStorageClusterPeer(ctx, r.Client, logger, mirrorPeer, clientInfoMap); err != nil {
+		logger.Error("Failed to create StorageClusterPeer", "error", err)
+		mirrorPeer.Status.Message = multiclusterv1alpha1.ConfigurationFailed
+		return ctrl.Result{}, err
+	}
+
+	if err := createManifestWorkForClusterPairingConfigMap(ctx, r.Client, logger, mirrorPeer, clientInfoMap); err != nil {
+		logger.Error("Failed to create ManifestWork for ClusterPairingConfigMap", "error", err)
+		mirrorPeer.Status.Message = multiclusterv1alpha1.ConfigurationFailed
+		return ctrl.Result{}, err
+	}
+
+	providerModePeeringDone, err := isProviderModePeeringDone(ctx, r.Client, r.Logger, mirrorPeer, clientInfoMap)
+	if err != nil {
+		mirrorPeer.Status.Message = multiclusterv1alpha1.PeeringIncomplete
+		return ctrl.Result{}, fmt.Errorf("failed to check if provider mode peering is correctly done %w", err)
+	}
+
+	if !providerModePeeringDone {
+		mirrorPeer.Status.Message = multiclusterv1alpha1.PeeringIncomplete
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	return ctrl.Result{}, nil
 }
 
