@@ -13,7 +13,7 @@ import (
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/acm"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/odf"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/mirrorpeer"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/ramen"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
@@ -150,10 +150,10 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		os.Exit(1)
 	}
 
-	if err = (&odf.MirrorPeerReconciler{
+	if err = (&mirrorpeer.MirrorPeerReconciler{
 		Client:           mgr.GetClient(),
 		Scheme:           mgr.GetScheme(),
-		Logger:           logger.With("controller", "odf.MirrorPeerReconciler"),
+		Logger:           logger.With("controller", "mirrorpeer.MirrorPeerReconciler"),
 		TestEnvFile:      o.testEnvFile,
 		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
