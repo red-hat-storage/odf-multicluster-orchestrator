@@ -269,7 +269,8 @@ func (r *MirrorPeerReconciler) reconcilePhases(ctx context.Context, logger *slog
 		return result, err
 	}
 
-	// Phase 2: Ensure S3 profiles exist and DRClusters are registered
+	// Phase 2: Resolve S3 profiles (backend operation)
+	// Phase 3: Register S3 profiles with Ramen and create DRClusters
 	if mirrorPeer.Spec.ManageS3 {
 		if result, err := r.ensureS3ProfileAndDRClusters(ctx, logger, mirrorPeer, clientInfoMap.Data, hasStorageClientRef); err != nil || result.Requeue {
 			return result, err
@@ -316,62 +317,76 @@ func (r *MirrorPeerReconciler) ensureReplicationReady(ctx context.Context, logge
 
 func (r *MirrorPeerReconciler) ensureS3ProfileAndDRClusters(ctx context.Context, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string, hasStorageClientRef bool) (ctrl.Result, error) {
 	for _, peerRef := range mirrorPeer.Spec.Items {
-		var s3Secret corev1.Secret
-		var secretName string
-		var namespace string
-
-		if hasStorageClientRef {
-			s3SecretName, s3SecretNamespace, err := GetNamespacedNameForClientS3Secret(peerRef, mirrorPeer, clientInfoMap)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to get namespace for s3 secret %w", err)
-			}
-			secretName = s3SecretName
-			namespace = s3SecretNamespace
-		} else {
-			secretName = utils.GetSecretNameByPeerRef(peerRef, utils.S3ProfilePrefix)
-			namespace = peerRef.ClusterName
-		}
-
-		namespacedName := types.NamespacedName{
-			Name:      secretName,
-			Namespace: namespace,
-		}
-		err := r.Client.Get(ctx, namespacedName, &s3Secret)
+		// Phase 2 — backend operation: resolve S3 credentials into a profile
+		profile, secretName, err := r.resolveS3Profile(ctx, logger, peerRef, mirrorPeer, clientInfoMap, hasStorageClientRef)
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
-				logger.Info("S3 secret is not yet synchronised. retrying till it is available. Requeing request...", "Secret Name", secretName, "Namespace/Cluster", namespace)
+				logger.Info("S3 secret is not yet synchronised, requeueing", "Cluster", peerRef.ClusterName)
 				return ctrl.Result{Requeue: true}, nil
 			}
-			logger.Error("Error in fetching s3 internal secret", "Cluster", peerRef.ClusterName, "error", err)
+			logger.Error("Failed to resolve S3 profile", "Cluster", peerRef.ClusterName, "error", err)
 			mirrorPeer.Status.Message = multiclusterv1alpha1.S3ConfigurationFailed
 			return ctrl.Result{}, err
 		}
 
-		data, err := odf.ValidateAndCreateS3Secret(ctx, r.Client, r.Scheme, r.CurrentNamespace, &s3Secret, mirrorPeer, logger)
-		if err != nil {
-			logger.Error("Error in creating S3 secret", "Cluster", peerRef.ClusterName, "error", err)
-			mirrorPeer.Status.Message = multiclusterv1alpha1.S3ConfigurationFailed
-			return ctrl.Result{}, err
-		}
-
-		if err = utils.UpdateRamenHubOperatorConfig(ctx, r.Client, &s3Secret, data, mirrorPeer, r.CurrentNamespace, logger); err != nil {
+		// Phase 3 — Ramen operations: update hub operator config, create DRCluster
+		if err = utils.UpdateRamenHubOperatorConfig(ctx, r.Client, *profile, secretName, r.CurrentNamespace, logger); err != nil {
 			logger.Error("Error in updating Ramen Hub Operator config", "Cluster", peerRef.ClusterName, "error", err)
 			mirrorPeer.Status.Message = multiclusterv1alpha1.S3ConfigurationFailed
 			return ctrl.Result{}, err
 		}
 
-		err = r.createDRClusters(ctx, peerRef.ClusterName, s3Secret, mirrorPeer)
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				logger.Info("Secret not synchronised yet, retrying to create DRCluster", "MirrorPeer", mirrorPeer.Name)
-				return ctrl.Result{Requeue: true}, nil
-			}
+		if err = r.createDRClusters(ctx, peerRef.ClusterName, profile.S3ProfileName, mirrorPeer); err != nil {
 			logger.Error("Failed to create DRClusters for MirrorPeer", "error", err)
 			mirrorPeer.Status.Message = multiclusterv1alpha1.DRClusterConfigurationFailed
 			return ctrl.Result{}, err
 		}
 	}
 	return ctrl.Result{}, nil
+}
+
+func (r *MirrorPeerReconciler) resolveS3Profile(ctx context.Context, logger *slog.Logger, peerRef multiclusterv1alpha1.PeerRef, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string, hasStorageClientRef bool) (*utils.S3Profile, string, error) {
+	var secretName, namespace string
+
+	if hasStorageClientRef {
+		var err error
+		secretName, namespace, err = GetNamespacedNameForClientS3Secret(peerRef, mirrorPeer, clientInfoMap)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to get namespace for s3 secret: %w", err)
+		}
+	} else {
+		secretName = utils.GetSecretNameByPeerRef(peerRef, utils.S3ProfilePrefix)
+		namespace = peerRef.ClusterName
+	}
+
+	var s3Secret corev1.Secret
+	if err := r.Client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, &s3Secret); err != nil {
+		return nil, "", err
+	}
+
+	if _, ok := s3Secret.Annotations[utils.MirrorPeerNameAnnotationKey]; !ok {
+		return nil, "", fmt.Errorf("failed to find MirrorPeerName annotation on secret %q", s3Secret.Name)
+	}
+	if s3Secret.Annotations[utils.MirrorPeerNameAnnotationKey] != mirrorPeer.Name {
+		return nil, "", fmt.Errorf("secret %q belongs to MirrorPeer %q, not %q", s3Secret.Name, s3Secret.Annotations[utils.MirrorPeerNameAnnotationKey], mirrorPeer.Name)
+	}
+
+	data, err := odf.ValidateAndCreateS3Secret(ctx, r.Client, r.Scheme, r.CurrentNamespace, &s3Secret, mirrorPeer, logger)
+	if err != nil {
+		return nil, "", err
+	}
+
+	profile := &utils.S3Profile{
+		S3ProfileName:  string(data[utils.S3ProfileName]),
+		S3Bucket:       string(data[utils.S3BucketName]),
+		S3Region:       string(data[utils.S3Region]),
+		S3Endpoint:     string(data[utils.S3Endpoint]),
+		AccessKeyID:    string(data[utils.AwsAccessKeyId]),
+		SecretAccessKey: string(data[utils.AwsSecretAccessKey]),
+		RawData:        data,
+	}
+
+	return profile, secretName, nil
 }
 
 func createManifestWorkForClusterPairingConfigMap(ctx context.Context, client client.Client, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) error {
@@ -962,23 +977,13 @@ func GetNamespacedNameForClientS3Secret(pr multiclusterv1alpha1.PeerRef, mp *mul
 	return s3SecretName, s3SecretNamespace, nil
 }
 
-func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, name string, secret corev1.Secret, mirrorpeer *multiclusterv1alpha1.MirrorPeer) error {
-	logger := r.Logger
-
-	logger.Info("Unmarshalling S3 secret", "SecretName", secret.Name)
-	st, err := utils.UnmarshalS3Secret(&secret)
-	if err != nil {
-		logger.Error("Failed to unmarshal S3 secret", "error", err, "SecretName", secret.Name)
-		return err
-	}
-
+func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, clusterName, s3ProfileName string, mirrorpeer *multiclusterv1alpha1.MirrorPeer) error {
 	dc := &ramenv1alpha1.DRCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
+		ObjectMeta: metav1.ObjectMeta{Name: clusterName},
 	}
 
-	logger.Info("Creating and updating DR clusters", "ClusterName", name)
-	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, dc, func() error {
-		dc.Spec.S3ProfileName = st.S3ProfileName
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, dc, func() error {
+		dc.Spec.S3ProfileName = s3ProfileName
 		return controllerutil.SetControllerReference(mirrorpeer, dc, r.Scheme)
 	})
 
