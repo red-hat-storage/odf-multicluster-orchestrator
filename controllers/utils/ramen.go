@@ -27,6 +27,17 @@ type S3Profile struct {
 	RawData        map[string][]byte
 }
 
+func CreateOrUpdateDRCluster(ctx context.Context, c client.Client, scheme *runtime.Scheme, clusterName, s3ProfileName string, owner *multiclusterv1alpha1.MirrorPeer) error {
+	dc := &rmn.DRCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: clusterName},
+	}
+	_, err := controllerutil.CreateOrUpdate(ctx, c, dc, func() error {
+		dc.Spec.S3ProfileName = s3ProfileName
+		return controllerutil.SetControllerReference(owner, dc, scheme)
+	})
+	return err
+}
+
 func CreateOrUpdateRamenS3Secret(ctx context.Context, rc client.Client, scheme *runtime.Scheme, name string, data map[string][]byte, namespace string, mirrorPeer *multiclusterv1alpha1.MirrorPeer) error {
 	secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{

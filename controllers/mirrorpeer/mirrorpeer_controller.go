@@ -336,7 +336,7 @@ func (r *MirrorPeerReconciler) ensureS3ProfileAndDRClusters(ctx context.Context,
 			return ctrl.Result{}, err
 		}
 
-		if err = r.createDRClusters(ctx, peerRef.ClusterName, profile.S3ProfileName, mirrorPeer); err != nil {
+		if err = utils.CreateOrUpdateDRCluster(ctx, r.Client, r.Scheme, peerRef.ClusterName, profile.S3ProfileName, mirrorPeer); err != nil {
 			logger.Error("Failed to create DRClusters for MirrorPeer", "error", err)
 			mirrorPeer.Status.Message = multiclusterv1alpha1.DRClusterConfigurationFailed
 			return ctrl.Result{}, err
@@ -975,19 +975,6 @@ func GetNamespacedNameForClientS3Secret(pr multiclusterv1alpha1.PeerRef, mp *mul
 	s3SecretNamespace := providerManagedClusterName
 
 	return s3SecretName, s3SecretNamespace, nil
-}
-
-func (r *MirrorPeerReconciler) createDRClusters(ctx context.Context, clusterName, s3ProfileName string, mirrorpeer *multiclusterv1alpha1.MirrorPeer) error {
-	dc := &ramenv1alpha1.DRCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: clusterName},
-	}
-
-	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, dc, func() error {
-		dc.Spec.S3ProfileName = s3ProfileName
-		return controllerutil.SetControllerReference(mirrorpeer, dc, r.Scheme)
-	})
-
-	return err
 }
 
 func isProviderModePeeringDone(ctx context.Context, client client.Client, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) (bool, error) {
