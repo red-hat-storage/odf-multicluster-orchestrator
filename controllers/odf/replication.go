@@ -21,7 +21,7 @@ const (
 	StorageClusterPeerNameAnnotationKey = "ocs.openshift.io/storage-cluster-peer"
 )
 
-func CreateStorageClusterPeer(ctx context.Context, c client.Client, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) error {
+func createStorageClusterPeer(ctx context.Context, c client.Client, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) error {
 	logger = logger.With("MirrorPeer", mirrorPeer.Name)
 	items := mirrorPeer.Spec.Items
 	clientInfo := make([]ClientInfo, 0)
@@ -124,7 +124,7 @@ func CreateStorageClusterPeer(ctx context.Context, c client.Client, logger *slog
 	return nil
 }
 
-func CreateManifestWorkForClusterPairingConfigMap(ctx context.Context, c client.Client, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) error {
+func createManifestWorkForClusterPairingConfigMap(ctx context.Context, c client.Client, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) error {
 	logger.Info("Starting to create ManifestWork for cluster pairing ConfigMap")
 
 	logger.Info("Fetched client info ConfigMap successfully")
@@ -261,7 +261,7 @@ func GetNamespacedNameForClientS3Secret(pr multiclusterv1alpha1.PeerRef, mp *mul
 	return s3SecretName, s3SecretNamespace, nil
 }
 
-func IsProviderModePeeringDone(ctx context.Context, c client.Client, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) (bool, error) {
+func isProviderModePeeringDone(ctx context.Context, c client.Client, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) (bool, error) {
 	isStorageClusterPeerManifestWorkCreated, err := checkStorageClusterPeerStatus(ctx, c, logger, mirrorPeer, clientInfoMap)
 	if err != nil {
 		logger.Error("failed to check if StorageClusterPeer have been created")

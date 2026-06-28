@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	_ "github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/odf"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -98,6 +99,11 @@ func getFakeMirrorPeerReconciler(mirrorpeer *multiclusterv1alpha1.MirrorPeer) Mi
 			Name: "cluster1",
 		},
 		Spec: clusterv1.ManagedClusterSpec{},
+		Status: clusterv1.ManagedClusterStatus{
+			ClusterClaims: []clusterv1.ManagedClusterClaim{
+				{Name: utils.OdfInfoClusterClaimNamespacedName, Value: "openshift-storage/odf-info"},
+			},
+		},
 	}
 
 	managedcluster2 := clusterv1.ManagedCluster{
@@ -105,6 +111,11 @@ func getFakeMirrorPeerReconciler(mirrorpeer *multiclusterv1alpha1.MirrorPeer) Mi
 			Name: "cluster2",
 		},
 		Spec: clusterv1.ManagedClusterSpec{},
+		Status: clusterv1.ManagedClusterStatus{
+			ClusterClaims: []clusterv1.ManagedClusterClaim{
+				{Name: utils.OdfInfoClusterClaimNamespacedName, Value: "openshift-storage/odf-info"},
+			},
+		},
 	}
 
 	var odfClientInfoConfigMap = &corev1.ConfigMap{
@@ -258,7 +269,12 @@ func TestDeleteResources(t *testing.T) {
 		t.Error("Failed to delete Internal Secrets", err)
 	}
 
-	err = r.deleteSecrets(ctx, mirrorpeer)
+	be, err := resolveBackend(ctx, r.Client, mirrorpeer)
+	if err != nil {
+		t.Fatal("Failed to resolve backend", err)
+	}
+
+	err = be.DeleteStorageBackendResources(ctx, r.Client, mirrorpeer, r.Logger)
 	if err != nil {
 		t.Error("Failed to delete resources", err)
 	}
