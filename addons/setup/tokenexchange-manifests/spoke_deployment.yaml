@@ -12,6 +12,8 @@ spec:
       app: token-exchange-agent
   template:
     metadata:
+      annotations:
+        openshift.io/required-scc: restricted-v2
       labels:
         app: token-exchange-agent
     spec:
