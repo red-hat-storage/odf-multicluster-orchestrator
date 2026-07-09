@@ -7,6 +7,9 @@ spec:
     matchLabels:
       app.kubernetes.io/name: odf-multicluster-console
   template:
+    metadata:
+      annotations:
+        openshift.io/required-scc: restricted-v2
     spec:
       automountServiceAccountToken: false
       containers:
