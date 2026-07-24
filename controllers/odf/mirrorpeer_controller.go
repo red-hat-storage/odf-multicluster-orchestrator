@@ -263,88 +263,15 @@ func (r *MirrorPeerReconciler) reconcilePhases(ctx context.Context, logger *slog
 		return ctrl.Result{}, err
 	}
 
-	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
-		if err := createStorageClusterPeer(ctx, r.Client, logger, mirrorPeer, clientInfoMap.Data); err != nil {
-			logger.Error("Failed to create StorageClusterPeer", "error", err)
-			mirrorPeer.Status.Message = multiclusterv1alpha1.ConfigurationFailed
-			return ctrl.Result{}, err
-		}
-
-		if err := createManifestWorkForClusterPairingConfigMap(ctx, r.Client, logger, mirrorPeer, clientInfoMap.Data); err != nil {
-			logger.Error("Failed to create ManifestWork for ClusterPairingConfigMap", "error", err)
-			mirrorPeer.Status.Message = multiclusterv1alpha1.ConfigurationFailed
-			return ctrl.Result{}, err
-		}
-
-		providerModePeeringDone, err := isProviderModePeeringDone(ctx, r.Client, r.Logger, mirrorPeer, clientInfoMap.Data)
-		if err != nil {
-			mirrorPeer.Status.Message = multiclusterv1alpha1.PeeringIncomplete
-			return ctrl.Result{}, fmt.Errorf("failed to check if provider mode peering is correctly done %w", err)
-		}
-
-		if !providerModePeeringDone {
-			mirrorPeer.Status.Message = multiclusterv1alpha1.PeeringIncomplete
-			return ctrl.Result{Requeue: true}, nil
-		}
+	// Phase 1: Ensure replication infrastructure is ready
+	if result, err := r.ensureReplicationReady(ctx, logger, mirrorPeer, clientInfoMap.Data); err != nil || result.Requeue {
+		return result, err
 	}
 
-	// update s3 profile when MirrorPeer changes
+	// Phase 2: Ensure S3 profiles exist and DRClusters are registered
 	if mirrorPeer.Spec.ManageS3 {
-		for _, peerRef := range mirrorPeer.Spec.Items {
-			var s3Secret corev1.Secret
-			var secretName string
-			var namespace string
-
-			if hasStorageClientRef {
-				s3SecretName, s3SecretNamespace, err := GetNamespacedNameForClientS3Secret(peerRef, mirrorPeer, clientInfoMap.Data)
-				if err != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to get namespace for s3 secret %w", err)
-				}
-				secretName = s3SecretName
-				namespace = s3SecretNamespace
-			} else {
-				secretName = utils.GetSecretNameByPeerRef(peerRef, utils.S3ProfilePrefix)
-				namespace = peerRef.ClusterName
-			}
-
-			namespacedName := types.NamespacedName{
-				Name:      secretName,
-				Namespace: namespace,
-			}
-			err = r.Client.Get(ctx, namespacedName, &s3Secret)
-			if err != nil {
-				if k8serrors.IsNotFound(err) {
-					logger.Info("S3 secret is not yet synchronised. retrying till it is available. Requeing request...", "Secret Name", secretName, "Namespace/Cluster", namespace)
-					return ctrl.Result{Requeue: true}, nil
-				}
-				logger.Error("Error in fetching s3 internal secret", "Cluster", peerRef.ClusterName, "error", err)
-				mirrorPeer.Status.Message = multiclusterv1alpha1.S3ConfigurationFailed
-				return ctrl.Result{}, err
-			}
-
-			data, err := ValidateAndCreateS3Secret(ctx, r.Client, r.Scheme, r.CurrentNamespace, &s3Secret, mirrorPeer, logger)
-			if err != nil {
-				logger.Error("Error in creating S3 secret", "Cluster", peerRef.ClusterName, "error", err)
-				mirrorPeer.Status.Message = multiclusterv1alpha1.S3ConfigurationFailed
-				return ctrl.Result{}, err
-			}
-
-			if err = utils.UpdateRamenHubOperatorConfig(ctx, r.Client, &s3Secret, data, mirrorPeer, r.CurrentNamespace, logger); err != nil {
-				logger.Error("Error in updating Ramen Hub Operator config", "Cluster", peerRef.ClusterName, "error", err)
-				mirrorPeer.Status.Message = multiclusterv1alpha1.S3ConfigurationFailed
-				return ctrl.Result{}, err
-			}
-
-			err = r.createDRClusters(ctx, peerRef.ClusterName, s3Secret, mirrorPeer)
-			if err != nil {
-				if k8serrors.IsNotFound(err) {
-					logger.Info("Secret not synchronised yet, retrying to create DRCluster", "MirrorPeer", mirrorPeer.Name)
-					return ctrl.Result{Requeue: true}, nil
-				}
-				logger.Error("Failed to create DRClusters for MirrorPeer", "error", err)
-				mirrorPeer.Status.Message = multiclusterv1alpha1.DRClusterConfigurationFailed
-				return ctrl.Result{}, err
-			}
+		if result, err := r.ensureS3ProfileAndDRClusters(ctx, logger, mirrorPeer, clientInfoMap.Data, hasStorageClientRef); err != nil || result.Requeue {
+			return result, err
 		}
 	}
 
@@ -352,6 +279,97 @@ func (r *MirrorPeerReconciler) reconcilePhases(ctx context.Context, logger *slog
 
 	mirrorPeer.Status.Phase = multiclusterv1alpha1.Ready
 	mirrorPeer.Status.Message = multiclusterv1alpha1.MirrorPeerReady
+	return ctrl.Result{}, nil
+}
+
+func (r *MirrorPeerReconciler) ensureReplicationReady(ctx context.Context, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) (ctrl.Result, error) {
+	if mirrorPeer.Spec.Type != multiclusterv1alpha1.Async {
+		return ctrl.Result{}, nil
+	}
+
+	if err := createStorageClusterPeer(ctx, r.Client, logger, mirrorPeer, clientInfoMap); err != nil {
+		logger.Error("Failed to create StorageClusterPeer", "error", err)
+		mirrorPeer.Status.Message = multiclusterv1alpha1.ConfigurationFailed
+		return ctrl.Result{}, err
+	}
+
+	if err := createManifestWorkForClusterPairingConfigMap(ctx, r.Client, logger, mirrorPeer, clientInfoMap); err != nil {
+		logger.Error("Failed to create ManifestWork for ClusterPairingConfigMap", "error", err)
+		mirrorPeer.Status.Message = multiclusterv1alpha1.ConfigurationFailed
+		return ctrl.Result{}, err
+	}
+
+	providerModePeeringDone, err := isProviderModePeeringDone(ctx, r.Client, r.Logger, mirrorPeer, clientInfoMap)
+	if err != nil {
+		mirrorPeer.Status.Message = multiclusterv1alpha1.PeeringIncomplete
+		return ctrl.Result{}, fmt.Errorf("failed to check if provider mode peering is correctly done %w", err)
+	}
+
+	if !providerModePeeringDone {
+		mirrorPeer.Status.Message = multiclusterv1alpha1.PeeringIncomplete
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *MirrorPeerReconciler) ensureS3ProfileAndDRClusters(ctx context.Context, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string, hasStorageClientRef bool) (ctrl.Result, error) {
+	for _, peerRef := range mirrorPeer.Spec.Items {
+		var s3Secret corev1.Secret
+		var secretName string
+		var namespace string
+
+		if hasStorageClientRef {
+			s3SecretName, s3SecretNamespace, err := GetNamespacedNameForClientS3Secret(peerRef, mirrorPeer, clientInfoMap)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to get namespace for s3 secret %w", err)
+			}
+			secretName = s3SecretName
+			namespace = s3SecretNamespace
+		} else {
+			secretName = utils.GetSecretNameByPeerRef(peerRef, utils.S3ProfilePrefix)
+			namespace = peerRef.ClusterName
+		}
+
+		namespacedName := types.NamespacedName{
+			Name:      secretName,
+			Namespace: namespace,
+		}
+		err := r.Client.Get(ctx, namespacedName, &s3Secret)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				logger.Info("S3 secret is not yet synchronised. retrying till it is available. Requeing request...", "Secret Name", secretName, "Namespace/Cluster", namespace)
+				return ctrl.Result{Requeue: true}, nil
+			}
+			logger.Error("Error in fetching s3 internal secret", "Cluster", peerRef.ClusterName, "error", err)
+			mirrorPeer.Status.Message = multiclusterv1alpha1.S3ConfigurationFailed
+			return ctrl.Result{}, err
+		}
+
+		data, err := ValidateAndCreateS3Secret(ctx, r.Client, r.Scheme, r.CurrentNamespace, &s3Secret, mirrorPeer, logger)
+		if err != nil {
+			logger.Error("Error in creating S3 secret", "Cluster", peerRef.ClusterName, "error", err)
+			mirrorPeer.Status.Message = multiclusterv1alpha1.S3ConfigurationFailed
+			return ctrl.Result{}, err
+		}
+
+		if err = utils.UpdateRamenHubOperatorConfig(ctx, r.Client, &s3Secret, data, mirrorPeer, r.CurrentNamespace, logger); err != nil {
+			logger.Error("Error in updating Ramen Hub Operator config", "Cluster", peerRef.ClusterName, "error", err)
+			mirrorPeer.Status.Message = multiclusterv1alpha1.S3ConfigurationFailed
+			return ctrl.Result{}, err
+		}
+
+		err = r.createDRClusters(ctx, peerRef.ClusterName, s3Secret, mirrorPeer)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				logger.Info("Secret not synchronised yet, retrying to create DRCluster", "MirrorPeer", mirrorPeer.Name)
+				return ctrl.Result{Requeue: true}, nil
+			}
+			logger.Error("Failed to create DRClusters for MirrorPeer", "error", err)
+			mirrorPeer.Status.Message = multiclusterv1alpha1.DRClusterConfigurationFailed
+			return ctrl.Result{}, err
+		}
+	}
 	return ctrl.Result{}, nil
 }
 
