@@ -80,29 +80,6 @@ func GetObjectBucketClaim(ctx context.Context, c client.Client, bucketName, buck
 	return noobaaOBC, nil
 }
 
-func createS3Secret(ctx context.Context, rc client.Client, scheme *runtime.Scheme, name string, data map[string][]byte, namespace string, mirrorPeer *multiclusterv1alpha1.MirrorPeer) error {
-	secret := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-	}
-
-	_, err := controllerutil.CreateOrUpdate(ctx, rc, &secret, func() error {
-		secret.Labels = map[string]string{
-			utils.CreatedByLabelKey: utils.MirrorPeerSecret,
-		}
-		secret.Type = corev1.SecretTypeOpaque
-		secret.Data = map[string][]byte{
-			utils.AwsAccessKeyId:     data[utils.AwsAccessKeyId],
-			utils.AwsSecretAccessKey: data[utils.AwsSecretAccessKey],
-		}
-		return controllerutil.SetControllerReference(mirrorPeer, &secret, scheme)
-	})
-
-	return err
-}
-
 // ValidateAndCreateS3Secret validates the internal secret and creates the S3 secret.
 // It returns the unmarshalled secret data for downstream consumers (e.g. ramen config update).
 func ValidateAndCreateS3Secret(ctx context.Context, rc client.Client, scheme *runtime.Scheme, currentNamespace string, secret *corev1.Secret, mirrorPeer *multiclusterv1alpha1.MirrorPeer, logger *slog.Logger) (map[string][]byte, error) {
@@ -129,7 +106,7 @@ func ValidateAndCreateS3Secret(ctx context.Context, rc client.Client, scheme *ru
 			return nil, err
 		}
 
-		if err := createS3Secret(ctx, rc, scheme, secret.Name, data, currentNamespace, mirrorPeer); err != nil {
+		if err := utils.CreateOrUpdateRamenS3Secret(ctx, rc, scheme, secret.Name, data, currentNamespace, mirrorPeer); err != nil {
 			logger.Error("Failed to create or update S3 secret", "error", err, "SecretName", secret.Name, "Namespace", currentNamespace)
 			return nil, err
 		}

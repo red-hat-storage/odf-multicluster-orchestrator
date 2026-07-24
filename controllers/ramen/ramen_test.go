@@ -300,14 +300,29 @@ func expectedRamenSecretData() map[string][]byte {
 	}
 }
 
-// createOrUpdateSecretsFromInternalSecret is a test helper that calls the split functions:
-// odf.ValidateAndCreateS3Secret (steps 1-3) + utils.UpdateRamenHubOperatorConfig (step 4).
+// createOrUpdateSecretsFromInternalSecret is a test helper that mirrors the
+// controller flow: validate+create S3 secret -> build S3Profile -> update Ramen config.
 func createOrUpdateSecretsFromInternalSecret(ctx context.Context, rc client.Client, scheme *runtime.Scheme, currentNamespace string, secret *corev1.Secret, mirrorPeer *multiclusterv1alpha1.MirrorPeer, logger *slog.Logger) error {
+	if !mirrorPeer.Spec.ManageS3 {
+		return nil
+	}
+
 	data, err := odf.ValidateAndCreateS3Secret(ctx, rc, scheme, currentNamespace, secret, mirrorPeer, logger)
 	if err != nil {
 		return err
 	}
-	return utils.UpdateRamenHubOperatorConfig(ctx, rc, secret, data, mirrorPeer, currentNamespace, logger)
+
+	profile := utils.S3Profile{
+		S3ProfileName:  string(data[utils.S3ProfileName]),
+		S3Bucket:       string(data[utils.S3BucketName]),
+		S3Region:       string(data[utils.S3Region]),
+		S3Endpoint:     string(data[utils.S3Endpoint]),
+		AccessKeyID:    string(data[utils.AwsAccessKeyId]),
+		SecretAccessKey: string(data[utils.AwsSecretAccessKey]),
+		RawData:        data,
+	}
+
+	return utils.UpdateRamenHubOperatorConfig(ctx, rc, profile, secret.Name, currentNamespace, logger)
 }
 
 func TestUpdateRamenConfigPreservesUnknownFields(t *testing.T) {
