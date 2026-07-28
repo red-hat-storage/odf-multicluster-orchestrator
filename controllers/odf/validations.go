@@ -40,21 +40,21 @@ import (
 
 func undefinedMirrorPeerSpec(spec multiclusterv1alpha1.MirrorPeerSpec) error {
 	if reflect.DeepEqual(spec, multiclusterv1alpha1.MirrorPeerSpec{}) {
-		return fmt.Errorf("validation: MirrorPeer.Spec must not be empty")
+		return fmt.Errorf("MirrorPeer.Spec must not be empty")
 	}
 	return nil
 }
 
 func uniqueSpecItems(spec multiclusterv1alpha1.MirrorPeerSpec) error {
 	if reflect.DeepEqual(spec.Items[0], spec.Items[1]) {
-		return fmt.Errorf("validation: MirrorPeer.Spec.Items fields must be unique within a MirrorPeer object")
+		return fmt.Errorf("MirrorPeer.Spec.Items fields must be unique within a MirrorPeer object")
 	}
 	return nil
 }
 
 func emptySpecItems(peerRef multiclusterv1alpha1.PeerRef) error {
 	if peerRef.ClusterName == "" || peerRef.StorageClusterRef.Name == "" {
-		return fmt.Errorf("validation: MirrorPeer.Spec.Items fields must not be empty or undefined")
+		return fmt.Errorf("MirrorPeer.Spec.Items fields must not be empty or undefined")
 	}
 	return nil
 }
@@ -64,9 +64,9 @@ func isManagedCluster(ctx context.Context, client client.Client, clusterName str
 	err := client.Get(ctx, types.NamespacedName{Name: clusterName}, &mcluster)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			return fmt.Errorf("validation: ManagedCluster %q not found : %q is not a managed cluster", clusterName, clusterName)
+			return fmt.Errorf("ManagedCluster %q not found : %q is not a managed cluster", clusterName, clusterName)
 		}
-		return fmt.Errorf("validation: unable to get ManagedCluster %q: error: %v", clusterName, err)
+		return fmt.Errorf("unable to get ManagedCluster %q: error: %v", clusterName, err)
 	}
 	return nil
 }
@@ -74,14 +74,14 @@ func isManagedCluster(ctx context.Context, client client.Client, clusterName str
 func isVersionCompatible(peerRef multiclusterv1alpha1.PeerRef, clientInfoMap map[string]string) error {
 	clientInfo, err := GetClientInfoFromConfigMap(clientInfoMap, utils.GetKey(peerRef.ClusterName, peerRef.StorageClusterRef.Name))
 	if err != nil {
-		return fmt.Errorf("validation: unable to get client info: error: %v", err)
+		return fmt.Errorf("unable to get client info: error: %v", err)
 	}
 	eq, err := utils.CompareSemverMajorMinorVersions(clientInfo.ProviderInfo.Version, version.Version, utils.Eq)
 	if err != nil {
-		return fmt.Errorf("validation: unable to parse versions: error: %v", err)
+		return fmt.Errorf("unable to parse versions: error: %v", err)
 	}
 	if !eq {
-		return fmt.Errorf("validation: StorageCluster version %q on ManagedCluster %q is incompatible with Multicluster Orchestrator version %q", clientInfo.ProviderInfo.Version, peerRef.ClusterName, version.Version)
+		return fmt.Errorf("StorageCluster version %q on ManagedCluster %q is incompatible with Multicluster Orchestrator version %q", clientInfo.ProviderInfo.Version, peerRef.ClusterName, version.Version)
 	}
 	return nil
 }
@@ -137,8 +137,11 @@ func checkStorageClusterPeerStatus(ctx context.Context, client client.Client, lo
 		logger.Info("StorageClusterPeer ManifestWork has reached Applied status", "ManifestWorkName", manifestWorkName)
 
 		mwResourceStatusManifests := manifestWork.Status.ResourceStatus.Manifests
-		if len(mwResourceStatusManifests) > 0 {
-			if *mwResourceStatusManifests[0].StatusFeedbacks.Values[0].Value.String != string(ocsv1.StorageClusterPeerStatePeered) {
+		if len(mwResourceStatusManifests) > 0 && len(mwResourceStatusManifests[0].StatusFeedbacks.Values) > 0 {
+			if *mwResourceStatusManifests[0].StatusFeedbacks.Values[0].Value.String == string(ocsv1.StorageClusterPeerStateFailed) {
+				logger.Error("StorageClusterPeer is in Failed status", "ManifestWorkName", manifestWorkName)
+				return false, fmt.Errorf("StorageClusterPeer %s is in Failed status", manifestWorkName)
+			} else if *mwResourceStatusManifests[0].StatusFeedbacks.Values[0].Value.String != string(ocsv1.StorageClusterPeerStatePeered) {
 				logger.Info("StorageClusterPeer has not reached Peered status", "ManifestWorkName", manifestWorkName)
 				return false, nil
 			}
