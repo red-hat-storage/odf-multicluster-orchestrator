@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -79,6 +80,30 @@ func (r *DRPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return reqs
 	}
 
+	mirrorPeerToDRPolicyMapFunc := func(ctx context.Context, object client.Object) []ctrl.Request {
+		mp, ok := object.(*multiclusterv1alpha1.MirrorPeer)
+		if !ok {
+			return nil
+		}
+		clusterNames := make(map[string]bool, len(mp.Spec.Items))
+		for _, item := range mp.Spec.Items {
+			clusterNames[item.ClusterName] = true
+		}
+		var drpolicyList ramenv1alpha1.DRPolicyList
+		if err := r.HubClient.List(ctx, &drpolicyList); err != nil {
+			r.Logger.Error("Unable to fetch DRPolicies while mapping MirrorPeer", "error", err)
+			return nil
+		}
+		var reqs []ctrl.Request
+		for _, dp := range drpolicyList.Items {
+			if len(dp.Spec.DRClusters) == 2 && clusterNames[dp.Spec.DRClusters[0]] && clusterNames[dp.Spec.DRClusters[1]] {
+				reqs = append(reqs, reconcile.Request{NamespacedName: types.NamespacedName{Name: dp.Name}})
+			}
+		}
+		r.Logger.Info("DRPolicy reconcile requests generated based on MirrorPeer change.", "MirrorPeer", mp.Name, "RequestCount", len(reqs))
+		return reqs
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ramenv1alpha1.DRPolicy{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(cmToDRPolicyMapFunc),
@@ -89,6 +114,29 @@ func (r *DRPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}
 				return true
 			}))).
+		Watches(&multiclusterv1alpha1.MirrorPeer{}, handler.EnqueueRequestsFromMapFunc(mirrorPeerToDRPolicyMapFunc),
+			builder.WithPredicates(predicate.Funcs{
+				CreateFunc: func(e event.CreateEvent) bool {
+					return true
+				},
+				DeleteFunc: func(e event.DeleteEvent) bool {
+					return false
+				},
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					oldMP, ok := e.ObjectOld.(*multiclusterv1alpha1.MirrorPeer)
+					if !ok {
+						return false
+					}
+					newMP, ok := e.ObjectNew.(*multiclusterv1alpha1.MirrorPeer)
+					if !ok {
+						return false
+					}
+					return oldMP.Status.Phase != newMP.Status.Phase
+				},
+				GenericFunc: func(e event.GenericEvent) bool {
+					return false
+				},
+			})).
 		Complete(r)
 }
 
@@ -112,8 +160,8 @@ func (r *DRPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	mirrorPeer, err := odf.GetMirrorPeerForClusterSet(ctx, r.HubClient, drpolicy.Spec.DRClusters)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			logger.Info("MirrorPeer not found. Requeuing", "DRClusters", drpolicy.Spec.DRClusters)
-			return ctrl.Result{RequeueAfter: time.Second * 10}, nil
+			logger.Info("MirrorPeer not found, waiting for MirrorPeer to be created", "DRClusters", drpolicy.Spec.DRClusters)
+			return ctrl.Result{}, nil
 		}
 		logger.Error("Error occurred while trying to fetch MirrorPeer for given DRPolicy", "error", err)
 		return ctrl.Result{}, err
@@ -124,8 +172,8 @@ func (r *DRPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	if mirrorPeer.Status.Phase != multiclusterv1alpha1.Ready {
-		logger.Info("MirrorPeer setup is not yet complete, requeuing after 5 seconds")
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		logger.Info("MirrorPeer setup is not yet complete, waiting for MirrorPeer to be ready")
+		return ctrl.Result{}, nil
 	}
 
 	if err = r.createOrUpdateManifestWorkForVRCAndVGRC(ctx, mirrorPeer, &drpolicy); err != nil {
