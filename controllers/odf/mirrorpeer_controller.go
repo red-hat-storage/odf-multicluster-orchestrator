@@ -366,6 +366,13 @@ func (r *MirrorPeerReconciler) deleteMirrorPeer(ctx context.Context, logger *slo
 		return reconcile.Result{RequeueAfter: time.Second}, err
 	}
 
+	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
+		if err := removeClientIDFromClusterPairingConfigMap(ctx, r.Client, logger, mirrorPeer, clientInfoMap); err != nil {
+			logger.Error("Failed to remove clientID from cluster pairing ConfigMap", "error", err)
+			return reconcile.Result{}, err
+		}
+	}
+
 	if err := deleteManagedClusterAddon(ctx, r.Client, r.Scheme, mirrorPeer, clientInfoMap); err != nil {
 		logger.Error("Failed to delete ManagedClusterAddon", "error", err)
 		return reconcile.Result{}, err
@@ -485,6 +492,58 @@ func updateProviderConfigMap(logger *slog.Logger, ctx context.Context, client cl
 	}
 
 	logger.Info("Successfully updated ManifestWork for provider", "ProviderName", providerName)
+	return nil
+}
+
+func removeClientIDFromClusterPairingConfigMap(ctx context.Context, c client.Client, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clientInfoMap map[string]string) error {
+	for _, item := range mirrorPeer.Spec.Items {
+		ci, err := GetClientInfoFromConfigMap(clientInfoMap, utils.GetKey(item.ClusterName, item.StorageClusterRef.Name))
+		if err != nil {
+			return err
+		}
+
+		providerName := ci.ProviderInfo.ProviderManagedClusterName
+		manifestWorkName := "storage-client-mapping"
+
+		manifestWork, err := utils.GetManifestWork(ctx, c, manifestWorkName, providerName)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				logger.Info("ManifestWork not found, skipping clientID removal", "Provider", providerName)
+				continue
+			}
+			return fmt.Errorf("failed to get ManifestWork for provider %s: %w", providerName, err)
+		}
+
+		if len(manifestWork.Spec.Workload.Manifests) == 0 {
+			continue
+		}
+
+		configMap, err := utils.DecodeConfigMap(manifestWork.Spec.Workload.Manifests[0].RawExtension.Raw)
+		if err != nil {
+			return fmt.Errorf("failed to decode ConfigMap from ManifestWork for provider %s: %w", providerName, err)
+		}
+
+		delete(configMap.Data, ci.ClientID)
+		logger.Info("Removed clientID from cluster pairing ConfigMap", "ClientID", ci.ClientID, "Provider", providerName)
+
+		updatedObjJson, err := json.Marshal(configMap)
+		if err != nil {
+			return fmt.Errorf("failed to marshal updated ConfigMap: %w", err)
+		}
+
+		ownerRef := metav1.OwnerReference{
+			APIVersion: mirrorPeer.APIVersion,
+			Kind:       mirrorPeer.Kind,
+			Name:       mirrorPeer.Name,
+			UID:        mirrorPeer.UID,
+		}
+
+		_, err = utils.CreateOrUpdateManifestWork(ctx, c, manifestWorkName, providerName, updatedObjJson, []workv1.ManifestConfigOption{}, ownerRef)
+		if err != nil {
+			return fmt.Errorf("failed to update ManifestWork for provider %s: %w", providerName, err)
+		}
+	}
+
 	return nil
 }
 
