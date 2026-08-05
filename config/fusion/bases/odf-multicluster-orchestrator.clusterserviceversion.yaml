@@ -5,6 +5,7 @@ metadata:
     alm-examples: '[]'
     capabilities: Basic Install
     console.openshift.io/plugins: '["odf-multicluster-console"]'
+    features.operators.openshift.io/tls-profiles: "true"
     operators.openshift.io/infrastructure-features: '["disconnected"]'
   name: odf-multicluster-orchestrator.v0.0.0
   namespace: placeholder

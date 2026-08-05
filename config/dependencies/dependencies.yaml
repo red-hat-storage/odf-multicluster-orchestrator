@@ -3,3 +3,7 @@ dependencies:
   value:
     packageName: ${RAMEN_HUB_PACKAGE_NAME}
     version: ${RAMEN_VERSION}
+- type: olm.package
+  value:
+    packageName: ${OCS_TLS_PROFILES_PACKAGE_NAME}
+    version: ${OCS_TLS_PROFILES_VERSION}
