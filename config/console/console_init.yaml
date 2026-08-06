@@ -16,8 +16,6 @@ spec:
             - /bin/sh
             - -c
             - |
-              CONF=/opt/app-root/etc/nginx.d/nginx.conf
-
               (
                 echo "Waiting for Nginx master process to start."
                 until nginx -s reload > /dev/null 2>&1; do
@@ -38,10 +36,10 @@ spec:
                 done
               ) &
 
-              if [ -L /etc/nginx/nginx.conf ]; then
+              if [ -x /usr/libexec/s2i/run ]; then
                 exec /usr/libexec/s2i/run
               else
-                exec nginx -c $CONF -g "daemon off;"
+                exec nginx -g "daemon off;"
               fi
           resources:
             limits:
