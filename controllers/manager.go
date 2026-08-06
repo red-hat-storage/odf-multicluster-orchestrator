@@ -10,6 +10,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	consolev1 "github.com/openshift/api/console/v1"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
+	ocstlsv1 "github.com/red-hat-storage/ocs-tls-profiles/api/v1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/acm"
@@ -48,6 +49,7 @@ func init() {
 	utilruntime.Must(addonapiv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(consolev1.AddToScheme(mgrScheme))
 	utilruntime.Must(configv1.AddToScheme(mgrScheme))
+	utilruntime.Must(ocstlsv1.AddToScheme(mgrScheme))
 
 	utilruntime.Must(ramenv1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(workv1.AddToScheme(mgrScheme))

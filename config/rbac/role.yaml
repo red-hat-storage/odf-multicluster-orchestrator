@@ -6,18 +6,21 @@ metadata:
 rules:
 - apiGroups:
   - ""
-  resources:
-  - configmaps
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - ""
   resourceNames:
   - odf-client-info
   resources:
   - configmaps
+  verbs:
+  - create
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - services
   verbs:
   - create
   - get
@@ -46,16 +49,6 @@ rules:
   - create
   - delete
   - deletecollection
-  - get
-  - list
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - services
-  verbs:
-  - create
   - get
   - list
   - update
@@ -219,6 +212,14 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - ocs.openshift.io
+  resources:
+  - tlsprofiles
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - ramendr.openshift.io
   resources:

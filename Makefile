@@ -94,7 +94,7 @@ undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/confi
 
 .PHONY: bundle
 bundle: manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
-	export RAMEN_HUB_PACKAGE_NAME=$(RAMEN_HUB_PACKAGE_NAME) RAMEN_VERSION=$(RAMEN_VERSION) && cat config/dependencies/dependencies.yaml | envsubst > bundle/metadata/dependencies.yaml
+	export RAMEN_HUB_PACKAGE_NAME=$(RAMEN_HUB_PACKAGE_NAME) RAMEN_VERSION=$(RAMEN_VERSION) OCS_TLS_PROFILES_PACKAGE_NAME=$(OCS_TLS_PROFILES_PACKAGE_NAME) OCS_TLS_PROFILES_VERSION=$(OCS_TLS_PROFILES_VERSION) && cat config/dependencies/dependencies.yaml | envsubst > bundle/metadata/dependencies.yaml
 	$(OSDK) generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	cd config/console && $(KUSTOMIZE) edit set image odf-multicluster-console=$(MULTICLUSTER_CONSOLE_IMG)

@@ -16,6 +16,8 @@ IMAGE_NAME ?= odf-multicluster-orchestrator
 BUNDLE_IMAGE_NAME ?= $(IMAGE_NAME)-bundle
 CATALOG_IMAGE_NAME ?= $(IMAGE_NAME)-catalog
 RAMEN_HUB_PACKAGE_NAME ?= ramen-hub-operator
+OCS_TLS_PROFILES_PACKAGE_NAME ?= ocs-tls-profiles
+OCS_TLS_PROFILES_VERSION ?= 4.23.0
 MULTICLUSTER_CONSOLE_IMG_NAME ?= odf-multicluster-console
 MULTICLUSTER_CONSOLE_IMG_TAG ?= latest
 

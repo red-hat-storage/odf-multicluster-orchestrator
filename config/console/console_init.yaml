@@ -12,6 +12,37 @@ spec:
       containers:
         - name: odf-multicluster-console
           image: odf-multicluster-console:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              CONF=/opt/app-root/etc/nginx.d/nginx.conf
+
+              (
+                echo "Waiting for Nginx master process to start."
+                until nginx -s reload > /dev/null 2>&1; do
+                  sleep 1
+                done
+
+                LAST_HASH=$(md5sum /opt/app-root/etc/nginx.d/*.conf 2>/dev/null | sort | md5sum)
+                echo "Nginx is up. Monitoring config changes."
+
+                while true; do
+                  CURRENT_HASH=$(md5sum /opt/app-root/etc/nginx.d/*.conf 2>/dev/null | sort | md5sum)
+                  if [ "$CURRENT_HASH" != "$LAST_HASH" ]; then
+                    if nginx -t && nginx -s reload; then
+                      LAST_HASH="$CURRENT_HASH"
+                    fi
+                  fi
+                  sleep 45
+                done
+              ) &
+
+              if [ -L /etc/nginx/nginx.conf ]; then
+                exec /usr/libexec/s2i/run
+              else
+                exec nginx -c $CONF -g "daemon off;"
+              fi
           resources:
             limits:
               cpu: "100m"
@@ -23,7 +54,21 @@ spec:
             - name: odf-multicluster-console-serving-cert
               mountPath: /var/serving-cert
               readOnly: true
+            - name: odf-multicluster-console-nginx-conf
+              mountPath: /opt/app-root/etc/nginx.d
+              readOnly: true
+            - name: odf-multicluster-console-nginx-log
+              mountPath: /var/log/nginx
+            - name: odf-multicluster-console-nginx-tmp
+              mountPath: /var/lib/nginx/tmp
       volumes:
         - name: odf-multicluster-console-serving-cert
           secret:
             secretName: odf-multicluster-console-serving-cert
+        - name: odf-multicluster-console-nginx-conf
+          configMap:
+            name: odf-multicluster-console-nginx-conf
+        - name: odf-multicluster-console-nginx-log
+          emptyDir: {}
+        - name: odf-multicluster-console-nginx-tmp
+          emptyDir: {}

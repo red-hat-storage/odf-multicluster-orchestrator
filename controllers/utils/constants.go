@@ -30,6 +30,10 @@ const (
 	OBCTypeAnnotationKey          = "multicluster.odf.openshift.io/obc-type"
 	OBCNameAnnotationKey          = "multicluster.odf.openshift.io/obc-name"
 	AddonDeletionlockName         = "token-exchange-addon-lock"
+
+	TLSProfileName   = "ocs-tls-profile"
+	TLSProfileDomain = "odf-multicluster.openshift.io"
+	TLSProfileServer = "console"
 )
 
 type OBCTypeValue string
