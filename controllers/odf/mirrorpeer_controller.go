@@ -234,6 +234,50 @@ func (r *MirrorPeerReconciler) reconcilePhases(ctx context.Context, logger *slog
 		return ctrl.Result{}, err
 	}
 
+	// Set rotation keyType on mirrorpeer for "async" DR type only
+	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async && mirrorPeer.Annotations[utils.KeyTypeAnnotation] != utils.KeyTypeAES256k {
+		// Get clients info from odf-client-info cm
+		mpItems := mirrorPeer.Spec.Items
+		ci1, err := GetClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(mpItems[0].ClusterName, mpItems[0].StorageClusterRef.Name))
+		if err != nil {
+			logger.Error("Failed to get client info from ConfigMap for the first cluster")
+			mirrorPeer.Status.Message = multiclusterv1alpha1.ConfigurationFailed
+			utils.SetConfiguredFalseCondition(&mirrorPeer.Status.Conditions, mirrorPeer.Generation, err.Error(), multiclusterv1alpha1.ReasonKeyTypeConfigurationFailed)
+			return ctrl.Result{}, err
+		}
+
+		ci2, err := GetClientInfoFromConfigMap(clientInfoMap.Data, utils.GetKey(mpItems[1].ClusterName, mpItems[1].StorageClusterRef.Name))
+		if err != nil {
+			logger.Error("Failed to get client info from ConfigMap for the second cluster")
+			mirrorPeer.Status.Message = multiclusterv1alpha1.ConfigurationFailed
+			utils.SetConfiguredFalseCondition(&mirrorPeer.Status.Conditions, mirrorPeer.Generation, err.Error(), multiclusterv1alpha1.ReasonKeyTypeConfigurationFailed)
+			return ctrl.Result{}, err
+		}
+
+		logger.Info("Fetched client info for the clusters", "ClientInfo1", ci1, "ClientInfo2", ci2)
+
+		keyTypeAnnSpoke1 := fmt.Sprintf("%s.%s", ci1.ProviderInfo.ProviderManagedClusterName, utils.SpokeKeyTypeAnnotation)
+		keyTypeAnnSpoke2 := fmt.Sprintf("%s.%s", ci2.ProviderInfo.ProviderManagedClusterName, utils.SpokeKeyTypeAnnotation)
+		keyTypeAnnSpoke1Val := mirrorPeer.Annotations[keyTypeAnnSpoke1]
+		keyTypeAnnSpoke2Val := mirrorPeer.Annotations[keyTypeAnnSpoke2]
+
+		// Set keyType annotation on mirrorpeer based on the spoke annotations
+		hubAnnVal := utils.KeyTypeAES
+		if keyTypeAnnSpoke1Val == utils.KeyTypeAES256k && keyTypeAnnSpoke2Val == utils.KeyTypeAES256k {
+			hubAnnVal = utils.KeyTypeAES256k
+		}
+
+		if utils.AddAnnotation(mirrorPeer, utils.KeyTypeAnnotation, hubAnnVal) {
+			logger.Info("Adding/Updating keyType annotation in mirrorpeer", "KeyType", hubAnnVal)
+			if err = r.Client.Update(ctx, mirrorPeer); err != nil {
+				logger.Error("Failed to update mirrorpeer with keyType annotation", "error", err)
+				mirrorPeer.Status.Message = multiclusterv1alpha1.ConfigurationFailed
+				utils.SetConfiguredFalseCondition(&mirrorPeer.Status.Conditions, mirrorPeer.Generation, err.Error(), multiclusterv1alpha1.ReasonKeyTypeConfigurationFailed)
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
 	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
 		if err := createStorageClusterPeer(ctx, r.Client, logger, mirrorPeer, clientInfoMap.Data); err != nil {
 			logger.Error("Failed to create StorageClusterPeer", "error", err)
