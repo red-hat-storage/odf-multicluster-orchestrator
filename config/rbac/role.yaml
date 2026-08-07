@@ -213,6 +213,14 @@ rules:
   - patch
   - update
 - apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs:
+  - create
+  - get
+  - update
+- apiGroups:
   - ocs.openshift.io
   resources:
   - tlsprofiles

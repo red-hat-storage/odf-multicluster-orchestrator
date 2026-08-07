@@ -21,6 +21,7 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 	ocstlsv1 "github.com/red-hat-storage/ocs-tls-profiles/api/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -48,6 +49,7 @@ type ClusterVersionReconciler struct {
 // +kubebuilder:rbac:groups=config.openshift.io,resources=clusterversions,verbs=get;list;watch
 // +kubebuilder:rbac:groups=console.openshift.io,resources=consoleplugins,verbs=get;create;update
 // +kubebuilder:rbac:groups="apps",resources=deployments,verbs=get;list;watch
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;create;update
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update
 // +kubebuilder:rbac:groups=ocs.openshift.io,resources=tlsprofiles,verbs=get;list;watch
@@ -114,12 +116,30 @@ func (r *ClusterVersionReconciler) ensureConsolePlugin(ctx context.Context, clus
 	}
 
 	odfConsolePlugin := console.GetConsolePluginCR(r.ConsolePort, console.PluginName, r.OperatorNamespace)
-	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, &odfConsolePlugin, func() error {
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, &odfConsolePlugin, func() error {
 		if odfConsolePlugin.Spec.Backend.Service != nil && odfConsolePlugin.Spec.Backend.Service.BasePath != basePath {
 			r.Logger.Info(fmt.Sprintf("Set the BasePath for odf-multicluster-console plugin as '%s'", basePath))
 			odfConsolePlugin.Spec.Backend.Service.BasePath = basePath
 		}
 		return nil
+	}); err != nil {
+		return err
+	}
+
+	consoleDeployment := &appsv1.Deployment{}
+	if err := r.Client.Get(ctx, types.NamespacedName{Name: console.PluginName, Namespace: r.OperatorNamespace}, consoleDeployment); err != nil {
+		return err
+	}
+
+	return r.ensureConsoleNetworkPolicy(ctx, consoleDeployment)
+}
+
+func (r *ClusterVersionReconciler) ensureConsoleNetworkPolicy(ctx context.Context, consoleDeployment *appsv1.Deployment) error {
+	networkPolicy := console.GetNetworkPolicy(r.OperatorNamespace)
+	desiredSpec := networkPolicy.Spec
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, networkPolicy, func() error {
+		networkPolicy.Spec = desiredSpec
+		return controllerutil.SetControllerReference(consoleDeployment, networkPolicy, r.Scheme)
 	})
 	return err
 }

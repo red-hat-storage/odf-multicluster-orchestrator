@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -29,11 +30,18 @@ func newTestScheme() *runtime.Scheme {
 	utilruntime.Must(consolev1.AddToScheme(s))
 	utilruntime.Must(appsv1.AddToScheme(s))
 	utilruntime.Must(corev1.AddToScheme(s))
+	utilruntime.Must(networkingv1.AddToScheme(s))
 	utilruntime.Must(ocstlsv1.AddToScheme(s))
 	return s
 }
 
 func newTestReconciler(scheme *runtime.Scheme, objs ...runtime.Object) *ClusterVersionReconciler {
+	consoleDeployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{
+		Name:      console.PluginName,
+		Namespace: testNamespace,
+		UID:       types.UID("console-deployment-uid"),
+	}}
+	objs = append([]runtime.Object{consoleDeployment}, objs...)
 	client := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objs...).Build()
 	return &ClusterVersionReconciler{
 		Client:            client,
@@ -67,6 +75,37 @@ func TestEnsureConsolePlugin(t *testing.T) {
 			assert.Equal(t, c.expectedBasePath, plugin.Spec.Backend.Service.BasePath)
 		})
 	}
+}
+
+func TestEnsureConsoleNetworkPolicy(t *testing.T) {
+	scheme := newTestScheme()
+	r := newTestReconciler(scheme)
+	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{
+		Name: console.PluginName, Namespace: testNamespace, UID: types.UID("console-deployment-uid"),
+	}}
+
+	require.NoError(t, r.ensureConsoleNetworkPolicy(context.TODO(), deployment))
+
+	policy := &networkingv1.NetworkPolicy{}
+	key := types.NamespacedName{Name: console.PluginName, Namespace: testNamespace}
+	require.NoError(t, r.Client.Get(context.TODO(), key, policy))
+	require.Len(t, policy.OwnerReferences, 1)
+	assert.Equal(t, "console-deployment-uid", string(policy.OwnerReferences[0].UID))
+	assert.True(t, *policy.OwnerReferences[0].Controller)
+	desiredSpec := console.GetNetworkPolicy(testNamespace).Spec
+	assert.Equal(t, desiredSpec.PodSelector, policy.Spec.PodSelector)
+	assert.Equal(t, desiredSpec.Ingress, policy.Spec.Ingress)
+	assert.Equal(t, desiredSpec.PolicyTypes, policy.Spec.PolicyTypes)
+	assert.Empty(t, policy.Spec.Egress)
+
+	policy.Spec.PolicyTypes = nil
+	require.NoError(t, r.Client.Update(context.TODO(), policy))
+	require.NoError(t, r.ensureConsoleNetworkPolicy(context.TODO(), deployment))
+	require.NoError(t, r.Client.Get(context.TODO(), key, policy))
+	assert.Equal(t, desiredSpec.PodSelector, policy.Spec.PodSelector)
+	assert.Equal(t, desiredSpec.Ingress, policy.Spec.Ingress)
+	assert.Equal(t, desiredSpec.PolicyTypes, policy.Spec.PolicyTypes)
+	assert.Empty(t, policy.Spec.Egress)
 }
 
 func TestEnsureConsolePluginUpdatesBasePath(t *testing.T) {

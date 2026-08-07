@@ -279,6 +279,14 @@ spec:
           - patch
           - update
         - apiGroups:
+          - networking.k8s.io
+          resources:
+          - networkpolicies
+          verbs:
+          - create
+          - get
+          - update
+        - apiGroups:
           - ramendr.openshift.io
           resources:
           - drclusters

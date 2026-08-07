@@ -4,7 +4,30 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	networkingv1 "k8s.io/api/networking/v1"
 )
+
+func TestGetNetworkPolicy(t *testing.T) {
+	policy := GetNetworkPolicy("openshift-operators")
+
+	assert.Equal(t, PluginName, policy.Name)
+	assert.Equal(t, "openshift-operators", policy.Namespace)
+	assert.Equal(t, map[string]string{serviceLabelKey: PluginName}, policy.Spec.PodSelector.MatchLabels)
+	assert.Equal(t, []networkingv1.PolicyType{networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress}, policy.Spec.PolicyTypes)
+	require.Len(t, policy.Spec.Ingress, 1)
+	require.Len(t, policy.Spec.Ingress[0].From, 1)
+	peer := policy.Spec.Ingress[0].From[0]
+	assert.Equal(t, map[string]string{"kubernetes.io/metadata.name": "openshift-console"}, peer.NamespaceSelector.MatchLabels)
+	assert.Equal(t, map[string]string{"app": "console", "component": "ui"}, peer.PodSelector.MatchLabels)
+	require.Len(t, policy.Spec.Ingress[0].Ports, 1)
+	require.NotNil(t, policy.Spec.Ingress[0].Ports[0].Protocol)
+	require.NotNil(t, policy.Spec.Ingress[0].Ports[0].Port)
+	assert.Equal(t, "TCP", string(*policy.Spec.Ingress[0].Ports[0].Protocol))
+	assert.Equal(t, int32(9001), policy.Spec.Ingress[0].Ports[0].Port.IntVal)
+	assert.NotNil(t, policy.Spec.Egress)
+	assert.Empty(t, policy.Spec.Egress)
+}
 
 func TestGetBasePath(t *testing.T) {
 	cases := []struct {
