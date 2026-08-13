@@ -3,3 +3,7 @@ dependencies:
   value:
     packageName: ramen-hub-operator
     version: 0.0.1
+- type: olm.package
+  value:
+    packageName: ocs-tls-profiles
+    version: 4.23.0
