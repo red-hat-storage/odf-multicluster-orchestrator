@@ -36,7 +36,8 @@ metadata:
       ]
     capabilities: Seamless Upgrades
     console.openshift.io/plugins: '["odf-multicluster-console"]'
-    createdAt: "2026-02-25T14:31:00Z"
+    createdAt: "2026-08-13T07:02:57Z"
+    features.operators.openshift.io/tls-profiles: "true"
     olm.skipRange: ""
     operators.openshift.io/infrastructure-features: '["disconnected"]'
     operators.operatorframework.io/builder: operator-sdk-unknown
@@ -73,18 +74,21 @@ spec:
       - rules:
         - apiGroups:
           - ""
-          resources:
-          - configmaps
-          verbs:
-          - get
-          - list
-          - watch
-        - apiGroups:
-          - ""
           resourceNames:
           - odf-client-info
           resources:
           - configmaps
+          verbs:
+          - create
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          - services
           verbs:
           - create
           - get
@@ -113,16 +117,6 @@ spec:
           - create
           - delete
           - deletecollection
-          - get
-          - list
-          - update
-          - watch
-        - apiGroups:
-          - ""
-          resources:
-          - services
-          verbs:
-          - create
           - get
           - list
           - update
@@ -229,6 +223,14 @@ spec:
           - list
           - watch
         - apiGroups:
+          - config.openshift.io
+          resources:
+          - clusterversions
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
           - console.openshift.io
           resources:
           - consoleplugins
@@ -278,6 +280,14 @@ spec:
           - get
           - patch
           - update
+        - apiGroups:
+          - ocs.openshift.io
+          resources:
+          - tlsprofiles
+          verbs:
+          - get
+          - list
+          - watch
         - apiGroups:
           - ramendr.openshift.io
           resources:
@@ -374,6 +384,8 @@ spec:
           strategy: {}
           template:
             metadata:
+              annotations:
+                openshift.io/required-scc: restricted-v2
               labels:
                 control-plane: odfmo-controller-manager
             spec:
@@ -434,12 +446,43 @@ spec:
           strategy: {}
           template:
             metadata:
+              annotations:
+                openshift.io/required-scc: restricted-v2
               labels:
                 app.kubernetes.io/name: odf-multicluster-console
             spec:
               automountServiceAccountToken: false
               containers:
-              - image: quay.io/ocs-dev/odf-multicluster-console:latest
+              - command:
+                - /bin/sh
+                - -c
+                - |
+                  (
+                    echo "Waiting for Nginx master process to start."
+                    until nginx -s reload > /dev/null 2>&1; do
+                      sleep 1
+                    done
+
+                    LAST_HASH=$(md5sum /opt/app-root/etc/nginx.d/*.conf 2>/dev/null | sort | md5sum)
+                    echo "Nginx is up. Monitoring config changes."
+
+                    while true; do
+                      CURRENT_HASH=$(md5sum /opt/app-root/etc/nginx.d/*.conf 2>/dev/null | sort | md5sum)
+                      if [ "" != "" ]; then
+                        if nginx -t && nginx -s reload; then
+                          LAST_HASH=""
+                        fi
+                      fi
+                      sleep 45
+                    done
+                  ) &
+
+                  if [ -x /usr/libexec/s2i/run ]; then
+                    exec /usr/libexec/s2i/run
+                  else
+                    exec nginx -g "daemon off;"
+                  fi
+                image: quay.io/ocs-dev/odf-multicluster-console:latest
                 name: odf-multicluster-console
                 ports:
                 - containerPort: 9001
@@ -452,10 +495,24 @@ spec:
                 - mountPath: /var/serving-cert
                   name: odf-multicluster-console-serving-cert
                   readOnly: true
+                - mountPath: /opt/app-root/etc/nginx.d
+                  name: odf-multicluster-console-nginx-conf
+                  readOnly: true
+                - mountPath: /var/log/nginx
+                  name: odf-multicluster-console-nginx-log
+                - mountPath: /var/lib/nginx/tmp
+                  name: odf-multicluster-console-nginx-tmp
               volumes:
               - name: odf-multicluster-console-serving-cert
                 secret:
                   secretName: odf-multicluster-console-serving-cert
+              - configMap:
+                  name: odf-multicluster-console-nginx-conf
+                name: odf-multicluster-console-nginx-conf
+              - emptyDir: {}
+                name: odf-multicluster-console-nginx-log
+              - emptyDir: {}
+                name: odf-multicluster-console-nginx-tmp
       permissions:
       - rules:
         - apiGroups:
