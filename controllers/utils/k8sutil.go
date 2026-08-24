@@ -14,3 +14,16 @@ func AddLabel(obj metav1.Object, key string, value string) bool {
 	}
 	return false
 }
+
+func AddAnnotation(obj metav1.Object, key string, value string) bool {
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+		obj.SetAnnotations(annotations)
+	}
+	if oldValue, exist := annotations[key]; !exist || oldValue != value {
+		annotations[key] = value
+		return true
+	}
+	return false
+}
