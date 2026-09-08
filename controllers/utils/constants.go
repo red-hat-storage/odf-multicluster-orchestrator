@@ -17,6 +17,12 @@ const (
 	SpokeMirrorPeerFinalizer = "spoke.multicluster.odf.openshift.io"
 	TokenExchangeName        = "tokenexchange"
 
+	CephClusterNameTemplate = "%s-cephcluster"
+	KeyTypeAnnotation       = "multicluster.odf.openshift.io/rbdMirroringKeyType"
+	SCKeyTypeAnnotation     = "ocs.openshift.io/rbdMirroringKeyType"
+	KeyTypeAES256k          = "aes256k"
+	KeyTypeAES              = "aes"
+
 	// Addon shared constants
 	RBDProvisionerTemplate        = "%s.rbd.csi.ceph.com"
 	CephFSProvisionerTemplate     = "%s.cephfs.csi.ceph.com"
@@ -30,10 +36,10 @@ const (
 	OBCTypeAnnotationKey          = "multicluster.odf.openshift.io/obc-type"
 	OBCNameAnnotationKey          = "multicluster.odf.openshift.io/obc-name"
 	AddonDeletionlockName         = "token-exchange-addon-lock"
-
-	TLSProfileName   = "ocs-tls-profile"
-	TLSProfileDomain = "odf-multicluster.openshift.io"
-	TLSProfileServer = "console"
+	TLSProfileName                = "ocs-tls-profile"
+	TLSProfileDomain              = "odf-multicluster.openshift.io"
+	TLSProfileServer              = "console"
+	SpokeKeyTypeAnnotation        = "spoke.multicluster.odf.openshift.io/rbdMirroringKeyType"
 )
 
 type OBCTypeValue string

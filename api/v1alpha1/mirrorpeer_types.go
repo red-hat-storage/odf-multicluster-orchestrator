@@ -81,6 +81,7 @@ const (
 	ReasonConfigurationFailed              = "ConfigurationFailed"
 	ReasonConfigurationInProgress          = "ConfigurationInProgress"
 	ReasonManagedClusterAddonFailed        = "ManagedClusterAddonFailed"
+	ReasonKeyTypeConfigurationFailed       = "KeyTypeConfigurationFailed"
 	ReasonPeeringInProgress                = "PeeringInProgress"
 	ReasonPeeringFailed                    = "PeeringFailed"
 	ReasonS3ConfiguringInProgress          = "S3ConfigurationInProgress"

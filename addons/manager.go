@@ -213,6 +213,7 @@ func runHubManager(ctx context.Context, options AddonAgentOptions, logger *slog.
 
 func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slog.Logger) {
 	currentNamespace := utils.GetEnv("POD_NAMESPACE", options.testEnvFile)
+	hubOperatorNamespace := utils.GetEnv("HUB_OPERATOR_NAMESPACE")
 
 	spokeKubeConfig, err := utils.GetClientConfig(options.KubeconfigFile)
 	if err != nil {
@@ -289,6 +290,19 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slo
 		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create ResourceDistributionReconciler controller", "controller", "ResourceDistributionReconciler", "error", err)
+		os.Exit(1)
+	}
+
+	if err = (&StorageClusterReconciler{
+		Scheme:               mgr.GetScheme(),
+		HubClient:            hubClient,
+		SpokeClient:          mgr.GetClient(),
+		SpokeClusterName:     options.SpokeClusterName,
+		Logger:               logger.With("controller", "StorageClusterReconciler"),
+		CurrentNamespace:     currentNamespace,
+		HubOperatorNamespace: hubOperatorNamespace,
+	}).SetupWithManager(mgr); err != nil {
+		logger.Error("Failed to create StorageClusterReconciler controller", "controller", "StorageClusterReconciler", "error", err)
 		os.Exit(1)
 	}
 
