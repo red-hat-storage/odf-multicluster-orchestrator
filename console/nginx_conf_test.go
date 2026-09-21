@@ -14,6 +14,7 @@ func TestGenerateNginxConf_NilConfig(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, conf, "listen       9001 ssl;")
 	assert.Contains(t, conf, "ssl_certificate /var/serving-cert/tls.crt;")
+	assert.Contains(t, conf, "worker_processes 8;")
 	assert.NotContains(t, conf, "ssl_protocols")
 	assert.NotContains(t, conf, "ssl_ciphers")
 	assert.NotContains(t, conf, "ssl_conf_command")
@@ -69,6 +70,35 @@ func TestGenerateNginxConf_ValidNginxStructure(t *testing.T) {
 	assert.True(t, strings.Contains(conf, "server {"))
 	assert.True(t, strings.Contains(conf, "location /"))
 	assert.True(t, strings.Contains(conf, "location /compatibility/"))
+}
+
+func TestGetNginxWorkerProcesses(t *testing.T) {
+	tests := []struct {
+		name     string
+		envValue string
+		want     string
+	}{
+		{name: "default when empty", envValue: "", want: DefaultNginxWorkerProcesses},
+		{name: "positive integer", envValue: "4", want: "4"},
+		{name: "auto", envValue: "auto", want: "auto"},
+		{name: "invalid falls back", envValue: "not-a-number", want: DefaultNginxWorkerProcesses},
+		{name: "zero falls back", envValue: "0", want: DefaultNginxWorkerProcesses},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(NginxWorkerProcessesEnvVar, tt.envValue)
+			assert.Equal(t, tt.want, GetNginxWorkerProcesses())
+		})
+	}
+}
+
+func TestGenerateNginxConf_WorkerProcessesFromEnv(t *testing.T) {
+	t.Setenv(NginxWorkerProcessesEnvVar, "2")
+	conf, err := GenerateNginxConf(nil)
+	require.NoError(t, err)
+	assert.Contains(t, conf, "worker_processes 2;")
+	assert.NotContains(t, conf, "worker_processes auto;")
 }
 
 func TestGetNginxConfConfigMap(t *testing.T) {
