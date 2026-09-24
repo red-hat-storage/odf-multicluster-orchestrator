@@ -22,11 +22,12 @@ import (
 	"log/slog"
 	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-
+	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/odf"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,6 +35,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -171,6 +173,40 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 		logger.Info("MirrorPeer deletion complete")
 		return ctrl.Result{}, nil
+	}
+
+	// Set keyRotation type on SC based on the value of mirrorpeer annotation for "async" DR type only
+	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
+		spokeKeyTypeAnn := fmt.Sprintf("%s.%s", r.SpokeClusterName, utils.SpokeKeyTypeAnnotation)
+		var sc ocsv1.StorageCluster
+		err := r.SpokeClient.Get(ctx, types.NamespacedName{
+			Name:      scr.Name,
+			Namespace: scr.Namespace,
+		}, &sc)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return ctrl.Result{}, fmt.Errorf("could not find StorageCluster %v in namespace %v: %w", sc.Name, sc.Namespace, err)
+			}
+			return ctrl.Result{}, fmt.Errorf("failed to retrieve StorageCluster %v in namespace %v: %w", sc.Name, sc.Namespace, err)
+		}
+
+		spokeAnnVal := utils.KeyTypeAES
+		if mirrorPeer.Annotations[utils.KeyTypeAnnotation] != utils.KeyTypeAES256k {
+			if sc.Status.Version >= version.Version {
+				spokeAnnVal = utils.KeyTypeAES256k
+			}
+			if utils.AddAnnotation(mirrorPeer, spokeKeyTypeAnn, spokeAnnVal) {
+				if err = r.HubClient.Update(ctx, mirrorPeer); err != nil {
+					logger.Error("Failed to update spoke cluster keyType annotation on MirrorPeer", "error", err)
+					return ctrl.Result{}, err
+				}
+			}
+		}
+
+		if err = odf.SetKeyTypeOnStorageCluster(ctx, logger, r.SpokeClient, r.HubClient, &sc); err != nil {
+			logger.Error("Failed to set keyType annotation on storagecluster", "error", err)
+			return ctrl.Result{}, err
+		}
 	}
 
 	logger.Info("Creating S3 buckets")
@@ -325,7 +361,7 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	r.Logger.Info("Setting up controller with manager")
-	mpPredicate := predicate.And(predicate.GenerationChangedPredicate{}, mirrorPeerSpokeClusterPredicate)
+	mpPredicate := predicate.And(predicate.GenerationChangedPredicate{}, predicate.AnnotationChangedPredicate{}, mirrorPeerSpokeClusterPredicate)
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("agent_mirrorpeer_controller").
 		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(mpPredicate)).
