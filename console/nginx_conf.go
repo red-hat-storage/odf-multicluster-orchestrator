@@ -2,6 +2,8 @@ package console
 
 import (
 	"bytes"
+	"os"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -13,16 +15,27 @@ import (
 const (
 	NginxConfigMapName = "odf-multicluster-console-nginx-conf"
 	NginxConfKey       = "nginx.conf"
+
+	// DefaultNginxWorkerProcesses is used when CONSOLE_NGINX_WORKER_PROCESSES
+	// is unset or invalid. A fixed value avoids OOM/FD exhaustion on high-CPU
+	// nodes where "auto" would spawn one worker per CPU.
+	DefaultNginxWorkerProcesses = "8"
+
+	// NginxWorkerProcessesEnvVar overrides DefaultNginxWorkerProcesses when set
+	// on the operator pod via Subscription spec.config.env. Accepted values are
+	// a positive integer or "auto".
+	NginxWorkerProcessesEnvVar = "CONSOLE_NGINX_WORKER_PROCESSES"
 )
 
-type nginxTLSConfig struct {
-	Protocol string
-	Ciphers  string
-	Groups   string
-	IsTLS13  bool
+type nginxTemplateData struct {
+	WorkerProcesses string
+	Protocol        string
+	Ciphers         string
+	Groups          string
+	IsTLS13         bool
 }
 
-var nginxConfTemplate = template.Must(template.New("nginx.conf").Parse(`worker_processes auto;
+var nginxConfTemplate = template.Must(template.New("nginx.conf").Parse(`worker_processes {{.WorkerProcesses}};
 error_log /var/log/nginx/error.log;
 pid /var/lib/nginx/tmp/nginx.pid;
 
@@ -94,8 +107,27 @@ http {
 }
 `))
 
+// GetNginxWorkerProcesses returns the nginx worker_processes value.
+// Prefer CONSOLE_NGINX_WORKER_PROCESSES when it is a positive integer or "auto";
+// otherwise fall back to DefaultNginxWorkerProcesses.
+func GetNginxWorkerProcesses() string {
+	value := strings.TrimSpace(os.Getenv(NginxWorkerProcessesEnvVar))
+	if value == "" {
+		return DefaultNginxWorkerProcesses
+	}
+	if strings.EqualFold(value, "auto") {
+		return "auto"
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil || n < 1 {
+		return DefaultNginxWorkerProcesses
+	}
+	return strconv.Itoa(n)
+}
+
 func GenerateNginxConf(ossl *ocstlsv1.OpenSSLConfig) (string, error) {
-	var cfg nginxTLSConfig
+	var cfg nginxTemplateData
+	cfg.WorkerProcesses = GetNginxWorkerProcesses()
 	if ossl != nil {
 		cfg.Protocol = ossl.Protocol
 		cfg.IsTLS13 = ossl.Protocol == "TLSv1.3"
