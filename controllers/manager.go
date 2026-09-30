@@ -21,7 +21,11 @@ import (
 	"github.com/spf13/cobra"
 	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	"golang.org/x/sync/errgroup"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/selection"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"open-cluster-management.io/addon-framework/pkg/addonmanager"
@@ -32,6 +36,8 @@ import (
 	appsubapis "open-cluster-management.io/multicloud-operators-subscription/pkg/apis"
 	appv1beta1 "sigs.k8s.io/application/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -140,12 +146,86 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		metricsServerOptions.FilterProvider = filters.WithAuthenticationAndAuthorization
 	}
 
+	// Create label selector for Secrets with operator-managed labels.
+	// Selects secrets that have the "multicluster.odf.openshift.io/created-by" label key,
+	// regardless of value (tokenexchange, mirrorpeersecret, etc.).
+	secretLabelReq, err := labels.NewRequirement(utils.CreatedByLabelKey, selection.Exists, nil)
+	if err != nil {
+		logger.Error("Failed to create secret label requirement", "error", err)
+		os.Exit(1)
+	}
+	secretLabelSelector := labels.NewSelector().Add(*secretLabelReq)
+
+	// Configure cache to only cache the resources we actually need.
+	// This reduces memory footprint by filtering out unnecessary resources.
+	cacheOptions := cache.Options{
+		ByObject: map[client.Object]cache.ByObject{
+			// Only cache tokenexchange ManagedClusterAddOn (namespace-scoped, one per managed cluster)
+			&addonapiv1alpha1.ManagedClusterAddOn{}: {
+				Field: fields.SelectorFromSet(fields.Set{"metadata.name": utils.TokenExchangeName}),
+			},
+			// Only cache tokenexchange ClusterManagementAddOn (cluster-scoped, single resource)
+			&addonapiv1alpha1.ClusterManagementAddOn{}: {
+				Field: fields.SelectorFromSet(fields.Set{"metadata.name": utils.TokenExchangeName}),
+			},
+			// Only cache ManagedClusterViews created by this controller
+			&viewv1beta1.ManagedClusterView{}: {
+				Label: labels.SelectorFromSet(labels.Set{utils.CreatedByLabelKey: "odf-multicluster-managedcluster-controller"}),
+			},
+			// Only cache the specific TLSProfile resource we monitor
+			&ocstlsv1.TLSProfile{}: {
+				Field: fields.SelectorFromSet(fields.Set{"metadata.name": utils.TLSProfileName}),
+			},
+			// Only cache ConfigMaps in the operator namespace to reduce memory usage.
+			// Controllers watch specific ConfigMaps (odf-client-info, ramen-hub-operator-config)
+			// which are all in the operator namespace.
+			&corev1.ConfigMap{}: {
+				Namespaces: map[string]cache.Config{
+					currentNamespace: {},
+				},
+			},
+			// Only cache Secrets created by this operator to reduce memory usage.
+			// All operator-managed secrets are labeled with "multicluster.odf.openshift.io/created-by"
+			// (with values like "tokenexchange" or "mirrorpeersecret").
+			// This includes S3 secrets and other secrets managed by the operator across
+			// the operator namespace and managed cluster namespaces.
+			&corev1.Secret{}: {
+				Label: secretLabelSelector,
+			},
+			// Only cache ManifestWorks created by this operator to reduce memory usage.
+			// Only cache ManifestWorks labeled with "multicluster.odf.openshift.io/created-by: odf-multicluster-orchestrator".
+			// NOTE: Enable it in future release, such that upgraded clusters already have the label added to the ManifestWork created by MCO
+			// &workv1.ManifestWork{}: {
+			// 	Label: labels.SelectorFromSet(labels.Set{utils.CreatedByLabelKey: utils.CreatorMulticlusterOrchestrator}),
+			// },
+			// ManagedCluster: Use transform to reduce memory footprint
+			// We only need metadata and status.clusterClaims, so strip everything else
+			&clusterv1.ManagedCluster{}: {
+				Transform: func(i interface{}) (interface{}, error) {
+					mc, ok := i.(*clusterv1.ManagedCluster)
+					if !ok {
+						return i, nil
+					}
+					// Create a minimal ManagedCluster with only the fields we need
+					minimal := &clusterv1.ManagedCluster{
+						ObjectMeta: mc.ObjectMeta,
+						Status: clusterv1.ManagedClusterStatus{
+							ClusterClaims: mc.Status.ClusterClaims,
+						},
+					}
+					return minimal, nil
+				},
+			},
+		},
+	}
+
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
 		Scheme:                 mgrScheme,
 		Metrics:                metricsServerOptions,
 		HealthProbeBindAddress: o.ProbeAddr,
 		LeaderElection:         o.EnableLeaderElection,
 		LeaderElectionID:       "1d19c724.odf.openshift.io",
+		Cache:                  cacheOptions,
 	})
 	if err != nil {
 		logger.Error("Failed to start manager", "error", err)
