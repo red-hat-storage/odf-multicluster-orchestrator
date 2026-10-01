@@ -35,6 +35,13 @@ func CreateOrUpdateManifestWork(ctx context.Context, c client.Client, name strin
 				},
 			},
 		}
+
+		if mw.Labels == nil {
+			mw.Labels = make(map[string]string)
+		}
+
+		mw.Labels[CreatedByLabelKey] = CreatorMulticlusterOrchestrator
+
 		if len(manifestConfigOptions) > 0 {
 			mw.Spec.ManifestConfigs = manifestConfigOptions
 		}
