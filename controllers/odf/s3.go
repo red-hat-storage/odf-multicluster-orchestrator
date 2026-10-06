@@ -91,6 +91,7 @@ func createS3Secret(ctx context.Context, rc client.Client, scheme *runtime.Schem
 	_, err := controllerutil.CreateOrUpdate(ctx, rc, &secret, func() error {
 		secret.Labels = map[string]string{
 			utils.CreatedByLabelKey: utils.MirrorPeerSecret,
+			utils.HubRecoveryLabel:  "",
 		}
 		secret.Type = corev1.SecretTypeOpaque
 		secret.Data = map[string][]byte{
