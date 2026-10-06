@@ -25,14 +25,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
-	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
+	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/odf"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/odf"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
+	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -70,7 +70,7 @@ var _ = BeforeSuite(func() {
 	testEnv = &envtest.Environment{
 		BinaryAssetsDirectory: getFirstFoundEnvTestBinaryDir(),
 		CRDDirectoryPaths: []string{
-			filepath.Join("../..", "config", "crd", "bases"),
+			filepath.Join("..", "..", "config", "crd", "bases"),
 			filepath.Join("..", "testdata"),
 		},
 		ErrorIfCRDPathMissing: true,

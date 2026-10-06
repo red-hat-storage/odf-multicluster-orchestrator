@@ -23,11 +23,12 @@ import (
 	"os"
 	"time"
 
+	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
-	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"

@@ -64,11 +64,11 @@ endif
 
 ##@ Build
 
-build: generate fmt vet golangci-lint kube-linter ## Build manager binary.
-	go build -ldflags=${LDFLAGS} -o bin/manager main.go
+build: manifests generate fmt vet golangci-lint kube-linter ## Build manager binary.
+	go build -ldflags=${LDFLAGS} -o bin/manager cmd/main.go
 
 run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./main.go
+	go run ./cmd/main.go
 
 operator-build: generate fmt vet golangci-lint kube-linter ## Build docker image with the manager.
 	${BUILD_TOOL} build --build-arg=LDFLAGS=${LDFLAGS} -t ${IMG} .

@@ -13,7 +13,8 @@ import (
 	"time"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

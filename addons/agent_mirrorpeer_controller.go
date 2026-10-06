@@ -22,11 +22,10 @@ import (
 	"log/slog"
 	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/odf"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/odf"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,6 +33,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"

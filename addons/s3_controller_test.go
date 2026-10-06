@@ -4,11 +4,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
+
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	routev1 "github.com/openshift/api/route/v1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

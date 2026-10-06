@@ -4,16 +4,16 @@ import (
 	"context"
 	"fmt"
 
-	routev1 "github.com/openshift/api/route/v1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/odf"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/odf"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
+	routev1 "github.com/openshift/api/route/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (

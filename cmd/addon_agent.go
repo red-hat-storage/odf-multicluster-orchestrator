@@ -1,4 +1,4 @@
-package cmd
+package main
 
 import (
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons"

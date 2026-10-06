@@ -10,18 +10,18 @@ COPY go.sum go.sum
 RUN go mod download
 
 # Copy the go source
-COPY main.go main.go
+COPY cmd/ cmd/
 COPY api/ api/
-COPY controllers/ controllers/
+COPY internal/controller/ internal/controller/
 COPY cmd/ cmd/
 COPY addons/ addons/
-COPY console/ console/
+COPY pkg/ pkg/
 COPY version/ version/
 
 ARG LDFLAGS
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -a -o odf-multicluster-orchestrator main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o odf-multicluster-orchestrator ./cmd
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details

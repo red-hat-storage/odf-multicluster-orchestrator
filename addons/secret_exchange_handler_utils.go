@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

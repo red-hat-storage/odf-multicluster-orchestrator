@@ -7,10 +7,11 @@ import (
 	"reflect"
 	"slices"
 
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/odf"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
+
 	templatev1 "github.com/openshift/api/template/v1"
 	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v4/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/odf"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"

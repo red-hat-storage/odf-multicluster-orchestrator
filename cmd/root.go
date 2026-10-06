@@ -1,4 +1,4 @@
-package cmd
+package main
 
 import (
 	"bytes"
@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
+
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 )
