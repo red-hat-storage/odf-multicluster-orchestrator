@@ -129,10 +129,10 @@ func getFakeMirrorPeerReconciler(mirrorpeer *multiclusterv1alpha1.MirrorPeer) Mi
 			},
 		},
 		Data: map[string]string{
-			"cluster1_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
-			"cluster2_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
-			"cluster3_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
-			"cluster4_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
+			"cluster1_test-storagecluster": "{\"providerInfo\":{\"version\":\"5.0.0\"}}",
+			"cluster2_test-storagecluster": "{\"providerInfo\":{\"version\":\"5.0.0\"}}",
+			"cluster3_test-storagecluster": "{\"providerInfo\":{\"version\":\"5.0.0\", \"deploymentType\": \"external\"}}",
+			"cluster4_test-storagecluster": "{\"providerInfo\":{\"version\":\"5.0.0\", \"deploymentType\": \"external\"}}",
 		},
 	}
 
@@ -189,10 +189,10 @@ func TestProcessManagedClusterAddons(t *testing.T) {
 			},
 		},
 		Data: map[string]string{
-			"cluster1_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
-			"cluster2_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\"}}",
-			"cluster3_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
-			"cluster4_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
+			"cluster1_test-storagecluster": "{\"providerInfo\":{\"version\":\"5.0.0\"}}",
+			"cluster2_test-storagecluster": "{\"providerInfo\":{\"version\":\"5.0.0\"}}",
+			"cluster3_test-storagecluster": "{\"providerInfo\":{\"version\":\"5.0.0\", \"deploymentType\": \"external\"}}",
+			"cluster4_test-storagecluster": "{\"providerInfo\":{\"version\":\"5.0.0\", \"deploymentType\": \"external\"}}",
 		},
 	}
 	// Create fake k8s client
@@ -302,7 +302,7 @@ func makeClientInfoJSON(clientID, providerManagedCluster, namespace string) stri
 	ci := ClientInfo{
 		ClientID: clientID,
 		ProviderInfo: ProviderInfo{
-			Version:                    "4.19.0",
+			Version:                    "5.0.0",
 			ProviderManagedClusterName: providerManagedCluster,
 			NamespacedName:             types.NamespacedName{Name: "storagecluster", Namespace: namespace},
 		},

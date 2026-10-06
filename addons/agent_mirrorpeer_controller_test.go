@@ -70,8 +70,8 @@ storageCluster:
 			},
 		},
 		Data: map[string]string{
-			"cluster1_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
-			"cluster2_test-storagecluster": "{\"providerInfo\":{\"version\":\"4.19.0\", \"deploymentType\": \"external\"}}",
+			"cluster1_test-storagecluster": "{\"providerInfo\":{\"version\":\"5.0.0\", \"deploymentType\": \"external\"}}",
+			"cluster2_test-storagecluster": "{\"providerInfo\":{\"version\":\"5.0.0\", \"deploymentType\": \"external\"}}",
 		},
 	}
 	mpItems = []multiclusterv1alpha1.PeerRef{
