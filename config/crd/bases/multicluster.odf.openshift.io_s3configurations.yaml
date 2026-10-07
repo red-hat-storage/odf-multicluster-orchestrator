@@ -1,0 +1,202 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.2
+  name: s3configurations.multicluster.odf.openshift.io
+spec:
+  group: multicluster.odf.openshift.io
+  names:
+    kind: S3Configuration
+    listKind: S3ConfigurationList
+    plural: s3configurations
+    singular: s3configuration
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          S3Configuration is the Schema for the s3configurations API.
+          S3Configuration manages S3 configuration for DR metadata storage.
+          One S3Configuration can be referenced by multiple DRClusters.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of S3Configuration
+            properties:
+              externalS3:
+                description: |-
+                  ExternalS3 specifies configuration for external S3-compatible storage.
+                  When specified, the referenced secret must already exist on the hub.
+                  Use this for:
+                    - Vendor-provided S3 (CNSA, Dell, Flash)
+                    - External S3 services (AWS S3, MinIO, etc.)
+                    - ODF with external S3 endpoint
+
+                  This field is mutually exclusive with InternalS3.
+                properties:
+                  secretRef:
+                    description: |-
+                      SecretRef references a secret containing S3 credentials.
+                      The secret must exist on the hub cluster in the specified namespace and contain:
+                        - AWS_ACCESS_KEY_ID: S3 access key
+                        - AWS_SECRET_ACCESS_KEY: S3 secret key
+                        - s3Bucket: Bucket name for DR metadata
+                        - s3Endpoint: S3 endpoint URL
+                        - s3Region: S3 region (optional, defaults to us-east-1)
+                    properties:
+                      name:
+                        description: Name is the name of the secret
+                        type: string
+                      namespace:
+                        description: Namespace is the namespace of the secret on the
+                          hub cluster
+                        type: string
+                    required:
+                    - name
+                    - namespace
+                    type: object
+                required:
+                - secretRef
+                type: object
+              internalS3:
+                description: |-
+                  InternalS3 specifies configuration for ODF-managed internal S3 (Noobaa/RGW).
+                  When specified, the S3Configuration controller will:
+                    1. Use addon mechanism to create OBC on the specified cluster (internalS3.managedCluster)
+                    2. Wait for addon to transfer generated secret from spoke to hub
+                    3. Copy S3 secret to Ramen operator namespace on hub
+                    4. Use the secret to configure Ramen ConfigMap S3 profile
+                    5. Create DRCluster on hub for all clusters in spec.managedClusters
+
+                  This field is mutually exclusive with ExternalS3.
+                  Only valid when used with ODF storage.
+                properties:
+                  managedCluster:
+                    description: |-
+                      ManagedCluster is the name of the cluster where the OBC will be created.
+                      This cluster must be one of the clusters in spec.managedClusters.
+
+                      The OBC will ONLY be created on this cluster, and the generated S3 endpoint
+                      will be shared by all clusters in spec.managedClusters.
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace is the namespace where OBC will be created on the managed cluster.
+                      Typically "openshift-storage" for ODF deployments.
+                    type: string
+                  obcName:
+                    description: |-
+                      OBCName is the name to use for the ObjectBucketClaim.
+                      If not specified, a name will be generated: "odr-<s3configuration-cr-name>"
+                    type: string
+                  storageClassName:
+                    description: |-
+                      StorageClassName is the name of the StorageClass to use for OBC creation.
+                      This StorageClass should be provided by the ODF operator on the managed cluster.
+                      Examples: "openshift-storage.noobaa.io", "ocs-storagecluster-ceph-rgw"
+                    type: string
+                required:
+                - managedCluster
+                - namespace
+                - storageClassName
+                type: object
+              managedClusters:
+                description: |-
+                  ManagedClusters is the list of clusters where this S3 configuration will be used.
+                  A DRCluster will be created on the hub for each cluster in this list.
+
+                  For InternalS3:
+                    - OBC created on ONE cluster (specified in internalS3.managedCluster)
+                    - S3 secret copied to Ramen operator namespace on hub
+                    - DRCluster created on hub for ALL clusters in this list
+                    - All DRClusters reference the S3 endpoint from the cluster where OBC was created
+
+                  For ExternalS3:
+                    - S3 secret copied to Ramen operator namespace on hub
+                    - DRCluster created on hub for ALL clusters in this list
+                    - All DRClusters reference the same external S3 endpoint
+
+                  IMPORTANT:
+                    - Each cluster can only appear in ONE S3Configuration's managedClusters list (enforced by webhook)
+                    - DRCluster is a hub-only API, not deployed to spoke clusters
+
+                  The S3Configuration CR name will be used as the s3ProfileName in Ramen ConfigMap
+                  and in DRCluster.spec.s3ProfileName.
+                items:
+                  type: string
+                minItems: 1
+                type: array
+            required:
+            - managedClusters
+            type: object
+            x-kubernetes-validations:
+            - message: must specify exactly one of internalS3 or externalS3
+              rule: (has(self.internalS3) && !has(self.externalS3)) || (!has(self.internalS3)
+                && has(self.externalS3))
+            - message: cannot change from internalS3 to externalS3
+              rule: '!has(oldSelf.internalS3) || has(self.internalS3)'
+            - message: cannot change from externalS3 to internalS3
+              rule: '!has(oldSelf.externalS3) || has(self.externalS3)'
+            - message: internalS3 configuration is immutable
+              rule: '!has(oldSelf.internalS3) || !has(self.internalS3) || self.internalS3
+                == oldSelf.internalS3'
+            - message: externalS3 configuration is immutable
+              rule: '!has(oldSelf.externalS3) || !has(self.externalS3) || self.externalS3
+                == oldSelf.externalS3'
+            - message: managedClusters is immutable
+              rule: self.managedClusters == oldSelf.managedClusters
+          status:
+            description: status defines the observed state of S3Configuration
+            properties:
+              configuredClusters:
+                description: ConfiguredClusters lists clusters where S3 has been successfully
+                  configured
+                items:
+                  type: string
+                type: array
+              message:
+                description: Message provides additional information about the current
+                  phase
+                type: string
+              phase:
+                description: Phase represents the current phase of S3Configuration
+                enum:
+                - Pending
+                - Configuring
+                - Ready
+                - Failed
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

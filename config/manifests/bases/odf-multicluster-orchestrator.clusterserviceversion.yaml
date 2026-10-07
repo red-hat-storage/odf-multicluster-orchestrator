@@ -23,6 +23,20 @@ spec:
       kind: MirrorPeer
       name: mirrorpeers.multicluster.odf.openshift.io
       version: v1alpha1
+    - description: ProtectedApplicationView represents an aggregated view of a protected
+        application
+      displayName: Protected Application View
+      kind: ProtectedApplicationView
+      name: protectedapplicationviews.multicluster.odf.openshift.io
+      version: v1alpha1
+    - description: |-
+        S3Configuration is the Schema for the s3configurations API.
+        S3Configuration manages S3 configuration for DR metadata storage.
+        One S3Configuration can be referenced by multiple DRClusters.
+      displayName: S3 Configuration
+      kind: S3Configuration
+      name: s3configurations.multicluster.odf.openshift.io
+      version: v1alpha1
   description: |
     Orchestrator for Data Foundation clusters running across multiple OpenShift clusters.
     It uses Red Hat Advanced Cluster Management for Kubernetes as the multicluster control plane.
