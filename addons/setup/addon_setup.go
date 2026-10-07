@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
+
 	"github.com/openshift/library-go/pkg/assets"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	certificatesv1 "k8s.io/api/certificates/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

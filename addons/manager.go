@@ -5,6 +5,11 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
+	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
+
 	replicationv1alpha1 "github.com/csi-addons/kubernetes-csi-addons/api/replication.storage/v1alpha1"
 	"github.com/go-logr/zapr"
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
@@ -14,10 +19,6 @@ import (
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
 	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v4/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
-	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	"github.com/spf13/cobra"
 	appsv1 "k8s.io/api/apps/v1"

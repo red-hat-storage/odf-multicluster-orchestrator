@@ -16,4 +16,13 @@ resources:
   kind: MirrorPeer
   path: github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: false
+  controller: true
+  domain: odf.openshift.io
+  group: multicluster
+  kind: ProtectedApplicationView
+  path: github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1
+  version: v1alpha1
 version: "3"

@@ -1,7 +1,9 @@
-package cmd
+package main
 
-import "github.com/red-hat-storage/odf-multicluster-orchestrator/controllers"
+import (
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller"
+)
 
 func init() {
-	rootCmd.AddCommand(controllers.NewManagerCommand())
+	rootCmd.AddCommand(controller.NewManagerCommand())
 }
