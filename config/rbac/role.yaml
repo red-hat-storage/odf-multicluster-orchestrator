@@ -196,6 +196,7 @@ rules:
   - multicluster.odf.openshift.io
   resources:
   - protectedapplicationviews
+  - s3configurations
   verbs:
   - create
   - delete
@@ -208,9 +209,16 @@ rules:
   - multicluster.odf.openshift.io
   resources:
   - protectedapplicationviews/status
+  - s3configurations/status
   verbs:
   - get
   - patch
+  - update
+- apiGroups:
+  - multicluster.odf.openshift.io
+  resources:
+  - s3configurations/finalizers
+  verbs:
   - update
 - apiGroups:
   - ocs.openshift.io

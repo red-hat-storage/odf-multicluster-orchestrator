@@ -1,0 +1,12 @@
+apiVersion: multicluster.odf.openshift.io/v1alpha1
+kind: S3Configuration
+metadata:
+  labels:
+    app.kubernetes.io/name: odf-multicluster-orchestrator
+    app.kubernetes.io/managed-by: kustomize
+  name: s3configuration-sample
+spec:
+  internalS3:
+    managedCluster: c1
+    storageClassName: dummy
+    namespace: dummy
