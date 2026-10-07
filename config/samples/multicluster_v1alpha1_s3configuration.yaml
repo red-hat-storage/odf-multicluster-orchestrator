@@ -7,6 +7,8 @@ metadata:
   name: s3configuration-sample
 spec:
   internalS3:
-    managedCluster: c1
-    storageClassName: dummy
-    namespace: dummy
+    managedCluster: name
+    storageClassName: openshift-storage.noobaa.io
+    namespace: openshift-storage
+  managedClusters:
+    - name

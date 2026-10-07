@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"crypto/tls"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/s3configuration"
 	"os"
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
@@ -147,27 +148,27 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		metricsServerOptions.FilterProvider = filters.WithAuthenticationAndAuthorization
 	}
 
-	// Create label selector for Secrets with operator-managed labels.
+	// Create selector for Object(s) with operator-managed labels.
 	// Selects secrets that have the "multicluster.odf.openshift.io/created-by" label key,
 	// regardless of value (tokenexchange, mirrorpeersecret, etc.).
-	secretLabelReq, err := labels.NewRequirement(utils.CreatedByLabelKey, selection.Exists, nil)
+	createByMCOLabelReq, err := labels.NewRequirement(utils.CreatedByLabelKey, selection.Exists, nil)
 	if err != nil {
 		logger.Error("Failed to create secret label requirement", "error", err)
 		os.Exit(1)
 	}
-	secretLabelSelector := labels.NewSelector().Add(*secretLabelReq)
+	createByMCOLabelSelector := labels.NewSelector().Add(*createByMCOLabelReq)
 
 	// Configure cache to only cache the resources we actually need.
 	// This reduces memory footprint by filtering out unnecessary resources.
 	cacheOptions := cache.Options{
 		ByObject: map[client.Object]cache.ByObject{
-			// Only cache tokenexchange ManagedClusterAddOn (namespace-scoped, one per managed cluster)
+			// Only cache ManagedClusterAddOn with required label
 			&addonapiv1alpha1.ManagedClusterAddOn{}: {
-				Field: fields.SelectorFromSet(fields.Set{"metadata.name": utils.TokenExchangeName}),
+				Label: createByMCOLabelSelector,
 			},
-			// Only cache tokenexchange ClusterManagementAddOn (cluster-scoped, single resource)
+			// Only cache ClusterManagementAddOn with required label
 			&addonapiv1alpha1.ClusterManagementAddOn{}: {
-				Field: fields.SelectorFromSet(fields.Set{"metadata.name": utils.TokenExchangeName}),
+				Label: createByMCOLabelSelector,
 			},
 			// Only cache ManagedClusterViews created by this controller
 			&viewv1beta1.ManagedClusterView{}: {
@@ -191,14 +192,13 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 			// This includes S3 secrets and other secrets managed by the operator across
 			// the operator namespace and managed cluster namespaces.
 			&corev1.Secret{}: {
-				Label: secretLabelSelector,
+				Label: createByMCOLabelSelector,
 			},
 			// Only cache ManifestWorks created by this operator to reduce memory usage.
-			// Only cache ManifestWorks labeled with "multicluster.odf.openshift.io/created-by: odf-multicluster-orchestrator".
-			// NOTE: Enable it in future release, such that upgraded clusters already have the label added to the ManifestWork created by MCO
-			// &workv1.ManifestWork{}: {
-			// 	Label: labels.SelectorFromSet(labels.Set{utils.CreatedByLabelKey: utils.CreatorMulticlusterOrchestrator}),
-			// },
+			// Only cache ManifestWorks labeled with "multicluster.odf.openshift.io/created-by".
+			&workv1.ManifestWork{}: {
+				Label: createByMCOLabelSelector,
+			},
 			// ManagedCluster: Use transform to reduce memory footprint
 			// We only need metadata and status.clusterClaims, so strip everything else
 			&clusterv1.ManagedCluster{}: {
@@ -230,6 +230,16 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 	})
 	if err != nil {
 		logger.Error("Failed to start manager", "error", err)
+		os.Exit(1)
+	}
+
+	if err = (&s3configuration.S3ConfigurationReconciler{
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		Logger:           logger.With("controller", "S3Configuration"),
+		CurrentNamespace: currentNamespace,
+	}).SetupWithManager(mgr); err != nil {
+		logger.Error("Failed to create S3Configuration controller", "error", err)
 		os.Exit(1)
 	}
 
@@ -303,22 +313,34 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		os.Exit(1)
 	}
 
-	logger.Info("Initializing token exchange addon")
+	logger.Info("Creating addon manager")
+	addonMgr, err := addonmanager.New(config)
+	if err != nil {
+		logger.Error("Failed to create addon manager", "error", err)
+	}
 
+	logger.Info("Initializing token exchange addon")
 	tokenExchangeAddon := setup.Addons{
 		Client:     mgr.GetClient(),
 		AgentImage: utils.GetEnv("TOKEN_EXCHANGE_IMAGE", o.testEnvFile),
 		AddonName:  utils.TokenExchangeName,
 	}
 
-	logger.Info("Creating addon manager")
-	addonMgr, err := addonmanager.New(config)
-	if err != nil {
-		logger.Error("Failed to create addon manager", "error", err)
-	}
 	err = addonMgr.AddAgent(&tokenExchangeAddon)
 	if err != nil {
 		logger.Error("Failed to add token exchange addon to addon manager", "error", err)
+	}
+
+	logger.Info("Initializing s3config addon")
+	s3ConfigAddon := setup.S3ConfigAddons{
+		Client:     mgr.GetClient(),
+		AgentImage: utils.GetEnv("TOKEN_EXCHANGE_IMAGE", o.testEnvFile), // Same image, different command
+		AddonName:  utils.S3ConfigAddonName,
+	}
+
+	err = addonMgr.AddAgent(&s3ConfigAddon)
+	if err != nil {
+		logger.Error("Failed to add s3config addon to addon manager", "error", err)
 	}
 
 	if err = (&ramen.DRPolicyReconciler{

@@ -32,11 +32,32 @@ metadata:
               "5m"
             ]
           }
+        },
+        {
+          "apiVersion": "multicluster.odf.openshift.io/v1alpha1",
+          "kind": "S3Configuration",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "odf-multicluster-orchestrator"
+            },
+            "name": "s3configuration-sample"
+          },
+          "spec": {
+            "internalS3": {
+              "managedCluster": "name",
+              "namespace": "openshift-storage",
+              "storageClassName": "openshift-storage.noobaa.io"
+            },
+            "managedClusters": [
+              "name"
+            ]
+          }
         }
       ]
     capabilities: Seamless Upgrades
     console.openshift.io/plugins: '["odf-multicluster-console"]'
-    createdAt: "2026-08-13T07:02:57Z"
+    createdAt: "2026-10-08T13:16:24Z"
     features.operators.openshift.io/tls-profiles: "true"
     olm.skipRange: ""
     operators.openshift.io/infrastructure-features: '["disconnected"]'
@@ -58,8 +79,19 @@ spec:
       kind: MirrorPeer
       name: mirrorpeers.multicluster.odf.openshift.io
       version: v1alpha1
-    - kind: ProtectedApplicationView
+    - description: ProtectedApplicationView represents an aggregated view of a protected
+        application
+      displayName: Protected Application View
+      kind: ProtectedApplicationView
       name: protectedapplicationviews.multicluster.odf.openshift.io
+      version: v1alpha1
+    - description: |-
+        S3Configuration is the Schema for the s3configurations API.
+        S3Configuration manages S3 configuration for DR metadata storage.
+        One S3Configuration can be referenced by multiple DRClusters.
+      displayName: S3 Configuration
+      kind: S3Configuration
+      name: s3configurations.multicluster.odf.openshift.io
       version: v1alpha1
   description: |
     Orchestrator for Data Foundation clusters running across multiple OpenShift clusters.
@@ -264,6 +296,7 @@ spec:
           - multicluster.odf.openshift.io
           resources:
           - protectedapplicationviews
+          - s3configurations
           verbs:
           - create
           - delete
@@ -276,9 +309,16 @@ spec:
           - multicluster.odf.openshift.io
           resources:
           - protectedapplicationviews/status
+          - s3configurations/status
           verbs:
           - get
           - patch
+          - update
+        - apiGroups:
+          - multicluster.odf.openshift.io
+          resources:
+          - s3configurations/finalizers
+          verbs:
           - update
         - apiGroups:
           - ocs.openshift.io
@@ -359,6 +399,12 @@ spec:
           - patch
           - update
           - watch
+        - apiGroups:
+          - work.open-cluster-management.io
+          resources:
+          - manifestworks/status
+          verbs:
+          - get
         - apiGroups:
           - authentication.k8s.io
           resources:

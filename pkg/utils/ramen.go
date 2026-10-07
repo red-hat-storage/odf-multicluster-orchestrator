@@ -10,6 +10,7 @@ import (
 
 	rmn "github.com/ramendr/ramen/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -161,6 +162,173 @@ func UpdateRamenHubOperatorConfig(ctx context.Context, rc client.Client, secret 
 	}
 
 	logger.Info("Ramen Hub Operator config updated successfully", "ConfigMapName", namespacedName)
+	return nil
+}
+
+// UpdateRamenConfigForS3Configuration updates the Ramen ConfigMap with S3 profile from S3Configuration
+func UpdateRamenConfigForS3Configuration(ctx context.Context, rc client.Client, s3ConfigName string, s3Bucket, s3Region, s3Endpoint string, ramenHubNamespace string, logger *slog.Logger) error {
+	logger.Info("Updating Ramen Hub Operator config for S3Configuration", "s3ConfigName", s3ConfigName)
+
+	expectedS3Profile := rmn.S3StoreProfile{
+		S3ProfileName:        s3ConfigName,
+		S3Bucket:             s3Bucket,
+		S3Region:             s3Region,
+		S3CompatibleEndpoint: s3Endpoint,
+		S3SecretRef: corev1.SecretReference{
+			Name: s3ConfigName,
+		},
+	}
+
+	currentRamenConfigMap := corev1.ConfigMap{}
+	namespacedName := types.NamespacedName{
+		Name:      RamenHubOperatorConfigName,
+		Namespace: ramenHubNamespace,
+	}
+	if err := rc.Get(ctx, namespacedName, &currentRamenConfigMap); err != nil {
+		logger.Error("Failed to fetch Ramen Hub Operator config map", "error", err, "ConfigMapName", namespacedName)
+		return err
+	}
+
+	ramenConfigData, ok := currentRamenConfigMap.Data["ramen_manager_config.yaml"]
+	if !ok {
+		err := fmt.Errorf("DR hub operator config data is empty for the config %q in namespace %q", RamenHubOperatorConfigName, ramenHubNamespace)
+		logger.Error("DR hub operator config data is missing", "error", err)
+		return err
+	}
+
+	// Unmarshal into an unstructured map to preserve unknown fields
+	rawConfig := map[string]interface{}{}
+	if err := yaml.Unmarshal([]byte(ramenConfigData), &rawConfig); err != nil {
+		logger.Error("Failed to unmarshal DR hub operator config data", "error", err)
+		return err
+	}
+
+	existingProfiles, err := extractS3Profiles(rawConfig)
+	if err != nil {
+		logger.Error("Failed to extract S3 profiles from config", "error", err)
+		return err
+	}
+
+	// Update or add profile
+	isUpdated := false
+	for i := range existingProfiles {
+		if existingProfiles[i].S3ProfileName == expectedS3Profile.S3ProfileName {
+			mergeCustomS3ProfileFields(&existingProfiles[i], &expectedS3Profile)
+			if areS3ProfileFieldsEqual(expectedS3Profile, existingProfiles[i]) {
+				logger.Info("No change detected in S3 profile, skipping update", "S3ProfileName", expectedS3Profile.S3ProfileName)
+				return nil
+			}
+			updateS3ProfileFields(&expectedS3Profile, &existingProfiles[i])
+			isUpdated = true
+			logger.Info("S3 profile updated", "S3ProfileName", expectedS3Profile.S3ProfileName)
+			break
+		}
+	}
+
+	if !isUpdated {
+		existingProfiles = append(existingProfiles, expectedS3Profile)
+		logger.Info("New S3 profile added", "S3ProfileName", expectedS3Profile.S3ProfileName)
+	}
+
+	if err := setS3Profiles(rawConfig, existingProfiles); err != nil {
+		logger.Error("Failed to set S3 profiles in config", "error", err)
+		return err
+	}
+
+	ramenConfigDataStr, err := yaml.Marshal(rawConfig)
+	if err != nil {
+		logger.Error("Failed to marshal Ramen config", "error", err)
+		return err
+	}
+
+	_, err = controllerutil.CreateOrUpdate(ctx, rc, &currentRamenConfigMap, func() error {
+		currentRamenConfigMap.Data["ramen_manager_config.yaml"] = string(ramenConfigDataStr)
+		return nil
+	})
+	if err != nil {
+		logger.Error("Failed to update Ramen Hub Operator config map", "error", err)
+		return err
+	}
+
+	logger.Info("Ramen Hub Operator config updated successfully", "ConfigMapName", namespacedName, "S3ProfileName", s3ConfigName)
+	return nil
+}
+
+// RemoveS3ProfileFromRamenConfig removes an S3 profile from the Ramen ConfigMap
+func RemoveS3ProfileFromRamenConfig(ctx context.Context, rc client.Client, s3ConfigName string, ramenHubNamespace string, logger *slog.Logger) error {
+	logger.Info("Removing S3 profile from Ramen Hub Operator config", "s3ProfileName", s3ConfigName)
+
+	currentRamenConfigMap := corev1.ConfigMap{}
+	namespacedName := types.NamespacedName{
+		Name:      RamenHubOperatorConfigName,
+		Namespace: ramenHubNamespace,
+	}
+	if err := rc.Get(ctx, namespacedName, &currentRamenConfigMap); err != nil {
+		if errors.IsNotFound(err) {
+			logger.Info("Ramen ConfigMap not found, nothing to clean up")
+			return nil
+		}
+		logger.Error("Failed to fetch Ramen Hub Operator config map", "error", err, "ConfigMapName", namespacedName)
+		return err
+	}
+
+	ramenConfigData, ok := currentRamenConfigMap.Data["ramen_manager_config.yaml"]
+	if !ok {
+		logger.Info("Ramen config data is empty, nothing to remove")
+		return nil
+	}
+
+	// Unmarshal into an unstructured map to preserve unknown fields
+	rawConfig := map[string]interface{}{}
+	if err := yaml.Unmarshal([]byte(ramenConfigData), &rawConfig); err != nil {
+		logger.Error("Failed to unmarshal DR hub operator config data", "error", err)
+		return err
+	}
+
+	existingProfiles, err := extractS3Profiles(rawConfig)
+	if err != nil {
+		logger.Error("Failed to extract S3 profiles from config", "error", err)
+		return err
+	}
+
+	// Remove profile if it exists
+	found := false
+	updatedProfiles := make([]rmn.S3StoreProfile, 0, len(existingProfiles))
+	for _, profile := range existingProfiles {
+		if profile.S3ProfileName != s3ConfigName {
+			updatedProfiles = append(updatedProfiles, profile)
+		} else {
+			found = true
+			logger.Info("Found S3 profile to remove", "S3ProfileName", s3ConfigName)
+		}
+	}
+
+	if !found {
+		logger.Info("S3 profile not found in Ramen config, nothing to remove", "S3ProfileName", s3ConfigName)
+		return nil
+	}
+
+	if err := setS3Profiles(rawConfig, updatedProfiles); err != nil {
+		logger.Error("Failed to set S3 profiles in config", "error", err)
+		return err
+	}
+
+	ramenConfigDataStr, err := yaml.Marshal(rawConfig)
+	if err != nil {
+		logger.Error("Failed to marshal Ramen config", "error", err)
+		return err
+	}
+
+	_, err = controllerutil.CreateOrUpdate(ctx, rc, &currentRamenConfigMap, func() error {
+		currentRamenConfigMap.Data["ramen_manager_config.yaml"] = string(ramenConfigDataStr)
+		return nil
+	})
+	if err != nil {
+		logger.Error("Failed to update Ramen Hub Operator config map", "error", err)
+		return err
+	}
+
+	logger.Info("Successfully removed S3 profile from Ramen config", "S3ProfileName", s3ConfigName)
 	return nil
 }
 

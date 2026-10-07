@@ -1,0 +1,38 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: s3config-addon-agent
+  namespace: {{ .AddonInstallNamespace }}
+  labels:
+    app: s3config-addon-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: s3config-addon-agent
+  template:
+    metadata:
+      annotations:
+        openshift.io/required-scc: restricted-v2
+      labels:
+        app: s3config-addon-agent
+    spec:
+      serviceAccountName: s3config-addon-agent-sa
+      volumes:
+      - name: hub-config
+        secret:
+          secretName: {{ .KubeConfigSecret }}
+      containers:
+      - name: s3config-addon-agent
+        image: {{ .Image }}
+        imagePullPolicy: Always
+        command:
+        - "/odf-multicluster-orchestrator"
+        args:
+          - "s3config-addon"
+          - "--hub-kubeconfig=/var/run/hub/kubeconfig"
+          - "--cluster-name={{ .ClusterName }}"
+          - "--install-namespace={{ .AddonInstallNamespace }}"
+        volumeMounts:
+          - name: hub-config
+            mountPath: /var/run/hub
