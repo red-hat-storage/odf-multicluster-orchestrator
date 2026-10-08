@@ -44,14 +44,14 @@ type SecretReference struct {
 
 // InternalS3Spec defines configuration for ODF-managed internal S3
 type InternalS3Spec struct {
-	// ManagedCluster is the name of the cluster where the OBC will be created.
+	// ProviderCluster is the name of the cluster where the OBC will be created.
 	// This cluster must be one of the clusters in spec.managedClusters.
 	//
 	// The OBC will ONLY be created on this cluster, and the generated S3 endpoint
 	// will be shared by all clusters in spec.managedClusters.
 	//
 	// +kubebuilder:validation:Required
-	ManagedCluster string `json:"managedCluster"`
+	ProviderCluster string `json:"providerCluster"`
 
 	// StorageClassName is the name of the StorageClass to use for OBC creation.
 	// This StorageClass should be provided by the ODF operator on the managed cluster.
@@ -97,7 +97,7 @@ type ExternalS3Spec struct {
 type S3ConfigurationSpec struct {
 	// InternalS3 specifies configuration for ODF-managed internal S3 (Noobaa/RGW).
 	// When specified, the S3Configuration controller will:
-	//   1. Use addon mechanism to create OBC on the specified cluster (internalS3.managedCluster)
+	//   1. Use addon mechanism to create OBC on the specified cluster (internalS3.providerCluster)
 	//   2. Wait for addon to transfer generated secret from spoke to hub
 	//   3. Copy S3 secret to Ramen operator namespace on hub
 	//   4. Use the secret to configure Ramen ConfigMap S3 profile
@@ -125,7 +125,7 @@ type S3ConfigurationSpec struct {
 	// A DRCluster will be created on the hub for each cluster in this list.
 	//
 	// For InternalS3:
-	//   - OBC created on ONE cluster (specified in internalS3.managedCluster)
+	//   - OBC created on ONE cluster (specified in internalS3.providerCluster)
 	//   - S3 secret copied to Ramen operator namespace on hub
 	//   - DRCluster created on hub for ALL clusters in this list
 	//   - All DRClusters reference the S3 endpoint from the cluster where OBC was created

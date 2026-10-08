@@ -45,8 +45,8 @@ metadata:
           },
           "spec": {
             "internalS3": {
-              "managedCluster": "name",
               "namespace": "openshift-storage",
+              "providerCluster": "name",
               "storageClassName": "openshift-storage.noobaa.io"
             },
             "managedClusters": [
@@ -57,7 +57,7 @@ metadata:
       ]
     capabilities: Seamless Upgrades
     console.openshift.io/plugins: '["odf-multicluster-console"]'
-    createdAt: "2026-10-08T13:16:24Z"
+    createdAt: "2026-10-09T07:14:58Z"
     features.operators.openshift.io/tls-profiles: "true"
     olm.skipRange: ""
     operators.openshift.io/infrastructure-features: '["disconnected"]'

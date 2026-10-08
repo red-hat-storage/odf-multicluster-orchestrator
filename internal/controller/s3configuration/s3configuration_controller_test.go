@@ -111,7 +111,7 @@ func TestReconcile_AddsFinalizer(t *testing.T) {
 		},
 		Spec: multiclusterv1alpha1.S3ConfigurationSpec{
 			InternalS3: &multiclusterv1alpha1.InternalS3Spec{
-				ManagedCluster:   "cluster1",
+				ProviderCluster:  "cluster1",
 				StorageClassName: "test-storage-class",
 				Namespace:        "test-namespace",
 			},
@@ -154,7 +154,7 @@ func TestReconcile_Deletion(t *testing.T) {
 		},
 		Spec: multiclusterv1alpha1.S3ConfigurationSpec{
 			InternalS3: &multiclusterv1alpha1.InternalS3Spec{
-				ManagedCluster:   "cluster1",
+				ProviderCluster:  "cluster1",
 				StorageClassName: "test-storage-class",
 				Namespace:        "test-namespace",
 			},
@@ -189,7 +189,7 @@ func TestEnsureManagedClusterAddOn(t *testing.T) {
 		},
 		Spec: multiclusterv1alpha1.S3ConfigurationSpec{
 			InternalS3: &multiclusterv1alpha1.InternalS3Spec{
-				ManagedCluster:   "cluster1",
+				ProviderCluster:  "cluster1",
 				StorageClassName: "test-storage-class",
 				Namespace:        "test-namespace",
 			},
@@ -240,7 +240,7 @@ func TestEnsureOBCManifestWork(t *testing.T) {
 		},
 		Spec: multiclusterv1alpha1.S3ConfigurationSpec{
 			InternalS3: &multiclusterv1alpha1.InternalS3Spec{
-				ManagedCluster:   "cluster1",
+				ProviderCluster:  "cluster1",
 				StorageClassName: "test-storage-class",
 				Namespace:        "test-namespace",
 				OBCName:          "custom-obc",
@@ -305,7 +305,7 @@ func TestEnsureOBCManifestWork_Applied(t *testing.T) {
 		},
 		Spec: multiclusterv1alpha1.S3ConfigurationSpec{
 			InternalS3: &multiclusterv1alpha1.InternalS3Spec{
-				ManagedCluster:   "cluster1",
+				ProviderCluster:  "cluster1",
 				StorageClassName: "test-storage-class",
 				Namespace:        "test-namespace",
 			},
@@ -422,7 +422,7 @@ func TestEnsureRamenSecret(t *testing.T) {
 		},
 		Spec: multiclusterv1alpha1.S3ConfigurationSpec{
 			InternalS3: &multiclusterv1alpha1.InternalS3Spec{
-				ManagedCluster:   "cluster1",
+				ProviderCluster:  "cluster1",
 				StorageClassName: "test-storage-class",
 				Namespace:        "test-namespace",
 			},
@@ -485,7 +485,7 @@ func TestEnsureDRClusters(t *testing.T) {
 		},
 		Spec: multiclusterv1alpha1.S3ConfigurationSpec{
 			InternalS3: &multiclusterv1alpha1.InternalS3Spec{
-				ManagedCluster:   "cluster1",
+				ProviderCluster:  "cluster1",
 				StorageClassName: "test-storage-class",
 				Namespace:        "test-namespace",
 			},
@@ -524,7 +524,7 @@ func TestReconcilePhases_StatusProgression(t *testing.T) {
 		},
 		Spec: multiclusterv1alpha1.S3ConfigurationSpec{
 			InternalS3: &multiclusterv1alpha1.InternalS3Spec{
-				ManagedCluster:   "cluster1",
+				ProviderCluster:  "cluster1",
 				StorageClassName: "test-storage-class",
 				Namespace:        "test-namespace",
 			},
@@ -561,7 +561,7 @@ func TestValidateManagedClustersUniqueness_NoDuplicates(t *testing.T) {
 		},
 		Spec: multiclusterv1alpha1.S3ConfigurationSpec{
 			InternalS3: &multiclusterv1alpha1.InternalS3Spec{
-				ManagedCluster:   "cluster1",
+				ProviderCluster:  "cluster1",
 				StorageClassName: "test-storage-class",
 				Namespace:        "test-namespace",
 			},
@@ -586,7 +586,7 @@ func TestValidateManagedClustersUniqueness_DuplicateWithinSameConfig(t *testing.
 		},
 		Spec: multiclusterv1alpha1.S3ConfigurationSpec{
 			InternalS3: &multiclusterv1alpha1.InternalS3Spec{
-				ManagedCluster:   "cluster1",
+				ProviderCluster:  "cluster1",
 				StorageClassName: "test-storage-class",
 				Namespace:        "test-namespace",
 			},
@@ -612,7 +612,7 @@ func TestValidateManagedClustersUniqueness_ConflictWithOtherS3Config(t *testing.
 		},
 		Spec: multiclusterv1alpha1.S3ConfigurationSpec{
 			InternalS3: &multiclusterv1alpha1.InternalS3Spec{
-				ManagedCluster:   "cluster1",
+				ProviderCluster:  "cluster1",
 				StorageClassName: "test-storage-class",
 				Namespace:        "test-namespace",
 			},
@@ -627,7 +627,7 @@ func TestValidateManagedClustersUniqueness_ConflictWithOtherS3Config(t *testing.
 		},
 		Spec: multiclusterv1alpha1.S3ConfigurationSpec{
 			InternalS3: &multiclusterv1alpha1.InternalS3Spec{
-				ManagedCluster:   "cluster2",
+				ProviderCluster:  "cluster2",
 				StorageClassName: "test-storage-class",
 				Namespace:        "test-namespace",
 			},
@@ -656,7 +656,7 @@ func TestValidateManagedClustersUniqueness_NoConflictWithSelf(t *testing.T) {
 		},
 		Spec: multiclusterv1alpha1.S3ConfigurationSpec{
 			InternalS3: &multiclusterv1alpha1.InternalS3Spec{
-				ManagedCluster:   "cluster1",
+				ProviderCluster:  "cluster1",
 				StorageClassName: "test-storage-class",
 				Namespace:        "test-namespace",
 			},
