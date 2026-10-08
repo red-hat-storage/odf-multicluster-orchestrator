@@ -25,6 +25,8 @@ import (
 	"strings"
 	"time"
 
+	"k8s.io/klog/v2"
+
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
@@ -790,6 +792,9 @@ func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, m
 	clusterManagementAddOn := addonapiv1alpha1.ClusterManagementAddOn{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: utils.TokenExchangeName,
+			Labels: map[string]string{
+				utils.CreatedByLabelKey: utils.CreatorMulticlusterOrchestrator,
+			},
 		},
 		Spec: addonapiv1alpha1.ClusterManagementAddOnSpec{
 			AddOnMeta: addonapiv1alpha1.AddOnMeta{
@@ -830,6 +835,9 @@ func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, m
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      utils.TokenExchangeName,
 				Namespace: config.Namespace,
+				Labels: map[string]string{
+					utils.CreatedByLabelKey: utils.CreatorMulticlusterOrchestrator,
+				},
 			},
 		}
 
