@@ -299,3 +299,9 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - work.open-cluster-management.io
+  resources:
+  - manifestworks/status
+  verbs:
+  - get

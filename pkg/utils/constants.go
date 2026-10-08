@@ -11,11 +11,13 @@ const (
 
 	RamenHubOperatorConfigName = "ramen-hub-operator-config"
 
-	MirrorPeerNameAnnotationKey = "multicluster.odf.openshift.io/mirrorpeer"
-	HubOperatorNamespaceKey     = "hub.multicluster.odf.openshift.io/operator-namespace"
+	MirrorPeerNameAnnotationKey      = "multicluster.odf.openshift.io/mirrorpeer"
+	S3ConfigurationNameAnnotationKey = "multicluster.odf.openshift.io/s3configuration"
+	HubOperatorNamespaceKey          = "hub.multicluster.odf.openshift.io/operator-namespace"
 
 	SpokeMirrorPeerFinalizer = "spoke.multicluster.odf.openshift.io"
 	TokenExchangeName        = "tokenexchange"
+	S3ConfigAddonName        = "s3config"
 
 	// Addon shared constants
 	RBDProvisionerTemplate        = "%s.rbd.csi.ceph.com"

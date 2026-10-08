@@ -1,0 +1,21 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: s3config-addon-agent
+  namespace: {{ .AddonInstallNamespace }}
+rules:
+- apiGroups: ["objectbucket.io"]
+  resources: ["objectbucketclaims"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+- apiGroups: ["objectbucket.io"]
+  resources: ["objectbucketclaims/finalizers"]
+  verbs: ["update"]
+- apiGroups: [""]
+  resources: ["secrets", "configmaps"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["route.openshift.io"]
+  resources: ["routes"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "create", "update"]

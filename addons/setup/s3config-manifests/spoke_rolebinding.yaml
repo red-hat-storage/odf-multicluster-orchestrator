@@ -1,0 +1,16 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: s3config-addon-agent
+  namespace: {{ .AddonInstallNamespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: s3config-addon-agent
+subjects:
+- kind: ServiceAccount
+  name: s3config-addon-agent-sa
+  namespace: {{ .AddonInstallNamespace }}
+- kind: Group
+  name: {{ .Group }}
+  apiGroup: rbac.authorization.k8s.io
