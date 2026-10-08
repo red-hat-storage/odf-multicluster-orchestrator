@@ -809,6 +809,7 @@ func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, m
 		}
 		clusterManagementAddOn.Annotations[AddonVersionAnnotationKey] = version.Version
 		clusterManagementAddOn.Annotations[utils.HubOperatorNamespaceKey] = r.CurrentNamespace
+		utils.AddLabel(&clusterManagementAddOn, utils.CreatedByLabelKey, utils.CreatorMulticlusterOrchestrator)
 
 		return controllerutil.SetOwnerReference(mirrorPeer, &clusterManagementAddOn, r.Scheme)
 	})
@@ -840,6 +841,7 @@ func (r *MirrorPeerReconciler) processManagedClusterAddon(ctx context.Context, m
 			annotations[utils.HubOperatorNamespaceKey] = r.CurrentNamespace
 
 			managedClusterAddOn.Annotations = annotations
+			utils.AddLabel(&managedClusterAddOn, utils.CreatedByLabelKey, utils.CreatorMulticlusterOrchestrator)
 			managedClusterAddOn.Spec.InstallNamespace = config.InstallNamespace
 			return controllerutil.SetOwnerReference(mirrorPeer, &managedClusterAddOn, r.Scheme)
 		})
