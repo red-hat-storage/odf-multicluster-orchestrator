@@ -42,6 +42,7 @@ func generateBlueSecret(
 			Namespace: managedCluster,
 			Labels: map[string]string{
 				utils.SecretLabelTypeKey: string(secretType),
+				utils.CreatedByLabelKey:  string(utils.TokenExchangeName),
 				utils.HubRecoveryLabel:   "",
 			},
 			Annotations: annotations,
