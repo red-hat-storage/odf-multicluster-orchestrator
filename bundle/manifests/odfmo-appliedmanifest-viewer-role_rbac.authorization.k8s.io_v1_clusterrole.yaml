@@ -1,0 +1,23 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: odf-multicluster-orchestrator
+  name: odfmo-appliedmanifest-viewer-role
+rules:
+- apiGroups:
+  - multicluster.odf.openshift.io
+  resources:
+  - appliedmanifests
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - multicluster.odf.openshift.io
+  resources:
+  - appliedmanifests/status
+  verbs:
+  - get
