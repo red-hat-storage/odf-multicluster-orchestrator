@@ -109,6 +109,7 @@ else
 		--patch '[{"op": "replace", "path": "/spec/replaces", "value": "$(REPLACES)"}]'
 	export IMG=$(IMG) MULTICLUSTER_CONSOLE_IMG=$(MULTICLUSTER_CONSOLE_IMG) && $(KUSTOMIZE) build config/manifests | envsubst | $(OSDK) generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
 endif
+	hack/update-csv-timestamp.sh
 	$(OSDK) bundle validate ./bundle
 
 .PHONY: bundle-build
