@@ -65,7 +65,7 @@ func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name strin
 			return fmt.Errorf("failed to find client peerRef for current provider cluster %s. %w", r.SpokeClusterName, err)
 		}
 		if len(storagePeerRefList) > 1 {
-			s3ProfileName = fmt.Sprintf("%s-%s-%s", utils.S3ProfilePrefix, r.SpokeClusterName, string(mirrorPeer.UID))
+			s3ProfileName = fmt.Sprintf("%s-%s-%d", utils.S3ProfilePrefix, r.SpokeClusterName, utils.FnvHash(mirrorPeer.Name))
 		}
 		if len(storagePeerRefList) < 1 {
 			r.Logger.Info("OBC references MirrorPeer which is not related to this provider.", "OBC Name", name, "OBC Namespace", namespace, "MirrorPeer", mirrorPeerName)
