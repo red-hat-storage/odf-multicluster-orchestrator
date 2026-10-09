@@ -136,17 +136,14 @@ stringData:
   AWS_ACCESS_KEY_ID: "..."
   AWS_SECRET_ACCESS_KEY: "..."
   s3Bucket: "dr-metadata-bucket"
-  s3Endpoint: "https://s3.amazonaws.com"
-  s3Region: "us-west-2"  # optional
+  s3CompatibleEndpoint: "https://s3.amazonaws.com"
+  s3Region: "us-west-2"  # required (AWS SDK signing region)
 ```
 
 ### 2.3 S3ConfigurationStatus
 
 ```go
 type S3ConfigurationStatus struct {
-    // +optional
-    Conditions []metav1.Condition `json:"conditions,omitempty"`
-    
     // +optional
     Phase S3ConfigurationPhase `json:"phase,omitempty"`
     
@@ -307,7 +304,7 @@ stringData:
   AWS_ACCESS_KEY_ID: "AKIAIOSFODNN7EXAMPLE"
   AWS_SECRET_ACCESS_KEY: "wJalrXUtnFEMI/..."
   s3Bucket: "my-dr-bucket"
-  s3Endpoint: "https://s3.us-west-2.amazonaws.com"
+  s3CompatibleEndpoint: "https://s3.us-west-2.amazonaws.com"
   s3Region: "us-west-2"
 
 ---
@@ -405,20 +402,22 @@ The following validations are implemented using CEL (Common Expression Language)
 - ❌ `spec.externalS3.*` - all fields immutable after creation
 - ❌ `spec.[]managedClusters` - all fields immutable after creation
 
-### 5.2 Validations (Future Implementation)
+### 5.2 Controller-Side Validations
 
-**Status:** 🔜 Not yet implemented - documented for future work
+These are enforced by the controller at reconcile time (not at admission like the CEL rules).
 
-**Cluster Uniqueness:**
+**Cluster Uniqueness (Implemented):**
 - Each cluster can only appear in ONE S3Configuration's `managedClusters` list
+  (`validateManagedClustersUniqueness`). Because this is a controller-side check,
+  there is an inherent race between near-simultaneous creates; a validating
+  webhook would be needed for a hard guarantee.
 
-**ManagedCluster Existence:**
-- Validate that referenced ManagedCluster resources actually exist
+**Deletion Protection (Implemented):**
+- An S3Configuration cannot be deleted while any DRPolicy references one of its
+  clusters (`validateNoDRPolicyUsesClusters`).
 
-**Deletion Protection:**
-- Cannot delete S3Configuration if any MirrorPeer references its clusters
-
-#### 5.2.3 Implementation Reference
+**ManagedCluster Existence (Future):**
+- Validate that referenced ManagedCluster resources actually exist.
 
 ### 7. Secret Sync Mechanism
 

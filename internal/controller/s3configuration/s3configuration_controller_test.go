@@ -40,6 +40,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	yaml "sigs.k8s.io/yaml"
 )
 
 func TestGetOBCName(t *testing.T) {
@@ -824,5 +825,96 @@ func getFakeS3ConfigurationReconciler(t *testing.T, initObjs ...runtime.Object) 
 		Scheme:           scheme,
 		Logger:           logger,
 		CurrentNamespace: "openshift-operators",
+	}
+}
+
+func TestReconcile_ExternalS3(t *testing.T) {
+	ctx := context.TODO()
+	const currentNamespace = "openshift-operators"
+
+	s3Config := &multiclusterv1alpha1.S3Configuration{
+		ObjectMeta: metav1.ObjectMeta{Name: "ext-s3"},
+		Spec: multiclusterv1alpha1.S3ConfigurationSpec{
+			ExternalS3: &multiclusterv1alpha1.ExternalS3Spec{
+				SecretRef: multiclusterv1alpha1.SecretReference{
+					Name:      "ext-s3-creds",
+					Namespace: "dr-system",
+				},
+			},
+			ManagedClusters: []string{"cluster1", "cluster2"},
+		},
+	}
+
+	// User-provided source secret.
+	sourceSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "ext-s3-creds", Namespace: "dr-system"},
+		Data: map[string][]byte{
+			utils.AwsAccessKeyId:     []byte("access-key"),
+			utils.AwsSecretAccessKey: []byte("secret-key"),
+			utils.S3BucketName:       []byte("ext-bucket"),
+			utils.S3Endpoint:         []byte("https://s3.example.com"),
+			utils.S3Region:           []byte("us-east-1"),
+		},
+	}
+
+	// Ramen hub operator config must exist for the profile update to succeed.
+	emptyConfig, err := yaml.Marshal(rmn.RamenConfig{})
+	assert.NoError(t, err)
+	ramenCM := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: utils.RamenHubOperatorConfigName, Namespace: currentNamespace},
+		Data:       map[string]string{"ramen_manager_config.yaml": string(emptyConfig)},
+	}
+
+	r := getFakeS3ConfigurationReconciler(t, s3Config, sourceSecret, ramenCM)
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "ext-s3"}}
+
+	// First reconcile adds the finalizer and requeues; second does the work.
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Reconcile() (finalizer pass) failed: %s", err)
+	}
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("Reconcile() (configure pass) failed: %s", err)
+	}
+
+	// Ramen secret copied into the operator namespace, named after the CR.
+	ramenSecret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: "ext-s3", Namespace: currentNamespace}, ramenSecret); err != nil {
+		t.Fatalf("expected Ramen secret to be created: %s", err)
+	}
+	if string(ramenSecret.Data[utils.AwsAccessKeyId]) != "access-key" {
+		t.Errorf("Ramen secret AWS_ACCESS_KEY_ID = %q, want access-key", ramenSecret.Data[utils.AwsAccessKeyId])
+	}
+
+	// Ramen configmap gained the S3 profile named after the CR.
+	cm := &corev1.ConfigMap{}
+	if err := r.Get(ctx, types.NamespacedName{Name: utils.RamenHubOperatorConfigName, Namespace: currentNamespace}, cm); err != nil {
+		t.Fatalf("failed to get ramen configmap: %s", err)
+	}
+	if !strings.Contains(cm.Data["ramen_manager_config.yaml"], "ext-s3") {
+		t.Errorf("expected s3 profile 'ext-s3' in ramen config, got: %s", cm.Data["ramen_manager_config.yaml"])
+	}
+
+	// One DRCluster per managed cluster, referencing the CR's profile.
+	for _, name := range []string{"cluster1", "cluster2"} {
+		drc := &rmn.DRCluster{}
+		if err := r.Get(ctx, types.NamespacedName{Name: name}, drc); err != nil {
+			t.Errorf("expected DRCluster %q to be created: %s", name, err)
+			continue
+		}
+		if drc.Spec.S3ProfileName != "ext-s3" {
+			t.Errorf("DRCluster %q s3ProfileName = %q, want ext-s3", name, drc.Spec.S3ProfileName)
+		}
+	}
+
+	// Status reflects success.
+	updated := &multiclusterv1alpha1.S3Configuration{}
+	if err := r.Get(ctx, types.NamespacedName{Name: "ext-s3"}, updated); err != nil {
+		t.Fatalf("failed to get s3config: %s", err)
+	}
+	if updated.Status.Phase != multiclusterv1alpha1.S3ConfigurationPhaseReady {
+		t.Errorf("Status.Phase = %q, want Ready", updated.Status.Phase)
+	}
+	if len(updated.Status.ConfiguredClusters) != 2 {
+		t.Errorf("Status.ConfiguredClusters = %v, want 2 clusters", updated.Status.ConfiguredClusters)
 	}
 }

@@ -80,8 +80,8 @@ type ExternalS3Spec struct {
 	//   - AWS_ACCESS_KEY_ID: S3 access key
 	//   - AWS_SECRET_ACCESS_KEY: S3 secret key
 	//   - s3Bucket: Bucket name for DR metadata
-	//   - s3Endpoint: S3 endpoint URL
-	//   - s3Region: S3 region (optional, defaults to us-east-1)
+	//   - s3CompatibleEndpoint: S3 endpoint URL
+	//   - s3Region: S3 region (required; used as the AWS SDK signing region)
 	//
 	// +kubebuilder:validation:Required
 	SecretRef SecretReference `json:"secretRef"`

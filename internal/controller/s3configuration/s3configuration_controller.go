@@ -273,6 +273,10 @@ func (r *S3ConfigurationReconciler) reconcilePhases(ctx context.Context, logger 
 			logger.Error("Failed to get secret", "secret", client.ObjectKeyFromObject(secret), "error", err)
 			return ctrl.Result{}, err
 		}
+	} else if s3Config.Spec.ExternalS3 != nil {
+		// External S3: the user has already created the secret on the hub.
+		secret.Name = s3Config.Spec.ExternalS3.SecretRef.Name
+		secret.Namespace = s3Config.Spec.ExternalS3.SecretRef.Namespace
 	}
 
 	if err := r.validateSecret(ctx, logger, secret); err != nil {
@@ -298,9 +302,9 @@ func (r *S3ConfigurationReconciler) reconcilePhases(ctx context.Context, logger 
 	// Phase 7: Update status to Ready
 	s3Config.Status.ConfiguredClusters = s3Config.Spec.ManagedClusters
 	s3Config.Status.Phase = multiclusterv1alpha1.S3ConfigurationPhaseReady
-	s3Config.Status.Message = "InternalS3 configured successfully"
+	s3Config.Status.Message = "S3 configured successfully"
 
-	logger.Info("InternalS3 configuration completed successfully")
+	logger.Info("S3 configuration completed successfully")
 
 	return ctrl.Result{}, nil
 }
@@ -543,7 +547,7 @@ func (r *S3ConfigurationReconciler) validateSecret(ctx context.Context, logger *
 		}
 	}
 
-	logger.Info("Found valid internal secret", "secret", client.ObjectKeyFromObject(secret))
+	logger.Info("Found valid secret", "secret", client.ObjectKeyFromObject(secret))
 	return nil
 }
 
