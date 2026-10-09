@@ -89,7 +89,20 @@ spec:
                     1))
               manageS3:
                 default: false
+                description: |-
+                  Deprecated: ManageS3 is deprecated and will be removed in a future release.
+                  S3 configuration should be managed via the S3Configuration CR instead.
                 type: boolean
+              storageVendor:
+                default: odf
+                description: StorageVendor represents the type of storage vendor for
+                  which MirrorPeer is created.
+                enum:
+                - odf
+                type: string
+                x-kubernetes-validations:
+                - message: spec.type is immutable.
+                  rule: self == oldSelf
               type:
                 default: async
                 description: Type represents the mode of DR operation (sync or async)
