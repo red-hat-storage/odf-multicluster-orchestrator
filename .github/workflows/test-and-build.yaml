@@ -88,7 +88,10 @@ jobs:
         go-version-file: go.mod
 
     - name: Validate
-      run: make bundle
+      run: |
+        make bundle
+        msg='Uncommitted bundle changes. Run `make bundle` and commit results.'
+        git diff --exit-code bundle || (echo -e '\e[31m'"$msg"; exit 1)
 
   build-bundle:
     name: Build Bundle Image
