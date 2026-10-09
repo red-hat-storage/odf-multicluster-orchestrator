@@ -15,9 +15,10 @@ require (
 	github.com/onsi/gomega v1.38.2
 	github.com/openshift/api v0.0.0-20251120040117-916c7003ed78
 	github.com/openshift/library-go v0.0.0-20240124134907-4dfbf6bc7b11
-	github.com/ramendr/ramen/api v0.0.0-20260609143232-8539a3642b6e
+	github.com/ramendr/ramen/api v0.1.0-rc1
 	github.com/red-hat-storage/ocs-operator/api/v4 v4.0.0-20260113064915-e9473b4e5f1a
 	github.com/red-hat-storage/ocs-tls-profiles/api v0.0.0-20260427105901-0c5f6d8fcd65
+	github.com/red-hat-storage/odf-multicluster-orchestrator/api v0.0.0-00010101000000-000000000000
 	github.com/rook/rook/pkg/apis v0.0.0-20260113214458-a712afae9805
 	github.com/spf13/cobra v1.10.2
 	github.com/stolostron/multicloud-operators-foundation v0.0.0-20220824091202-e9cd9710d009
@@ -51,7 +52,7 @@ require (
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.6.0 // indirect
 	github.com/MakeNowJust/heredoc v1.0.0 // indirect
-	github.com/Masterminds/semver/v3 v3.4.0 // indirect
+	github.com/Masterminds/semver/v3 v3.5.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.1.6 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
@@ -259,6 +260,7 @@ replace (
 	github.com/openshift/hive => github.com/openshift/hive v1.1.17-0.20220223000051-b1c8fa5853b1
 	github.com/openshift/hive/apis => github.com/openshift/hive/apis v0.0.0-20220221165319-b389a65758da
 	github.com/portworx/sched-ops => github.com/portworx/sched-ops v0.20.4-openstorage-rc3
+	github.com/red-hat-storage/odf-multicluster-orchestrator/api => ./api
 	github.com/terraform-providers/terraform-provider-aws => github.com/openshift/terraform-provider-aws v1.60.1-0.20211215220004-24df6d73af46
 	github.com/terraform-providers/terraform-provider-ignition/v2 => github.com/community-terraform-providers/terraform-provider-ignition/v2 v2.1.0
 	k8s.io/apimachinery => k8s.io/apimachinery v0.34.2
