@@ -26,10 +26,3 @@ func GetEnv(key string, filenames ...string) string {
 
 	return ""
 }
-
-func GetEnvOrDefault(key, defaultValue string, filenames ...string) string {
-	if value := GetEnv(key, filenames...); value != "" {
-		return value
-	}
-	return defaultValue
-}

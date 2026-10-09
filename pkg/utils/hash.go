@@ -2,15 +2,10 @@ package utils
 
 import (
 	"crypto/md5"
-	"crypto/sha1"
-	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
-	"strings"
-
-	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 )
 
 /*
@@ -24,35 +19,6 @@ func FnvHash(s string) uint32 {
 		return 0
 	}
 	return h.Sum32()
-}
-
-// CreateUniqueName function creates a sha512 hex sum from the given parameters
-func CreateUniqueName(params ...string) string {
-	genStr := strings.Join(params, "-")
-	return fmt.Sprintf("%x", sha512.Sum512([]byte(genStr)))
-}
-
-// CreateUniqueSecretName function creates a name of 40 chars using sha512 hex sum from the given parameters
-func CreateUniqueSecretName(managedCluster, storageClusterNamespace, storageClusterName string, prefix ...string) string {
-	if len(prefix) > 0 {
-		return CreateUniqueName(prefix[0], managedCluster, storageClusterNamespace, storageClusterName)[0:39]
-	}
-	return CreateUniqueName(managedCluster, storageClusterNamespace, storageClusterName)[0:39]
-}
-
-func CreateUniqueSecretNameForClient(providerKey, clientKey1, clientKey2 string) string {
-	return CreateUniqueName(providerKey, clientKey1, clientKey2)[0:39]
-}
-
-func GenerateUniqueIdForMirrorPeer(mirrorPeer *multiclusterv1alpha1.MirrorPeer) string {
-	var checksum [20]byte
-	var peerAccumulator string
-	for _, peer := range mirrorPeer.Spec.Items {
-		peerAccumulator += peer.ClusterName
-	}
-	checksum = sha1.Sum([]byte(peerAccumulator))
-	// truncate to bucketGenerateName + "-" + first 12 (out of 20) byte representations of sha1 checksum
-	return hex.EncodeToString(checksum[:])
 }
 
 func GetKey(clusterName, clientName string) string {
