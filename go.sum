@@ -109,8 +109,8 @@ github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym
 github.com/IBM/keyprotect-go-client v0.5.1/go.mod h1:5TwDM/4FRJq1ZOlwQL1xFahLWQ3TveR88VmL1u3njyI=
 github.com/MakeNowJust/heredoc v1.0.0 h1:cXCdzVdstXyiTqTvfqk9SDHpKNjxuom+DOlyEeQ4pzQ=
 github.com/MakeNowJust/heredoc v1.0.0/go.mod h1:mG5amYoWBHf8vpLOuehzbGGw0EHxpZZ6lCpQ4fNJ8LE=
-github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1Xbatp0=
-github.com/Masterminds/semver/v3 v3.4.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
+github.com/Masterminds/semver/v3 v3.5.0 h1:kQceYJfbupGfZOKZQg0kou0DgAKhzDg2NZPAwZ/2OOE=
+github.com/Masterminds/semver/v3 v3.5.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/Microsoft/go-winio v0.5.2/go.mod h1:WpS1mjBmmwHBEWmogvA2mj8546UReBk4v8QkMxJ6pZY=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
@@ -1017,8 +1017,8 @@ github.com/prometheus/procfs v0.17.0/go.mod h1:oPQLaDAMRbA+u8H5Pbfq+dl3VDAvHxMUO
 github.com/prometheus/tsdb v0.7.1/go.mod h1:qhTCs0VvXwvX/y3TZrWD7rabWM+ijKTux40TwIPHuXU=
 github.com/r3labs/diff/v3 v3.0.2 h1:yVuxAY1V6MeM4+HNur92xkS39kB/N+cFi2hMkY06BbA=
 github.com/r3labs/diff/v3 v3.0.2/go.mod h1:Cy542hv0BAEmhDYWtGxXRQ4kqRsVIcEjG9gChUlTmkw=
-github.com/ramendr/ramen/api v0.0.0-20260609143232-8539a3642b6e h1:PNYx+wTSAoRo5THxe1qvyNuiQ9T3/DT+5aash0rI21E=
-github.com/ramendr/ramen/api v0.0.0-20260609143232-8539a3642b6e/go.mod h1:F6Iuq5ywxI4TJL2VvoJNQvn2cMWOHOdysbaoeT9RMig=
+github.com/ramendr/ramen/api v0.1.0-rc1 h1:qTZ5nU1N7KiM7ht+e4RdTpvsOxbjXQUPj5PRTJchpnQ=
+github.com/ramendr/ramen/api v0.1.0-rc1/go.mod h1:F6Iuq5ywxI4TJL2VvoJNQvn2cMWOHOdysbaoeT9RMig=
 github.com/red-hat-storage/ocs-operator/api/v4 v4.0.0-20260113064915-e9473b4e5f1a h1:FeRvfblz8THny6ShCPxCDmKu8rKmbF348f1FtPvTKhk=
 github.com/red-hat-storage/ocs-operator/api/v4 v4.0.0-20260113064915-e9473b4e5f1a/go.mod h1:Lkfm/UaH1hPkjLjXf4g2elAaGspLzmHXwgGSIkeNzf4=
 github.com/red-hat-storage/ocs-tls-profiles/api v0.0.0-20260427105901-0c5f6d8fcd65 h1:Ie0cAiC3lrzy6S5vZ7tKCs3SjAAIs3wFbNJkGrx6tXg=
