@@ -3,6 +3,8 @@ kind: MirrorPeer
 metadata:
   name: mirrorpeer-sample
 spec:
+  storageVendor: odf
+  type: async
   items:
     - clusterName: local-cluster
       storageClusterRef:
@@ -12,5 +14,3 @@ spec:
       storageClusterRef:
         name: ocs-storagecluster
         namespace: openshift-storage
-  schedulingIntervals: ["5m"]
-  manageS3: false

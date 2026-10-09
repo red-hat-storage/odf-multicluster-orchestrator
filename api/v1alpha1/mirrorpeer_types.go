@@ -23,6 +23,7 @@ import (
 type PhaseType string
 type DRType string
 type PhaseMessage string
+type VendorType string
 
 // PhaseType for a mirrorpeer
 const (
@@ -37,6 +38,11 @@ const (
 const (
 	Sync  DRType = "sync"
 	Async DRType = "async"
+)
+
+// VendorType for a mirrorpeer
+const (
+	ODF VendorType = "odf"
 )
 
 // PhaseMessage for a mirrorpeer
@@ -112,6 +118,13 @@ type PeerRef struct {
 
 // MirrorPeerSpec defines the desired state of MirrorPeer
 type MirrorPeerSpec struct {
+	// StorageVendor represents the type of storage vendor for which MirrorPeer is created.
+	// +kubebuilder:default=odf
+	// +kubebuilder:validation:Enum=odf;
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec.type is immutable."
+	// +optional
+	StorageVendor VendorType `json:"storageVendor,omitempty"`
+
 	// Type represents the mode of DR operation (sync or async)
 	// +kubebuilder:default=async
 	// +kubebuilder:validation:Enum=async;sync
@@ -126,8 +139,11 @@ type MirrorPeerSpec struct {
 	// +listMapKey=clusterName
 	Items []PeerRef `json:"items"`
 
+	// Deprecated: ManageS3 is deprecated and will be removed in a future release.
+	// S3 configuration should be managed via the S3Configuration CR instead.
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=false
+	// +optional
 	ManageS3 bool `json:"manageS3,omitempty"`
 }
 

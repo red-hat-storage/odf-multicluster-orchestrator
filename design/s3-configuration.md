@@ -350,7 +350,7 @@ kind: MirrorPeer
 metadata:
   name: odf-dr
 spec:
-  vendor: odf
+  storageVendor: odf
   items:
     - clusterName: cluster1
       storageClusterRef: {name: ocs-storagecluster}
@@ -365,7 +365,7 @@ kind: MirrorPeer
 metadata:
   name: dell-dr
 spec:
-  vendor: dell
+  storageVendor: dell
   items:
     - clusterName: cluster1
       storageClusterRef: {name: powerstore}
