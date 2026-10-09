@@ -5,25 +5,8 @@ import (
 	"fmt"
 
 	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
-	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-const (
-	CephClusterNameTemplate = "%s-cephcluster"
-)
-
-func FetchCephCluster(ctx context.Context, c client.Client, storageClusterNamespacedName types.NamespacedName) (*rookv1.CephCluster, error) {
-	var cephCluster rookv1.CephCluster
-	cephClusterName := fmt.Sprintf(CephClusterNameTemplate, storageClusterNamespacedName.Name)
-	cephClusterNamespace := storageClusterNamespacedName.Namespace
-	err := c.Get(ctx, types.NamespacedName{Namespace: cephClusterNamespace, Name: cephClusterName}, &cephCluster)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve cephcluster with name %s in namespace %s", cephClusterName, cephClusterNamespace)
-	}
-	return &cephCluster, nil
-}
 
 func GetStorageClusterFromCurrentNamespace(ctx context.Context, c client.Client, namespace string) (*ocsv1.StorageCluster, error) {
 	storageClusterList := &ocsv1.StorageClusterList{}

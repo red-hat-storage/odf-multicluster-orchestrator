@@ -4,9 +4,6 @@ metadata:
   name: token-exchange-agent-role
   namespace: {{ .AddonInstallNamespace }}
 rules:
-- apiGroups: [""]
-  resources: ["pods", "namespaces"]
-  verbs: ["get", "list"]
 - apiGroups: ["apps"]
   resources: ["replicasets", "deployments"]
   verbs: ["get"]
@@ -16,9 +13,6 @@ rules:
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]
   verbs: ["get", "list", "watch", "create", "update", "delete"]
-- apiGroups: ["ceph.rook.io"]
-  resources: ["cephclusters"]
-  verbs: ["get", "list", "update"]
 - apiGroups: ["ocs.openshift.io"]
   resources: ["storageclusters"]
   verbs: ["get", "watch", "list", "create"]

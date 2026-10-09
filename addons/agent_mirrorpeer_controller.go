@@ -35,9 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // MirrorPeerReconciler reconciles a MirrorPeer object
@@ -149,11 +147,6 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 
-		result, err := r.deleteMirrorPeer(ctx, mirrorPeer, scr)
-		if err != nil {
-			return result, err
-		}
-
 		err = r.HubClient.Get(ctx, req.NamespacedName, mirrorPeer)
 		if err != nil {
 			if errors.IsNotFound(err) {
@@ -171,13 +164,6 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 		logger.Info("MirrorPeer deletion complete")
 		return ctrl.Result{}, nil
-	}
-
-	logger.Info("Creating S3 buckets")
-	err = r.createS3(ctx, mirrorPeer, scr.Namespace, hasStorageClientRef)
-	if err != nil {
-		logger.Error("Failed to create ODR S3 resources", "error", err)
-		return ctrl.Result{}, err
 	}
 
 	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async && hasStorageClientRef {
@@ -226,27 +212,6 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	return ctrl.Result{}, nil
-}
-
-func (r *MirrorPeerReconciler) createS3(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer, scNamespace string, hasStorageClientRef bool) error {
-	bucketNamespace := utils.GetEnvOrDefault("ODR_NAMESPACE", scNamespace, r.TestEnvFile)
-	bucketName := odf.GenerateBucketName(mirrorPeer)
-	annotations := map[string]string{
-		utils.MirrorPeerNameAnnotationKey: mirrorPeer.Name,
-	}
-	if hasStorageClientRef {
-		annotations[utils.OBCTypeAnnotationKey] = string(utils.OBCTypeClient)
-	} else {
-		annotations[utils.OBCTypeAnnotationKey] = string(utils.OBCTypeCluster)
-	}
-
-	operationResult, err := odf.CreateOrUpdateObjectBucketClaim(ctx, r.SpokeClient, bucketName, bucketNamespace, annotations)
-	if err != nil {
-		return err
-	}
-	r.Logger.Info(fmt.Sprintf("ObjectBucketClaim %s was %s in namespace %s", bucketName, operationResult, bucketNamespace))
-
-	return nil
 }
 
 func (r *MirrorPeerReconciler) hasSpokeCluster(obj client.Object) bool {
@@ -301,70 +266,10 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		},
 	}
 
-	tokenToMirrorPeerMapFunc := func(ctx context.Context, obj client.Object) []ctrl.Request {
-		reqs := []ctrl.Request{}
-		var mirrorPeerList multiclusterv1alpha1.MirrorPeerList
-		err := r.HubClient.List(ctx, &mirrorPeerList)
-		if err != nil {
-			r.Logger.Error("Unable to reconcile MirrorPeer based on token changes.", "error", err)
-			return reqs
-		}
-		for _, mirrorpeer := range mirrorPeerList.Items {
-			if mirrorpeer.Status.Phase == multiclusterv1alpha1.Failed {
-				continue
-			}
-			for _, peerRef := range mirrorpeer.Spec.Items {
-				name := utils.GetSecretNameByPeerRef(peerRef)
-				if name == obj.GetName() {
-					reqs = append(reqs, reconcile.Request{NamespacedName: types.NamespacedName{Name: mirrorpeer.Name}})
-					break
-				}
-			}
-		}
-		return reqs
-	}
-
 	r.Logger.Info("Setting up controller with manager")
 	mpPredicate := predicate.And(predicate.GenerationChangedPredicate{}, mirrorPeerSpokeClusterPredicate)
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("agent_mirrorpeer_controller").
 		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(mpPredicate)).
-		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(tokenToMirrorPeerMapFunc), builder.WithPredicates(utils.InternalSecretPredicate)).
 		Complete(r)
-}
-
-// deleteS3 deletes the S3 bucket in the storage cluster namespace, each new mirrorpeer generates
-// a new bucket, so we do not need to check if the bucket is being used by another mirrorpeer
-func (r *MirrorPeerReconciler) deleteS3(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer, scNamespace string) error {
-	bucketName := odf.GenerateBucketName(mirrorPeer)
-	bucketNamespace := utils.GetEnvOrDefault("ODR_NAMESPACE", scNamespace, r.TestEnvFile)
-	noobaaOBC, err := odf.GetObjectBucketClaim(ctx, r.SpokeClient, bucketName, bucketNamespace)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.Logger.Info("ODR ObjectBucketClaim not found, skipping deletion", "namespace", scNamespace, "MirrorPeer", mirrorPeer.Name)
-			return nil
-		} else {
-			r.Logger.Error("Failed to retrieve ODR ObjectBucketClaim", "namespace", scNamespace, "MirrorPeer", mirrorPeer.Name, "error", err)
-			return err
-		}
-	}
-	err = r.SpokeClient.Delete(ctx, noobaaOBC)
-	if err != nil {
-		r.Logger.Error("Failed to delete ODR ObjectBucketClaim", "ObjectBucketClaim", noobaaOBC.Name, "namespace", scNamespace, "error", err)
-		return err
-	}
-	r.Logger.Info("Successfully deleted ODR ObjectBucketClaim", "ObjectBucketClaim", noobaaOBC.Name, "namespace", scNamespace)
-	return nil
-}
-
-func (r *MirrorPeerReconciler) deleteMirrorPeer(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer, scr *multiclusterv1alpha1.StorageClusterRef) (ctrl.Result, error) {
-	r.Logger.Info("MirrorPeer is being deleted", "MirrorPeer", mirrorPeer.Name)
-
-	if err := r.deleteS3(ctx, mirrorPeer, scr.Namespace); err != nil {
-		r.Logger.Error("Failed to delete S3 buckets", "namespace", scr.Namespace, "error", err)
-		return ctrl.Result{}, fmt.Errorf("failed to delete S3 buckets")
-	}
-
-	r.Logger.Info("Successfully completed the deletion of MirrorPeer resources", "MirrorPeer", mirrorPeer.Name)
-	return ctrl.Result{}, nil
 }

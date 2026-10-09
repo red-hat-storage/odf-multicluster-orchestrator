@@ -268,19 +268,6 @@ func runSpokeManager(ctx context.Context, options AddonAgentOptions, logger *slo
 		os.Exit(1)
 	}
 
-	if err = (&S3SecretReconciler{
-		Scheme:           mgr.GetScheme(),
-		HubClient:        hubClient,
-		SpokeClient:      mgr.GetClient(),
-		SpokeClusterName: options.SpokeClusterName,
-		Logger:           logger.With("controller", "S3SecretReconciler"),
-		TestEnvFile:      options.testEnvFile,
-		CurrentNamespace: currentNamespace,
-	}).SetupWithManager(mgr); err != nil {
-		logger.Error("Failed to create S3Secret controller", "controller", "S3Secret", "error", err)
-		os.Exit(1)
-	}
-
 	if err = (&ResourceDistributionReconciler{
 		Scheme:           mgr.GetScheme(),
 		HubClient:        hubClient,

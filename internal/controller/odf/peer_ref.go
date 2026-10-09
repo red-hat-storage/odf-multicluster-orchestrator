@@ -29,32 +29,6 @@ const (
 	PeerRefTypeUnknown PeerRefType = "Unknown"
 )
 
-// DoesAnotherMirrorPeerPointToPeerRef checks if another mirrorpeer is pointing to the provided peer ref
-func DoesAnotherMirrorPeerPointToPeerRef(ctx context.Context, rc client.Client, peerRef multiclusterv1alpha1.PeerRef) (bool, error) {
-	mirrorPeers, err := utils.FetchAllMirrorPeers(ctx, rc)
-	if err != nil {
-		return false, err
-	}
-	count := 0
-	for i := range mirrorPeers {
-		if utils.ContainsPeerRef(mirrorPeers[i].Spec.Items, peerRef) {
-			count++
-		}
-	}
-
-	return count > 1, nil
-}
-
-// GetPeerRefForSpokeCluster returns the peer ref for the cluster name
-func GetPeerRefForSpokeCluster(mp *multiclusterv1alpha1.MirrorPeer, spokeClusterName string) (*multiclusterv1alpha1.PeerRef, error) {
-	for _, v := range mp.Spec.Items {
-		if v.ClusterName == spokeClusterName {
-			return &v, nil
-		}
-	}
-	return nil, fmt.Errorf("peerRef for cluster %s under mirrorpeer %s not found", spokeClusterName, mp.Name)
-}
-
 // GetPeerRefForProviderCluster returns the client peer ref for the current provider cluster
 func GetPeerRefForProviderCluster(ctx context.Context, spokeClient, hubClient client.Client, mp *multiclusterv1alpha1.MirrorPeer) ([]multiclusterv1alpha1.PeerRef, error) {
 	var peerRefList []multiclusterv1alpha1.PeerRef

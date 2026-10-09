@@ -30,6 +30,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -68,27 +69,6 @@ var (
 	}
 	mirrorPeerLookupKey = types.NamespacedName{Namespace: mirrorPeer.Namespace, Name: mirrorPeer.Name}
 )
-
-func GetFakeS3SecretForPeerRef(peer multiclusterv1alpha1.PeerRef, mirrorPeer *multiclusterv1alpha1.MirrorPeer) *v1.Secret {
-	return &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      utils.GetSecretNameByPeerRef(peer, utils.S3ProfilePrefix),
-			Namespace: peer.ClusterName,
-			Labels: map[string]string{
-				"multicluster.odf.openshift.io/secret-type": "INTERNAL",
-			},
-			Annotations: map[string]string{
-				"multicluster.odf.openshift.io/mirrorpeer": mirrorPeer.Name,
-			},
-		},
-		Data: map[string][]byte{
-			"namespace":            []byte("openshift-storage"),
-			"secret-data":          []byte(`{"AWS_ACCESS_KEY_ID":"dXNlcjEyMzQ=","AWS_SECRET_ACCESS_KEY":"cGFzc3dvcmQxMjM0","s3Bucket":"b2RyYnVja2V0LWJjZjMwNDFmMjFkNw==","s3CompatibleEndpoint":"aHR0cHM6Ly9zMy1vcGVuc2hpZnQtc3RvcmFnZS5hcHBzLmh1Yi01MTY3NjNiMC0yZjQzLTRmMGYtYWI3Zi0wYzI4YjYzM2FjMTAuZGV2Y2x1c3Rlci5vcGVuc2hpZnQuY29t","s3ProfileName":"czNwcm9maWxlLWxvY2FsLWNsdXN0ZXItb2NzLXN0b3JhZ2VjbHVzdGVy","s3Region":"bm9vYmFh"}`),
-			"secret-origin":        []byte("S3"),
-			"storage-cluster-name": []byte("ocs-storagecluster"),
-		},
-	}
-}
 
 var _ = Describe("MirrorPeer Validations", func() {
 	When("creating MirrorPeer", func() {
@@ -419,6 +399,29 @@ var _ = Describe("MirrorPeerReconciler Reconcile", func() {
 			err = k8sClient.Create(context.TODO(), &managedcluster2, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 
+			// Create DRClusters for the ManagedClusters
+			drcluster1 := ramenv1alpha1.DRCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-provider-cluster1",
+				},
+				Spec: ramenv1alpha1.DRClusterSpec{
+					Region: "test-region-1",
+				},
+			}
+			err = k8sClient.Create(context.TODO(), &drcluster1, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			drcluster2 := ramenv1alpha1.DRCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-provider-cluster2",
+				},
+				Spec: ramenv1alpha1.DRClusterSpec{
+					Region: "test-region-2",
+				},
+			}
+			err = k8sClient.Create(context.TODO(), &drcluster2, &client.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
 			err = k8sClient.Create(context.TODO(), &ns11, &client.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Create(context.TODO(), &ns22, &client.CreateOptions{})
@@ -456,6 +459,23 @@ var _ = Describe("MirrorPeerReconciler Reconcile", func() {
 			newMirrorPeer := mirrorPeer.DeepCopy()
 			newMirrorPeer.ObjectMeta.Name = "test-mirrorpeer-create"
 			err := k8sClient.Delete(context.TODO(), newMirrorPeer, &client.DeleteOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Delete DRClusters
+			drcluster1 := ramenv1alpha1.DRCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-provider-cluster1",
+				},
+			}
+			err = k8sClient.Delete(context.TODO(), &drcluster1, &client.DeleteOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			drcluster2 := ramenv1alpha1.DRCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-provider-cluster2",
+				},
+			}
+			err = k8sClient.Delete(context.TODO(), &drcluster2, &client.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
 
 			err = k8sClient.DeleteAllOf(context.TODO(), &clusterv1.ManagedCluster{}, &client.DeleteAllOfOptions{
