@@ -117,7 +117,7 @@ func (r *S3ConfigurationReconciler) findS3ConfigForSecret(ctx context.Context, s
 	var requests []reconcile.Request
 	for _, s3Config := range s3ConfigList.Items {
 		// Check if this S3Config uses this cluster
-		if s3Config.Spec.InternalS3 != nil && s3Config.Spec.InternalS3.ManagedCluster == clusterNamespace {
+		if s3Config.Spec.InternalS3 != nil && s3Config.Spec.InternalS3.ProviderCluster == clusterNamespace {
 			requests = append(requests, reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: s3Config.Name,
@@ -262,7 +262,7 @@ func (r *S3ConfigurationReconciler) reconcilePhases(ctx context.Context, logger 
 			return res, err
 		}
 		secret.Name = getOBCName(s3Config) // Use OBC name as secret name
-		secret.Namespace = s3Config.Spec.InternalS3.ManagedCluster
+		secret.Namespace = s3Config.Spec.InternalS3.ProviderCluster
 
 		// Wait for addon to sync secret
 		if err := r.Get(ctx, client.ObjectKeyFromObject(secret), secret); err != nil {
@@ -329,14 +329,14 @@ func (r *S3ConfigurationReconciler) deletionPhase(ctx context.Context, logger *s
 		//    Wait for ManifestWork deletion before removing finalizer to ensure addon has time to clean up hub secrets
 		if s3Config.Spec.InternalS3 != nil {
 			manifestWorkName := fmt.Sprintf("s3config-%s-obc", s3Config.Name)
-			managedCluster := s3Config.Spec.InternalS3.ManagedCluster
+			providerCluster := s3Config.Spec.InternalS3.ProviderCluster
 
 			mw := &workv1.ManifestWork{}
 			mw.Name = manifestWorkName
-			mw.Namespace = managedCluster
+			mw.Namespace = providerCluster
 			if err := r.Get(ctx, client.ObjectKeyFromObject(mw), mw); err == nil {
 				// ManifestWork exists, delete it and wait for completion
-				logger.Info("Deleting ManifestWork to trigger OBC cleanup", "manifestWork", manifestWorkName, "cluster", managedCluster)
+				logger.Info("Deleting ManifestWork to trigger OBC cleanup", "manifestWork", manifestWorkName, "cluster", providerCluster)
 				if err := r.Delete(ctx, mw); err != nil {
 					logger.Error("Failed to delete ManifestWork", "error", err)
 					return ctrl.Result{}, err
@@ -352,7 +352,7 @@ func (r *S3ConfigurationReconciler) deletionPhase(ctx context.Context, logger *s
 			// ManifestWork already deleted, OBC cleanup complete
 
 			// 3. Clean up ManagedClusterAddOn if this is the last S3Config using this cluster
-			if err := r.cleanupManagedClusterAddOn(ctx, logger, managedCluster, s3Config.Name); err != nil {
+			if err := r.cleanupManagedClusterAddOn(ctx, logger, providerCluster, s3Config.Name); err != nil {
 				logger.Error("Failed to cleanup ManagedClusterAddOn", "error", err)
 				return ctrl.Result{}, err
 			}
@@ -398,10 +398,10 @@ func (r *S3ConfigurationReconciler) reconcileInternalS3Type(ctx context.Context,
 	return ctrl.Result{}, nil
 }
 
-// ensureManagedClusterAddOn ensures the S3Config addon is deployed on the managed cluster
+// ensureManagedClusterAddOn ensures the S3Config addon is deployed on the provider cluster
 func (r *S3ConfigurationReconciler) ensureManagedClusterAddOn(ctx context.Context, logger *slog.Logger, s3Config *multiclusterv1alpha1.S3Configuration) error {
-	managedCluster := s3Config.Spec.InternalS3.ManagedCluster
-	logger.Info("Ensuring S3Config addon", "cluster", managedCluster)
+	providerCluster := s3Config.Spec.InternalS3.ProviderCluster
+	logger.Info("Ensuring S3Config addon", "cluster", providerCluster)
 
 	// Step 1: Create/Update ClusterManagementAddOn (hub-level resource)
 	clusterManagementAddOn := &addonapiv1alpha1.ClusterManagementAddOn{}
@@ -425,7 +425,7 @@ func (r *S3ConfigurationReconciler) ensureManagedClusterAddOn(ctx context.Contex
 	// Step 2: Create/Update ManagedClusterAddOn (per-cluster installation)
 	managedClusterAddOn := addonapiv1alpha1.ManagedClusterAddOn{}
 	managedClusterAddOn.Name = utils.S3ConfigAddonName
-	managedClusterAddOn.Namespace = managedCluster
+	managedClusterAddOn.Namespace = providerCluster
 
 	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, &managedClusterAddOn, func() error {
 		if err := controllerutil.SetOwnerReference(s3Config, clusterManagementAddOn, r.Scheme); err != nil {
@@ -439,18 +439,18 @@ func (r *S3ConfigurationReconciler) ensureManagedClusterAddOn(ctx context.Contex
 		return err
 	}
 
-	logger.Info("S3Config addon ensured", "cluster", managedCluster)
+	logger.Info("S3Config addon ensured", "cluster", providerCluster)
 	return nil
 }
 
 // ensureOBCManifestWork creates ManifestWork to deploy OBC on the spoke cluster
 func (r *S3ConfigurationReconciler) ensureOBCManifestWork(ctx context.Context, logger *slog.Logger, s3Config *multiclusterv1alpha1.S3Configuration) (bool, error) {
 	obcName := getOBCName(s3Config)
-	managedCluster := s3Config.Spec.InternalS3.ManagedCluster
+	providerCluster := s3Config.Spec.InternalS3.ProviderCluster
 	namespace := s3Config.Spec.InternalS3.Namespace
 	storageClassName := s3Config.Spec.InternalS3.StorageClassName
 
-	logger.Info("Ensuring OBC ManifestWork", "obcName", obcName, "managedCluster", managedCluster, "namespace", namespace)
+	logger.Info("Ensuring OBC ManifestWork", "obcName", obcName, "providerCluster", providerCluster, "namespace", namespace)
 
 	// Create OBC resource with proper TypeMeta for ManifestWork
 	obc := &obv1alpha1.ObjectBucketClaim{
@@ -480,7 +480,7 @@ func (r *S3ConfigurationReconciler) ensureOBCManifestWork(ctx context.Context, l
 	manifestWorkName := fmt.Sprintf("s3config-%s-obc", s3Config.Name)
 	mw := &workv1.ManifestWork{}
 	mw.Name = manifestWorkName
-	mw.Namespace = managedCluster
+	mw.Namespace = providerCluster
 
 	if _, err = controllerutil.CreateOrUpdate(ctx, r.Client, mw, func() error {
 		if err := controllerutil.SetControllerReference(s3Config, mw, r.Scheme); err != nil {
@@ -664,7 +664,7 @@ func (r *S3ConfigurationReconciler) removeS3ProfileFromRamenConfig(ctx context.C
 }
 
 // cleanupManagedClusterAddOn deletes MCA if no other S3Configuration uses this cluster
-func (r *S3ConfigurationReconciler) cleanupManagedClusterAddOn(ctx context.Context, logger *slog.Logger, managedCluster string, currentS3ConfigName string) error {
+func (r *S3ConfigurationReconciler) cleanupManagedClusterAddOn(ctx context.Context, logger *slog.Logger, providerCluster string, currentS3ConfigName string) error {
 	// List all S3Configurations
 	s3ConfigList := &multiclusterv1alpha1.S3ConfigurationList{}
 	if err := r.List(ctx, s3ConfigList); err != nil {
@@ -679,17 +679,17 @@ func (r *S3ConfigurationReconciler) cleanupManagedClusterAddOn(ctx context.Conte
 			continue
 		}
 		// Check if another S3Config uses the same cluster
-		if s3Config.Spec.InternalS3 != nil && s3Config.Spec.InternalS3.ManagedCluster == managedCluster {
-			logger.Info("ManagedClusterAddOn still in use by another S3Configuration", "cluster", managedCluster, "s3config", s3Config.Name)
+		if s3Config.Spec.InternalS3 != nil && s3Config.Spec.InternalS3.ProviderCluster == providerCluster {
+			logger.Info("ManagedClusterAddOn still in use by another S3Configuration", "cluster", providerCluster, "s3config", s3Config.Name)
 			return nil
 		}
 	}
 
 	// No other S3Config uses this cluster, safe to delete MCA
-	logger.Info("Deleting ManagedClusterAddOn as no S3Configuration uses this cluster", "cluster", managedCluster)
+	logger.Info("Deleting ManagedClusterAddOn as no S3Configuration uses this cluster", "cluster", providerCluster)
 	mca := &addonapiv1alpha1.ManagedClusterAddOn{}
 	mca.Name = utils.S3ConfigAddonName
-	mca.Namespace = managedCluster
+	mca.Namespace = providerCluster
 
 	if err := r.Delete(ctx, mca); err != nil {
 		if !errors.IsNotFound(err) {
@@ -698,7 +698,7 @@ func (r *S3ConfigurationReconciler) cleanupManagedClusterAddOn(ctx context.Conte
 		}
 		logger.Info("ManagedClusterAddOn already deleted")
 	} else {
-		logger.Info("Successfully deleted ManagedClusterAddOn", "cluster", managedCluster)
+		logger.Info("Successfully deleted ManagedClusterAddOn", "cluster", providerCluster)
 	}
 
 	return nil

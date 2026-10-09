@@ -85,9 +85,9 @@ type S3ConfigurationSpec struct {
 
 ```go
 type InternalS3Spec struct {
-    // ManagedCluster where OBC will be created
+    // ProviderCluster where OBC will be created
     // +required
-    ManagedCluster string `json:"managedCluster"`
+    ProviderCluster string `json:"providerCluster"`
     
     // StorageClassName for OBC
     // +required
@@ -104,7 +104,7 @@ type InternalS3Spec struct {
 ```
 
 **Key Points:**
-- OBC created on **ONE** cluster (specified in `managedCluster`)
+- OBC created on **ONE** cluster (specified in `providerCluster`)
 - S3 endpoint from that cluster is shared by all clusters in `managedClusters`
 - Addon agent on spoke syncs OBC secret to hub
 
@@ -198,7 +198,7 @@ The S3Configuration controller runs on the hub and manages the full S3 configura
 │    - Check InternalS3 XOR ExternalS3                        │
 │    - Validate ManagedClusters exist                         │
 │    - For ExternalS3: Validate secret exists                 │
-│    - For InternalS3: Validate managedCluster in list        │
+│    - For InternalS3: Validate providerCluster in list       │
 └─────────────────┬───────────────────────────────────────────┘
                   ▼
          ┌────────┴────────┐
@@ -278,7 +278,7 @@ metadata:
   name: odf-internal-s3  # ← This becomes s3ProfileName
 spec:
   internalS3:
-    managedCluster: cluster1  # OBC created here
+    providerCluster: cluster1  # OBC created here
     storageClassName: openshift-storage.noobaa.io
     namespace: openshift-storage
     obcName: dr-metadata-obc
