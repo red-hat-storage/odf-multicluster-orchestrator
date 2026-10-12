@@ -17,7 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package odf
+package mirrorpeer
 
 import (
 	"context"
@@ -28,6 +28,7 @@ import (
 	"time"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/odf"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
@@ -230,9 +231,9 @@ func TestProcessManagedClusterAddons(t *testing.T) {
 }
 
 func makeClientInfoJSON(clientID, providerManagedCluster, namespace string) string {
-	ci := ClientInfo{
+	ci := odf.ClientInfo{
 		ClientID: clientID,
-		ProviderInfo: ProviderInfo{
+		ProviderInfo: odf.ProviderInfo{
 			Version:                    "5.0.0",
 			ProviderManagedClusterName: providerManagedCluster,
 			NamespacedName:             types.NamespacedName{Name: "storagecluster", Namespace: namespace},
