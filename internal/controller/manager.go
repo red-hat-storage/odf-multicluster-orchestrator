@@ -3,8 +3,9 @@ package controller
 import (
 	"context"
 	"crypto/tls"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/s3configuration"
 	"os"
+
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/s3configuration"
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
@@ -68,6 +69,8 @@ func init() {
 	utilruntime.Must(appv1beta1.AddToScheme(mgrScheme))
 	// +kubebuilder:scaffold:scheme
 }
+
+// +kubebuilder:scaffold:imports
 
 type ManagerOptions struct {
 	MetricsAddr             string

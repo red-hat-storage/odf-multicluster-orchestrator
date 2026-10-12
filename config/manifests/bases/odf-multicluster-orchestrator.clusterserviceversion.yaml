@@ -18,6 +18,13 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
+    - description: |-
+        AppliedManifest is the CR created on the destination cluster by MCO and reconciled by the 3rd-party storage vendor.
+        The status of this CR is watched by MCO, and reflected on mirrorpeer status.
+      displayName: Applied Manifest
+      kind: AppliedManifest
+      name: appliedmanifests.multicluster.odf.openshift.io
+      version: v1alpha1
     - description: MirrorPeer is the Schema for the mirrorpeers API
       displayName: Mirror Peer
       kind: MirrorPeer
@@ -36,6 +43,14 @@ spec:
       displayName: S3 Configuration
       kind: S3Configuration
       name: s3configurations.multicluster.odf.openshift.io
+      version: v1alpha1
+    - description: |-
+        SourceManifest is the CR created by a storage vendor on Cluster A which defines the resources
+        that need to be created on Cluster B.
+        It carries no status; MCO processes this via ManagedClusterView.
+      displayName: Source Manifest
+      kind: SourceManifest
+      name: sourcemanifests.multicluster.odf.openshift.io
       version: v1alpha1
   description: |
     Orchestrator for Data Foundation clusters running across multiple OpenShift clusters.

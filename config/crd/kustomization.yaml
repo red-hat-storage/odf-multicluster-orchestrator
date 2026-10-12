@@ -5,6 +5,8 @@ resources:
 - bases/multicluster.odf.openshift.io_mirrorpeers.yaml
 - bases/multicluster.odf.openshift.io_protectedapplicationviews.yaml
 - bases/multicluster.odf.openshift.io_s3configurations.yaml
+- bases/multicluster.odf.openshift.io_sourcemanifests.yaml
+- bases/multicluster.odf.openshift.io_appliedmanifests.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:

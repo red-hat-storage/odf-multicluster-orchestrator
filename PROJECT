@@ -35,4 +35,20 @@ resources:
   kind: S3Configuration
   path: github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: odf.openshift.io
+  group: multicluster
+  kind: SourceManifest
+  path: github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: odf.openshift.io
+  group: multicluster
+  kind: AppliedManifest
+  path: github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1
+  version: v1alpha1
 version: "3"

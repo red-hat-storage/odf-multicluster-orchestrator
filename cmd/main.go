@@ -16,8 +16,6 @@ limitations under the License.
 
 package main
 
-// +kubebuilder:scaffold:imports
-
 func main() {
 	Execute()
 }
