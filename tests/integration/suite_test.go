@@ -26,7 +26,7 @@ import (
 	"testing"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/odf"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/mirrorpeer"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	. "github.com/onsi/ginkgo"
@@ -110,7 +110,7 @@ var _ = BeforeSuite(func() {
 	Expect(mgr).NotTo(BeNil())
 
 	fakeLogger := utils.GetLogger(utils.GetZapLogger(true))
-	err = (&odf.MirrorPeerReconciler{
+	err = (&mirrorpeer.MirrorPeerReconciler{
 		Client:           mgr.GetClient(),
 		Scheme:           mgr.GetScheme(),
 		Logger:           fakeLogger,
