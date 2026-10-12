@@ -5,13 +5,13 @@ import (
 	"crypto/tls"
 	"os"
 
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/s3configuration"
-
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/s3config"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/tokenexchange"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/acm"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/mirrorpeer"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/ramen"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/s3configuration"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
 
@@ -323,7 +323,7 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 	}
 
 	logger.Info("Initializing token exchange addon")
-	tokenExchangeAddon := setup.Addons{
+	tokenExchangeAddon := tokenexchange.Addons{
 		Client:     mgr.GetClient(),
 		AgentImage: utils.GetEnv("TOKEN_EXCHANGE_IMAGE", o.testEnvFile),
 		AddonName:  utils.TokenExchangeName,
@@ -335,7 +335,7 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 	}
 
 	logger.Info("Initializing s3config addon")
-	s3ConfigAddon := setup.S3ConfigAddons{
+	s3ConfigAddon := s3config.S3ConfigAddons{
 		Client:     mgr.GetClient(),
 		AgentImage: utils.GetEnv("TOKEN_EXCHANGE_IMAGE", o.testEnvFile), // Same image, different command
 		AddonName:  utils.S3ConfigAddonName,

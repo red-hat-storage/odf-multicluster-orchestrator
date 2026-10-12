@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"log/slog"
 	"time"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/odf"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/storagevendor/odf"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	replicationv1alpha1 "github.com/csi-addons/kubernetes-csi-addons/api/replication.storage/v1alpha1"
@@ -160,7 +161,7 @@ func (r *DRPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	// Find MirrorPeer for clusterset for the storagecluster namespaces
-	mirrorPeer, err := odf.GetMirrorPeerForClusterSet(ctx, r.HubClient, drpolicy.Spec.DRClusters)
+	mirrorPeer, err := getMirrorPeerForClusterSet(ctx, r.HubClient, drpolicy.Spec.DRClusters)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.Info("MirrorPeer not found, waiting for MirrorPeer to be created", "DRClusters", drpolicy.Spec.DRClusters)
@@ -508,4 +509,25 @@ func validateTokenExchangeAgentUpdated(ctx context.Context, client client.Client
 	}
 
 	return nil
+}
+
+func getMirrorPeerForClusterSet(ctx context.Context, client client.Client, clusterSet []string) (*multiclusterv1alpha1.MirrorPeer, error) {
+
+	var mpList multiclusterv1alpha1.MirrorPeerList
+	if err := client.List(ctx, &mpList); err != nil {
+		return nil, err
+	}
+
+	if len(mpList.Items) == 0 {
+		return nil, k8serrors.NewNotFound(schema.GroupResource{Group: multiclusterv1alpha1.GroupVersion.Group, Resource: "MirrorPeer"}, "MirrorPeerList")
+	}
+
+	for _, mp := range mpList.Items {
+		if (mp.Spec.Items[0].ClusterName == clusterSet[0] && mp.Spec.Items[1].ClusterName == clusterSet[1]) ||
+			(mp.Spec.Items[1].ClusterName == clusterSet[0] && mp.Spec.Items[0].ClusterName == clusterSet[1]) {
+			return &mp, nil
+		}
+	}
+
+	return nil, k8serrors.NewNotFound(schema.GroupResource{Group: multiclusterv1alpha1.GroupVersion.Group, Resource: "MirrorPeer"}, fmt.Sprintf("ClusterSet-%s-%s", clusterSet[0], clusterSet[1]))
 }

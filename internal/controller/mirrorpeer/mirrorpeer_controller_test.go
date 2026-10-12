@@ -28,7 +28,7 @@ import (
 	"time"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/odf"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/storagevendor/odf"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
@@ -152,83 +152,10 @@ func getFakeMirrorPeerReconciler(mirrorpeer *multiclusterv1alpha1.MirrorPeer) Mi
 	return r
 }
 
-func TestProcessManagedClusterAddons(t *testing.T) {
-	ctx := context.TODO()
-	mirrorpeer := &multiclusterv1alpha1.MirrorPeer{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "mirrorpeer-test",
-		},
-		Spec: multiclusterv1alpha1.MirrorPeerSpec{
-			Items: []multiclusterv1alpha1.PeerRef{
-				{
-					ClusterName: "cluster3",
-					StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
-						Name:      "test-storagecluster",
-						Namespace: "test-namespace",
-					},
-				},
-				{
-					ClusterName: "cluster4",
-					StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{
-						Name:      "test-storagecluster",
-						Namespace: "test-namespace",
-					},
-				},
-			},
-		},
-	}
-	odfClientInfoConfigMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "odf-client-info",
-			Namespace: utils.GetEnv("POD_NAMESPACE"),
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion: viewv1beta1.GroupVersion.String(),
-					Kind:       "ManagedClusterView",
-					Name:       "mcv-1",
-					UID:        "mcv-uid",
-				},
-			},
-		},
-		Data: map[string]string{
-			"cluster1_test-storagecluster": "{\"providerInfo\":{\"version\":\"5.0.0\"}}",
-			"cluster2_test-storagecluster": "{\"providerInfo\":{\"version\":\"5.0.0\"}}",
-			"cluster3_test-storagecluster": "{\"providerInfo\":{\"version\":\"5.0.0\", \"deploymentType\": \"external\"}}",
-			"cluster4_test-storagecluster": "{\"providerInfo\":{\"version\":\"5.0.0\", \"deploymentType\": \"external\"}}",
-		},
-	}
-	// Create fake k8s client
-	r := getFakeMirrorPeerReconciler(mirrorpeer)
-	// Create fake secrets somehow
-	if err := r.processManagedClusterAddon(ctx, mirrorpeer, odfClientInfoConfigMap.Data); err != nil {
-		t.Error("Failed to create managed cluster addon")
-	}
+// TestProcessManagedClusterAddons moved to pkg/storagevendor/odf/vendor_test.go
+// since processManagedClusterAddon is now a method on ODFVendor
 
-	clusterManagementAddOn := addonapiv1alpha1.ClusterManagementAddOn{}
-	if err := r.Get(ctx, types.NamespacedName{
-		Name: utils.TokenExchangeName,
-	}, &clusterManagementAddOn); err != nil {
-		t.Error("Failed to create ClusterManagementAddOn")
-	}
-	owner := clusterManagementAddOn.GetOwnerReferences()
-	if owner[0].Name != mirrorpeer.Name {
-		t.Error("Failed to add OwnerRefs to ClusterManagementAddOn")
-	}
-
-	for i := range mirrorpeer.Spec.Items {
-		managedClusterAddon := addonapiv1alpha1.ManagedClusterAddOn{}
-		if err := r.Get(ctx, types.NamespacedName{
-			Name:      utils.TokenExchangeName,
-			Namespace: mirrorpeer.Spec.Items[i].ClusterName,
-		}, &managedClusterAddon); err != nil {
-			t.Error("Failed to create ManagedClusterAddon")
-		}
-		owner := managedClusterAddon.GetOwnerReferences()
-		if owner[0].Name != mirrorpeer.Name {
-			t.Error("Failed to add OwnerRefs to ManagedClusterAddon")
-		}
-	}
-}
+// Helper functions for controller tests
 
 func makeClientInfoJSON(clientID, providerManagedCluster, namespace string) string {
 	ci := odf.ClientInfo{
@@ -250,8 +177,8 @@ func makeManagedClusterAddOn(mp *multiclusterv1alpha1.MirrorPeer, namespace stri
 			Namespace: namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion:         AddonApiVersion,
-					Kind:               ManagedClusterAddOn,
+					APIVersion:         odf.AddonApiVersion,
+					Kind:               odf.ManagedClusterAddOn,
 					Name:               mp.Name,
 					UID:                mp.UID,
 					BlockOwnerDeletion: func() *bool { b := true; return &b }(),
@@ -291,111 +218,27 @@ func makeStorageClientMappingManifestWork(namespace, cmNamespace string, data ma
 	}
 }
 
-func TestRemoveClientIDFromClusterPairingConfigMap(t *testing.T) {
-	ctx := context.TODO()
-	scheme := mgrScheme
-	logger := utils.GetLogger(utils.GetZapLogger(true))
-
-	clientInfoMap := map[string]string{
-		"cluster1_test-storagecluster": makeClientInfoJSON("client-id-1", "provider1", "openshift-storage"),
-		"cluster2_test-storagecluster": makeClientInfoJSON("client-id-2", "provider2", "openshift-storage"),
+func verifyConfigMapEntry(t *testing.T, ctx context.Context, c client.Client, namespace, key string, shouldExist bool) {
+	t.Helper()
+	var mw workv1.ManifestWork
+	if err := c.Get(ctx, types.NamespacedName{Name: "storage-client-mapping", Namespace: namespace}, &mw); err != nil {
+		t.Fatalf("failed to get ManifestWork in namespace %s: %v", namespace, err)
 	}
-
-	mirrorPeer := &multiclusterv1alpha1.MirrorPeer{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-mirrorpeer"},
-		Spec: multiclusterv1alpha1.MirrorPeerSpec{
-			Items: []multiclusterv1alpha1.PeerRef{
-				{ClusterName: "cluster1", StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{Name: "test-storagecluster"}},
-				{ClusterName: "cluster2", StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{Name: "test-storagecluster"}},
-			},
-		},
+	cm, err := utils.DecodeConfigMap(mw.Spec.Workload.Manifests[0].RawExtension.Raw)
+	if err != nil {
+		t.Fatalf("failed to decode ConfigMap: %v", err)
 	}
-
-	t.Run("removes clientID from both provider ManifestWorks", func(t *testing.T) {
-		mw1 := makeStorageClientMappingManifestWork("provider1", "openshift-storage", map[string]string{
-			"client-id-1":  "client-id-2",
-			"other-client": "other-paired",
-		})
-		mw2 := makeStorageClientMappingManifestWork("provider2", "openshift-storage", map[string]string{
-			"client-id-2": "client-id-1",
-		})
-
-		fakeClient := fake.NewClientBuilder().WithScheme(scheme).
-			WithObjects(mw1, mw2).
-			Build()
-
-		err := removeClientIDFromClusterPairingConfigMap(ctx, fakeClient, logger, mirrorPeer, clientInfoMap)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		var updatedMW1 workv1.ManifestWork
-		if err := fakeClient.Get(ctx, types.NamespacedName{Name: "storage-client-mapping", Namespace: "provider1"}, &updatedMW1); err != nil {
-			t.Fatalf("failed to get ManifestWork for provider1: %v", err)
-		}
-		cm1, err := utils.DecodeConfigMap(updatedMW1.Spec.Workload.Manifests[0].RawExtension.Raw)
-		if err != nil {
-			t.Fatalf("failed to decode ConfigMap: %v", err)
-		}
-		if _, exists := cm1.Data["client-id-1"]; exists {
-			t.Error("client-id-1 should have been removed from provider1 ConfigMap")
-		}
-		if cm1.Data["other-client"] != "other-paired" {
-			t.Error("other-client entry should be preserved in provider1 ConfigMap")
-		}
-
-		var updatedMW2 workv1.ManifestWork
-		if err := fakeClient.Get(ctx, types.NamespacedName{Name: "storage-client-mapping", Namespace: "provider2"}, &updatedMW2); err != nil {
-			t.Fatalf("failed to get ManifestWork for provider2: %v", err)
-		}
-		cm2, err := utils.DecodeConfigMap(updatedMW2.Spec.Workload.Manifests[0].RawExtension.Raw)
-		if err != nil {
-			t.Fatalf("failed to decode ConfigMap: %v", err)
-		}
-		if _, exists := cm2.Data["client-id-2"]; exists {
-			t.Error("client-id-2 should have been removed from provider2 ConfigMap")
-		}
-	})
-
-	t.Run("succeeds when ManifestWork does not exist", func(t *testing.T) {
-		fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-
-		err := removeClientIDFromClusterPairingConfigMap(ctx, fakeClient, logger, mirrorPeer, clientInfoMap)
-		if err != nil {
-			t.Fatalf("should succeed when ManifestWork is missing, got: %v", err)
-		}
-	})
-
-	t.Run("succeeds when ManifestWork has empty manifests", func(t *testing.T) {
-		emptyMW := &workv1.ManifestWork{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "storage-client-mapping",
-				Namespace: "provider1",
-			},
-			Spec: workv1.ManifestWorkSpec{},
-		}
-		fakeClient := fake.NewClientBuilder().WithScheme(scheme).
-			WithObjects(emptyMW).
-			Build()
-
-		err := removeClientIDFromClusterPairingConfigMap(ctx, fakeClient, logger, mirrorPeer, clientInfoMap)
-		if err != nil {
-			t.Fatalf("should succeed when ManifestWork has no manifests, got: %v", err)
-		}
-	})
-
-	t.Run("returns error when clientInfo is missing from configmap", func(t *testing.T) {
-		fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-		incompleteClientInfoMap := map[string]string{
-			"cluster1_test-storagecluster": makeClientInfoJSON("client-id-1", "provider1", "openshift-storage"),
-		}
-
-		err := removeClientIDFromClusterPairingConfigMap(ctx, fakeClient, logger, mirrorPeer, incompleteClientInfoMap)
-		if err == nil {
-			t.Fatal("expected error when client info is missing, got nil")
-		}
-	})
+	_, exists := cm.Data[key]
+	if shouldExist && !exists {
+		t.Errorf("expected key %q to exist in ConfigMap for namespace %s", key, namespace)
+	}
+	if !shouldExist && exists {
+		t.Errorf("expected key %q to be removed from ConfigMap for namespace %s", key, namespace)
+	}
 }
+
+// TestRemoveClientIDFromClusterPairingConfigMap moved to pkg/storagevendor/odf/vendor_test.go
+// since removeClientIDFromClusterPairingConfigMap is now a method on ODFVendor
 
 func TestDeleteMirrorPeer(t *testing.T) {
 	ctx := context.TODO()
@@ -433,8 +276,16 @@ func TestDeleteMirrorPeer(t *testing.T) {
 			Spec:       ramenv1alpha1.DRPolicySpec{DRClusters: []string{"cluster1", "cluster2"}},
 		}
 
+		odfClientInfoConfigMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "odf-client-info",
+				Namespace: utils.GetEnv("POD_NAMESPACE"),
+			},
+			Data: clientInfoMap,
+		}
+
 		fakeClient := fake.NewClientBuilder().WithScheme(scheme).
-			WithObjects(mp, drpolicy).
+			WithObjects(mp, drpolicy, odfClientInfoConfigMap).
 			WithStatusSubresource(mp).
 			Build()
 
@@ -445,7 +296,12 @@ func TestDeleteMirrorPeer(t *testing.T) {
 			CurrentNamespace: utils.GetEnv("POD_NAMESPACE"),
 		}
 
-		_, err := r.deleteMirrorPeer(ctx, logger, mp, clientInfoMap)
+		vendor, err := odf.NewODFVendor(ctx, fakeClient, scheme, logger, utils.GetEnv("POD_NAMESPACE"))
+		if err != nil {
+			t.Fatalf("Failed to create ODF vendor: %v", err)
+		}
+
+		_, err = r.deleteMirrorPeer(ctx, logger, mp, vendor)
 		if err == nil {
 			t.Fatal("expected error when DRPolicy references MirrorPeer, got nil")
 		}
@@ -458,8 +314,16 @@ func TestDeleteMirrorPeer(t *testing.T) {
 			Spec:       ramenv1alpha1.DRPolicySpec{DRClusters: []string{"cluster2", "cluster1"}},
 		}
 
+		odfClientInfoConfigMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "odf-client-info",
+				Namespace: utils.GetEnv("POD_NAMESPACE"),
+			},
+			Data: clientInfoMap,
+		}
+
 		fakeClient := fake.NewClientBuilder().WithScheme(scheme).
-			WithObjects(mp, drpolicy).
+			WithObjects(mp, drpolicy, odfClientInfoConfigMap).
 			WithStatusSubresource(mp).
 			Build()
 
@@ -470,7 +334,12 @@ func TestDeleteMirrorPeer(t *testing.T) {
 			CurrentNamespace: utils.GetEnv("POD_NAMESPACE"),
 		}
 
-		_, err := r.deleteMirrorPeer(ctx, logger, mp, clientInfoMap)
+		vendor, err := odf.NewODFVendor(ctx, fakeClient, scheme, logger, utils.GetEnv("POD_NAMESPACE"))
+		if err != nil {
+			t.Fatalf("Failed to create ODF vendor: %v", err)
+		}
+
+		_, err = r.deleteMirrorPeer(ctx, logger, mp, vendor)
 		if err == nil {
 			t.Fatal("expected error when DRPolicy references MirrorPeer (reverse order), got nil")
 		}
@@ -480,8 +349,16 @@ func TestDeleteMirrorPeer(t *testing.T) {
 		mp := newMirrorPeer()
 		mp.Finalizers = append(mp.Finalizers, fmt.Sprintf("some-prefix.%s", utils.SpokeMirrorPeerFinalizer))
 
+		odfClientInfoConfigMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "odf-client-info",
+				Namespace: utils.GetEnv("POD_NAMESPACE"),
+			},
+			Data: clientInfoMap,
+		}
+
 		fakeClient := fake.NewClientBuilder().WithScheme(scheme).
-			WithObjects(mp).
+			WithObjects(mp, odfClientInfoConfigMap).
 			WithStatusSubresource(mp).
 			Build()
 
@@ -492,7 +369,12 @@ func TestDeleteMirrorPeer(t *testing.T) {
 			CurrentNamespace: utils.GetEnv("POD_NAMESPACE"),
 		}
 
-		result, err := r.deleteMirrorPeer(ctx, logger, mp, clientInfoMap)
+		vendor, err := odf.NewODFVendor(ctx, fakeClient, scheme, logger, utils.GetEnv("POD_NAMESPACE"))
+		if err != nil {
+			t.Fatalf("Failed to create ODF vendor: %v", err)
+		}
+
+		result, err := r.deleteMirrorPeer(ctx, logger, mp, vendor)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -513,8 +395,16 @@ func TestDeleteMirrorPeer(t *testing.T) {
 		addon1 := makeManagedClusterAddOn(mp, "provider1")
 		addon2 := makeManagedClusterAddOn(mp, "provider2")
 
+		odfClientInfoConfigMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "odf-client-info",
+				Namespace: utils.GetEnv("POD_NAMESPACE"),
+			},
+			Data: clientInfoMap,
+		}
+
 		fakeClient := fake.NewClientBuilder().WithScheme(scheme).
-			WithObjects(mp, mw1, mw2, addon1, addon2).
+			WithObjects(mp, mw1, mw2, addon1, addon2, odfClientInfoConfigMap).
 			WithStatusSubresource(mp).
 			Build()
 
@@ -525,7 +415,12 @@ func TestDeleteMirrorPeer(t *testing.T) {
 			CurrentNamespace: utils.GetEnv("POD_NAMESPACE"),
 		}
 
-		result, err := r.deleteMirrorPeer(ctx, logger, mp, clientInfoMap)
+		vendor, err := odf.NewODFVendor(ctx, fakeClient, scheme, logger, utils.GetEnv("POD_NAMESPACE"))
+		if err != nil {
+			t.Fatalf("Failed to create ODF vendor: %v", err)
+		}
+
+		result, err := r.deleteMirrorPeer(ctx, logger, mp, vendor)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -561,8 +456,16 @@ func TestDeleteMirrorPeer(t *testing.T) {
 		addon1 := makeManagedClusterAddOn(mp, "provider1")
 		addon2 := makeManagedClusterAddOn(mp, "provider2")
 
+		odfClientInfoConfigMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "odf-client-info",
+				Namespace: utils.GetEnv("POD_NAMESPACE"),
+			},
+			Data: clientInfoMap,
+		}
+
 		fakeClient := fake.NewClientBuilder().WithScheme(scheme).
-			WithObjects(mp, addon1, addon2).
+			WithObjects(mp, addon1, addon2, odfClientInfoConfigMap).
 			WithStatusSubresource(mp).
 			Build()
 
@@ -573,7 +476,12 @@ func TestDeleteMirrorPeer(t *testing.T) {
 			CurrentNamespace: utils.GetEnv("POD_NAMESPACE"),
 		}
 
-		_, err := r.deleteMirrorPeer(ctx, logger, mp, clientInfoMap)
+		vendor, err := odf.NewODFVendor(ctx, fakeClient, scheme, logger, utils.GetEnv("POD_NAMESPACE"))
+		if err != nil {
+			t.Fatalf("Failed to create ODF vendor: %v", err)
+		}
+
+		_, err = r.deleteMirrorPeer(ctx, logger, mp, vendor)
 		if err != nil {
 			t.Fatalf("unexpected error when no DRPolicy exists: %v", err)
 		}
@@ -584,7 +492,6 @@ func TestDeleteMirrorPeerE2EFlow(t *testing.T) {
 	ctx := context.TODO()
 	scheme := mgrScheme
 	os.Setenv("POD_NAMESPACE", "openshift-operators")
-	logger := utils.GetLogger(utils.GetZapLogger(true))
 
 	clientInfoMap := map[string]string{
 		"cluster1_test-storagecluster": makeClientInfoJSON("client-id-1", "provider1", "openshift-storage"),
@@ -599,6 +506,7 @@ func TestDeleteMirrorPeerE2EFlow(t *testing.T) {
 				DeletionTimestamp: &metav1.Time{Time: time.Now()},
 			},
 			Spec: multiclusterv1alpha1.MirrorPeerSpec{
+				Type: multiclusterv1alpha1.Async,
 				Items: []multiclusterv1alpha1.PeerRef{
 					{ClusterName: "cluster1", StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{Name: "test-storagecluster", Namespace: "test-namespace"}},
 					{ClusterName: "cluster2", StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{Name: "test-storagecluster", Namespace: "test-namespace"}},
@@ -616,12 +524,29 @@ func TestDeleteMirrorPeerE2EFlow(t *testing.T) {
 			"another-client2": "another-client1",
 		})
 
+		odfClientInfoConfigMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "odf-client-info",
+				Namespace: utils.GetEnv("POD_NAMESPACE"),
+			},
+			Data: clientInfoMap,
+		}
+
+		addon1 := makeManagedClusterAddOn(mp, "provider1")
+		addon2 := makeManagedClusterAddOn(mp, "provider2")
+
 		fakeClient := fake.NewClientBuilder().WithScheme(scheme).
-			WithObjects(mp, mw1, mw2).
+			WithObjects(mp, mw1, mw2, odfClientInfoConfigMap, addon1, addon2).
 			WithStatusSubresource(mp).
 			Build()
 
-		err := removeClientIDFromClusterPairingConfigMap(ctx, fakeClient, logger, mp, clientInfoMap)
+		vendor, err := odf.NewODFVendor(ctx, fakeClient, scheme, utils.GetLogger(utils.GetZapLogger(true)), utils.GetEnv("POD_NAMESPACE"))
+		if err != nil {
+			t.Fatalf("Failed to create ODF vendor: %v", err)
+		}
+
+		// Call vendor CleanupResources directly to test the full cleanup flow
+		_, err = vendor.CleanupResources(ctx, mp)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -634,23 +559,4 @@ func TestDeleteMirrorPeerE2EFlow(t *testing.T) {
 		verifyConfigMapEntry(t, ctx, fakeClient, "provider2", "client-id-2", false)
 		verifyConfigMapEntry(t, ctx, fakeClient, "provider2", "another-client2", true)
 	})
-}
-
-func verifyConfigMapEntry(t *testing.T, ctx context.Context, c client.Client, namespace, key string, shouldExist bool) {
-	t.Helper()
-	var mw workv1.ManifestWork
-	if err := c.Get(ctx, types.NamespacedName{Name: "storage-client-mapping", Namespace: namespace}, &mw); err != nil {
-		t.Fatalf("failed to get ManifestWork in namespace %s: %v", namespace, err)
-	}
-	cm, err := utils.DecodeConfigMap(mw.Spec.Workload.Manifests[0].RawExtension.Raw)
-	if err != nil {
-		t.Fatalf("failed to decode ConfigMap: %v", err)
-	}
-	_, exists := cm.Data[key]
-	if shouldExist && !exists {
-		t.Errorf("expected key %q to exist in ConfigMap for namespace %s", key, namespace)
-	}
-	if !shouldExist && exists {
-		t.Errorf("expected key %q to be removed from ConfigMap for namespace %s", key, namespace)
-	}
 }

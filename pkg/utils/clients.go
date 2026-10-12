@@ -9,7 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// GetClientFromConfig returns a controller-runtime Client for a rest.Config
+// GetClientFromConfig returns a controller-runtime client for a rest.Config
 func GetClientFromConfig(config *rest.Config, scheme *runtime.Scheme) (client.Client, error) {
 	cl, err := client.New(config, client.Options{Scheme: scheme})
 	if err != nil {

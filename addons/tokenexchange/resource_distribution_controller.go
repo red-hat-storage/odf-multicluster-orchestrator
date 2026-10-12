@@ -1,4 +1,4 @@
-package addons
+package tokenexchange
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"slices"
 
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/odf"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/storagevendor/odf"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	templatev1 "github.com/openshift/api/template/v1"

@@ -23,4 +23,6 @@ const (
 	TLSProfileName   = "ocs-tls-profile"
 	TLSProfileDomain = "odf-multicluster.openshift.io"
 	TLSProfileServer = "console"
+
+	AddonVersionAnnotationKey = "multicluster.odf.openshift.io/version"
 )
