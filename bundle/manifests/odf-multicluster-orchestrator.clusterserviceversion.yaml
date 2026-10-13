@@ -246,7 +246,7 @@ metadata:
       ]
     capabilities: Seamless Upgrades
     console.openshift.io/plugins: '["odf-multicluster-console"]'
-    createdAt: "2026-10-09T19:38:00Z"
+    createdAt: "2026-10-13T06:23:04Z"
     features.operators.openshift.io/tls-profiles: "true"
     olm.skipRange: ""
     operators.openshift.io/infrastructure-features: '["disconnected"]'
@@ -646,7 +646,7 @@ spec:
                 command:
                 - /odf-multicluster-orchestrator
                 env:
-                - name: TOKEN_EXCHANGE_IMAGE
+                - name: ADDON_IMAGE
                   value: quay.io/ocs-dev/odf-multicluster-orchestrator:latest
                 - name: POD_NAME
                   valueFrom:
