@@ -51,6 +51,7 @@ const (
 	DeletionFailed                   PhaseMessage = "Deletion failed"
 	DeletionInProgress               PhaseMessage = "Deletion is in progress"
 	ConfigurationFailed              PhaseMessage = "Configuration failed"
+	InitializationFailed             PhaseMessage = "Initialization failed"
 	ManagedClusterAddOnFailed        PhaseMessage = "ManagedClusterAddon configuration failed"
 	PeeringInProgress                PhaseMessage = "Peering is in progress"
 	PeeringFailed                    PhaseMessage = "Peering of managedclusters failed"
@@ -81,6 +82,7 @@ const (
 
 // Condition reason for a mirrorpeer
 const (
+	ReasonInitializationFailed             = "InitializationFailed"
 	ReasonValidationFailed                 = "ValidationFailed"
 	ReasonValidated                        = "MirrorPeerValid"
 	ReasonConfigurationDone                = "Configured"

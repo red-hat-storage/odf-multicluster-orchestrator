@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package addons
+package tokenexchange
 
 import (
 	"context"
@@ -23,9 +23,10 @@ import (
 	"time"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/odf"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/storagevendor/odf"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
+	ocsv1 "github.com/red-hat-storage/ocs-operator/api/v4/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -87,7 +88,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	var scr *multiclusterv1alpha1.StorageClusterRef
 	if hasStorageClientRef {
-		sc, err := odf.GetStorageClusterFromCurrentNamespace(ctx, r.SpokeClient, r.CurrentNamespace)
+		sc, err := getStorageClusterFromCurrentNamespace(ctx, r.SpokeClient, r.CurrentNamespace)
 		if err != nil {
 			logger.Error("Failed to fetch StorageCluster for given namespace", "Namespace", r.CurrentNamespace)
 			return ctrl.Result{}, err
@@ -97,7 +98,7 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			Namespace: sc.Namespace,
 		}
 	} else {
-		scr, err = odf.GetCurrentStorageClusterRef(mirrorPeer, r.SpokeClusterName)
+		scr, err = getCurrentStorageClusterRef(mirrorPeer, r.SpokeClusterName)
 		if err != nil {
 			logger.Error("Failed to get current storage cluster ref", "error", err)
 			return ctrl.Result{}, err
@@ -272,4 +273,38 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Named("agent_mirrorpeer_controller").
 		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(mpPredicate)).
 		Complete(r)
+}
+
+func getCurrentStorageClusterRef(mp *multiclusterv1alpha1.MirrorPeer, spokeClusterName string) (*multiclusterv1alpha1.StorageClusterRef, error) {
+	for _, v := range mp.Spec.Items {
+		if v.ClusterName == spokeClusterName {
+			return &v.StorageClusterRef, nil
+		}
+	}
+
+	return nil, fmt.Errorf("StorageClusterRef for cluster %s under mirrorpeer %s not found", spokeClusterName, mp.Name)
+}
+
+func getStorageClusterFromCurrentNamespace(ctx context.Context, c client.Client, namespace string) (*ocsv1.StorageCluster, error) {
+	storageClusterList := &ocsv1.StorageClusterList{}
+	listOptions := []client.ListOption{
+		client.InNamespace(namespace),
+	}
+
+	// List all StorageClusters in the specified namespace
+	if err := c.List(ctx, storageClusterList, listOptions...); err != nil {
+		return nil, fmt.Errorf("failed to list StorageClusters in namespace %s: %w", namespace, err)
+	}
+
+	// Ensure only one StorageCluster exists
+	if len(storageClusterList.Items) == 0 {
+		return nil, fmt.Errorf("no StorageCluster found in namespace %s", namespace)
+	}
+
+	if len(storageClusterList.Items) > 1 {
+		return nil, fmt.Errorf("multiple StorageClusters found in namespace %s", namespace)
+	}
+
+	// Return the single StorageCluster
+	return &storageClusterList.Items[0], nil
 }

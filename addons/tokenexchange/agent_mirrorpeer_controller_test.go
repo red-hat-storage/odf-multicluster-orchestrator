@@ -1,7 +1,7 @@
 //go:build unit
 // +build unit
 
-package addons
+package tokenexchange
 
 import (
 	"context"
