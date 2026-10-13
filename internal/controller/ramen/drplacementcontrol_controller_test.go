@@ -57,8 +57,8 @@ func TestDRPCReconcile_CreatesPAVSpec(t *testing.T) {
 		t.Errorf("Expected drpcRef.name %s, got %s", testDRPCName, pav.Spec.DRPCRef.Name)
 	}
 
-	if pav.Spec.DRPCRef.Kind != drpcKind {
-		t.Errorf("Expected drpcRef.kind %s, got %s", drpcKind, pav.Spec.DRPCRef.Kind)
+	if pav.Spec.DRPCRef.Kind != utils.DRPCKind {
+		t.Errorf("Expected drpcRef.kind %s, got %s", utils.DRPCKind, pav.Spec.DRPCRef.Kind)
 	}
 
 	// Verify owner reference
