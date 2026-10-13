@@ -9,6 +9,7 @@ import (
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/tokenexchange"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/acm"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/clusterversion"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/mirrorpeer"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/ramen"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/s3configuration"
@@ -296,7 +297,7 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		os.Exit(1)
 	}
 
-	if err = (&ClusterVersionReconciler{
+	if err = (&clusterversion.ClusterVersionReconciler{
 		Client:            mgr.GetClient(),
 		Scheme:            mgr.GetScheme(),
 		Logger:            logger.With("controller", "ClusterVersionReconciler"),
