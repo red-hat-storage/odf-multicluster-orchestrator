@@ -1,4 +1,4 @@
-package ramen
+package protectedapplicationview
 
 import (
 	"context"
@@ -37,7 +37,6 @@ const (
 	placementLabel                     = "cluster.open-cluster-management.io/placement"
 	applicationSetKind                 = "ApplicationSet"
 	subscriptionKind                   = "Subscription"
-	placementKind                      = "Placement"
 	requeueAfterSeconds                = time.Duration(30 * time.Second)
 	subscriptionAnnotation             = "apps.open-cluster-management.io/subscriptions"
 	drPolicyKind                       = "DRPolicy"
@@ -276,7 +275,7 @@ func (r *ProtectedApplicationViewReconciler) updatePAVStatus(
 		PlacementInfo: &multiclusterv1alpha1.PlacementInfo{
 			PlacementRef: corev1.ObjectReference{
 				APIVersion: placementv1beta1.SchemeGroupVersion.String(),
-				Kind:       placementKind,
+				Kind:       utils.PlacementKind,
 				Name:       placement.Name,
 				Namespace:  placement.Namespace,
 			},
@@ -478,7 +477,7 @@ func (r *ProtectedApplicationViewReconciler) findSubscriptionsByPlacement(
 		if sub.Spec.Placement != nil &&
 			sub.Spec.Placement.PlacementRef != nil &&
 			sub.Spec.Placement.PlacementRef.Name == placement.Name &&
-			sub.Spec.Placement.PlacementRef.Kind == placementKind {
+			sub.Spec.Placement.PlacementRef.Kind == utils.PlacementKind {
 			matchingSubs = append(matchingSubs, sub)
 			logger.Info("Found Subscription for Placement",
 				"subscription", sub.Name,

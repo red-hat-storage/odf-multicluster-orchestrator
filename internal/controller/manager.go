@@ -13,7 +13,7 @@ import (
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/drplacementcontrol"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/drpolicy"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/mirrorpeer"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/ramen"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/protectedapplicationview"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/s3configuration"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/version"
@@ -290,10 +290,10 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		os.Exit(1)
 	}
 
-	if err = (&ramen.ProtectedApplicationViewReconciler{
+	if err = (&protectedapplicationview.ProtectedApplicationViewReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Logger: logger.With("controller", "ramen.ProtectedApplicationViewReconciler"),
+		Logger: logger.With("controller", "protectedapplicationview.ProtectedApplicationViewReconciler"),
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create ProtectedApplicationView controller", "error", err)
 		os.Exit(1)
