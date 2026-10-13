@@ -10,6 +10,7 @@ import (
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/acm"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/clusterversion"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/drplacementcontrol"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/drpolicy"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/mirrorpeer"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/ramen"
@@ -280,10 +281,10 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		os.Exit(1)
 	}
 
-	if err = (&ramen.DRPlacementControlReconciler{
+	if err = (&drplacementcontrol.DRPlacementControlReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Logger: logger.With("controller", "ramen.DRPlacementControlReconciler"),
+		Logger: logger.With("controller", "drplacementcontrol.DRPlacementControlReconciler"),
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error("Failed to create DRPlacementControl controller", "error", err)
 		os.Exit(1)
