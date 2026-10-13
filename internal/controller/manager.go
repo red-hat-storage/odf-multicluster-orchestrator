@@ -10,6 +10,7 @@ import (
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/acm"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/clusterversion"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/drpolicy"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/mirrorpeer"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/ramen"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/s3configuration"
@@ -347,10 +348,10 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		logger.Error("Failed to add s3config addon to addon manager", "error", err)
 	}
 
-	if err = (&ramen.DRPolicyReconciler{
+	if err = (&drpolicy.DRPolicyReconciler{
 		HubClient:        mgr.GetClient(),
 		Scheme:           mgr.GetScheme(),
-		Logger:           logger.With("controller", "ramen.DRPolicyReconciler"),
+		Logger:           logger.With("controller", "drpolicy.DRPolicyReconciler"),
 		TestEnvFile:      o.testEnvFile,
 		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
