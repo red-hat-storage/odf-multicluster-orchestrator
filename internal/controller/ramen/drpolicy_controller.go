@@ -170,7 +170,8 @@ func (r *DRPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	if mirrorPeer.Spec.Type != multiclusterv1alpha1.Async {
+	if !(mirrorPeer.Spec.StorageVendor == "" || mirrorPeer.Spec.StorageVendor == multiclusterv1alpha1.ODF) ||
+		mirrorPeer.Spec.Type != multiclusterv1alpha1.Async {
 		return ctrl.Result{}, nil
 	}
 
