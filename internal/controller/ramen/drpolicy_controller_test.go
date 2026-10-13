@@ -95,7 +95,7 @@ func TestDRPolicyReconcile(t *testing.T) {
 func getFakeDRPolicyReconciler(drpolicy *ramenv1alpha1.DRPolicy, mp *multiclusterv1alpha1.MirrorPeer) DRPolicyReconciler {
 	scheme := mgrScheme
 	os.Setenv("POD_NAMESPACE", "openshift-operators")
-	os.Setenv("TOKEN_EXCHANGE_IMAGE", "quay.io/ocs-dev/mco:test")
+	os.Setenv("ADDON_IMAGE", "quay.io/ocs-dev/mco:test")
 	ns1 := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: cName1,

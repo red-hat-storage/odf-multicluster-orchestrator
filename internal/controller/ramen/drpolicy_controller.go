@@ -489,7 +489,7 @@ func validateTokenExchangeAgentUpdated(ctx context.Context, client client.Client
 		return fmt.Errorf("failed to unmarshal result data. %w", err)
 	}
 
-	tokenExchangeImage := utils.GetEnv("TOKEN_EXCHANGE_IMAGE", testEnvFile)
+	tokenExchangeImage := utils.GetEnv("ADDON_IMAGE", testEnvFile)
 	tokenExchangeContainer := corev1.Container{}
 	for _, c := range tokenExchangeDep.Spec.Template.Spec.Containers {
 		if c.Name == utils.TokenExchangeDeployment {
