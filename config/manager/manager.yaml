@@ -39,7 +39,7 @@ spec:
         - containerPort: 8081
           protocol: TCP
         env:
-        - name: TOKEN_EXCHANGE_IMAGE
+        - name: ADDON_IMAGE
           value: ${IMG}
         - name: POD_NAME
           valueFrom:
