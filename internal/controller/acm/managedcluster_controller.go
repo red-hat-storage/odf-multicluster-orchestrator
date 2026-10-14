@@ -9,7 +9,9 @@ import (
 
 	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -21,6 +23,7 @@ import (
 
 type ManagedClusterReconciler struct {
 	Client           client.Client
+	Scheme           *runtime.Scheme
 	Logger           *slog.Logger
 	TestEnvFile      string
 	CurrentNamespace string
@@ -100,18 +103,40 @@ func (r *ManagedClusterReconciler) processManagedClusterViews(ctx context.Contex
 	}
 	r.Logger.Info(fmt.Sprintf("ManagedClusterView was %s", operationResult), "ManagedClusterView", mcv.Name)
 
-	// Create ManagedClusterView for token-exchange-agent deployment running on managedclusters.
-	resourceType = "Deployment"
-	deploymentNamespace := odfInfoConfigMapNamespacedName.Namespace
-	deploymentName := utils.TokenExchangeDeployment
-	tokenExchangeMCVName := utils.GetTokenExchangeManagedClusterViewName(managedCluster.Name)
-
-	mcvDeployment, operationResult, err := utils.CreateOrUpdateManagedClusterView(ctx, r.Client, tokenExchangeMCVName, deploymentName, deploymentNamespace, resourceType, managedCluster.Name, mcvOwnerRef)
-	if err != nil {
-		return fmt.Errorf("failed to create or update ManagedClusterView. %w", err)
-
+	// Clean up tokenexchange older MCVs as it is not required anymore for validation
+	// during upgrades
+	if err := r.cleanupTokenExchangeMCV(ctx, managedCluster.Name); err != nil {
+		return fmt.Errorf("failed to cleanup tokenexchange ManagedClusterView: %w", err)
 	}
-	r.Logger.Info(fmt.Sprintf("ManagedClusterView was %s", operationResult), "ManagedClusterView", mcvDeployment.Name)
 
+	return nil
+}
+
+// cleanupTokenExchangeMCV deletes the tokenexchange MCV
+func (r *ManagedClusterReconciler) cleanupTokenExchangeMCV(ctx context.Context, clusterName string) error {
+
+	// Delete tokenexchange MCV if it exists
+	tokenExchangeMCVName := utils.GetTokenExchangeManagedClusterViewName(clusterName)
+	tokenExchangeMCV := &viewv1beta1.ManagedClusterView{}
+	tokenExchangeMCV.Name = tokenExchangeMCVName
+	tokenExchangeMCV.Namespace = clusterName
+
+	err := r.Client.Get(ctx, client.ObjectKeyFromObject(tokenExchangeMCV), tokenExchangeMCV)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			// Already deleted, nothing to do
+			return nil
+		}
+		return fmt.Errorf("failed to get tokenexchange ManagedClusterView: %w", err)
+	}
+
+	// MCV exists, delete it
+	if err := r.Client.Delete(ctx, tokenExchangeMCV); err != nil {
+		if !k8serrors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete tokenexchange ManagedClusterView: %w", err)
+		}
+	}
+
+	r.Logger.Info("Deleted tokenexchange ManagedClusterView", "ManagedClusterView", tokenExchangeMCVName)
 	return nil
 }

@@ -20,6 +20,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"strings"
+	"time"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
@@ -33,14 +36,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
-	"log/slog"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"time"
 )
 
 const (
@@ -93,14 +94,14 @@ func (odf *ODFVendor) ValidateVersion(ctx context.Context, mirrorPeer *multiclus
 }
 
 func (odf *ODFVendor) ConfigureStorageForDR(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
-	if err := odf.processManagedClusterAddon(ctx, mirrorPeer); err != nil {
-		odf.logger.Error("Failed to process managedclusteraddon", "error", err)
-		mirrorPeer.Status.Message = multiclusterv1alpha1.ManagedClusterAddOnFailed
-		utils.SetConfiguredFalseCondition(&mirrorPeer.Status.Conditions, mirrorPeer.Generation, err.Error(), multiclusterv1alpha1.ReasonManagedClusterAddonFailed)
-		return ctrl.Result{}, err
-	}
-
 	if mirrorPeer.Spec.Type == multiclusterv1alpha1.Async {
+		if err := odf.processManagedClusterAddon(ctx, mirrorPeer); err != nil {
+			odf.logger.Error("Failed to process managedclusteraddon", "error", err)
+			mirrorPeer.Status.Message = multiclusterv1alpha1.ManagedClusterAddOnFailed
+			utils.SetConfiguredFalseCondition(&mirrorPeer.Status.Conditions, mirrorPeer.Generation, err.Error(), multiclusterv1alpha1.ReasonManagedClusterAddonFailed)
+			return ctrl.Result{}, err
+		}
+
 		if err := createStorageClusterPeer(ctx, odf.client, odf.logger, mirrorPeer, odf.infoMap); err != nil {
 			odf.logger.Error("Failed to create StorageClusterPeer", "error", err)
 			mirrorPeer.Status.Message = multiclusterv1alpha1.PeeringFailed
@@ -127,6 +128,13 @@ func (odf *ODFVendor) ConfigureStorageForDR(ctx context.Context, mirrorPeer *mul
 			utils.SetConfiguredFalseCondition(&mirrorPeer.Status.Conditions, mirrorPeer.Generation, multiclusterv1alpha1.MessagePeeringInProgress, multiclusterv1alpha1.ReasonPeeringInProgress)
 			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
+	} else {
+		// TODO: Remove this block in future version, as the tokenexchange addon would already be removed for sync type by then.
+		// Cleanup token-exchange-agent addon for Sync type DR, as the s3 secrets are now managed by S3Config addon
+		if err := odf.cleanUpManagedClusterAddonForSyncDR(ctx, mirrorPeer); err != nil {
+			odf.logger.Error("Failed to cleanup redundant tokenexchange ManagedClusterAddon for Sync type DR", "error", err)
+			return ctrl.Result{}, err
+		}
 	}
 	return ctrl.Result{}, nil
 }
@@ -137,11 +145,11 @@ func (odf *ODFVendor) CleanupResources(ctx context.Context, mirrorPeer *multiclu
 			odf.logger.Error("Failed to remove clientID from cluster pairing ConfigMap", "error", err)
 			return reconcile.Result{}, err
 		}
-	}
 
-	if err := odf.deleteManagedClusterAddon(ctx, mirrorPeer); err != nil {
-		odf.logger.Error("Failed to delete ManagedClusterAddon", "error", err)
-		return reconcile.Result{}, err
+		if err := odf.deleteManagedClusterAddon(ctx, mirrorPeer); err != nil {
+			odf.logger.Error("Failed to delete ManagedClusterAddon", "error", err)
+			return reconcile.Result{}, err
+		}
 	}
 	return ctrl.Result{}, nil
 }
@@ -184,7 +192,7 @@ func (odf *ODFVendor) getConfig(mp *multiclusterv1alpha1.MirrorPeer) ([]ManagedC
 // processManagedClusterAddon creates an addon for the cluster management in all the peer refs,
 // the resources gets an owner ref of the mirrorpeer to let the garbage collector handle it if the mirrorpeer gets deleted
 func (odf *ODFVendor) processManagedClusterAddon(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer) error {
-	odf.logger.Info("Processing ManagedClusterAddons for MirrorPeer")
+	odf.logger.Info("Processing ClusterManagementAddOn and ManagedClusterAddons for MirrorPeer")
 
 	clusterManagementAddOn := &addonapiv1alpha1.ClusterManagementAddOn{
 		ObjectMeta: metav1.ObjectMeta{
@@ -366,6 +374,95 @@ func (odf *ODFVendor) deleteManagedClusterAddon(ctx context.Context, mirrorPeer 
 		}
 	}
 
+	return nil
+}
+
+func (odf *ODFVendor) cleanUpManagedClusterAddonForSyncDR(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer) error {
+	addonConfigs, err := odf.getConfig(mirrorPeer)
+	if err != nil {
+		return fmt.Errorf("failed to get managedclusteraddon config %w", err)
+	}
+
+	for _, config := range addonConfigs {
+		managedClusterAddOn := &addonapiv1alpha1.ManagedClusterAddOn{}
+		managedClusterAddOn.Name = config.Name
+		managedClusterAddOn.Namespace = config.Namespace
+
+		if err := odf.client.Get(ctx, client.ObjectKeyFromObject(managedClusterAddOn), managedClusterAddOn); err != nil {
+			if k8serrors.IsNotFound(err) {
+				odf.logger.Info("tokenexchange ManagedClusterAddon for Sync type DR not found, continuing to cleanup spoke finalizers")
+				if err := odf.cleanUpSpokeFinalizersForSyncDR(ctx, mirrorPeer); err != nil {
+					return fmt.Errorf("failed to cleanup spoke finalizers when ManagedClusterAddon not found %w", err)
+				} else {
+					continue
+				}
+			} else {
+				return err
+			}
+		}
+
+		refs := []metav1.OwnerReference{
+			{
+				APIVersion:         AddonApiVersion,
+				Kind:               ManagedClusterAddOn,
+				Name:               mirrorPeer.GetName(),
+				UID:                mirrorPeer.GetUID(),
+				BlockOwnerDeletion: ptr.To(true),
+				Controller:         ptr.To(true),
+			},
+		}
+
+		found, err := controllerutil.HasOwnerReference(refs, managedClusterAddOn, odf.scheme)
+		if err != nil {
+			return err
+		}
+
+		if found {
+			err = controllerutil.RemoveOwnerReference(mirrorPeer, managedClusterAddOn, odf.scheme)
+			if err != nil {
+				return err
+			}
+		}
+
+		if err = odf.client.Get(ctx, client.ObjectKeyFromObject(managedClusterAddOn), managedClusterAddOn); err != nil {
+			return err
+		}
+
+		if len(managedClusterAddOn.GetOwnerReferences()) == 0 {
+			if err = odf.client.Delete(ctx, managedClusterAddOn); err != nil {
+				return err
+			}
+			if err := odf.cleanUpSpokeFinalizersForSyncDR(ctx, mirrorPeer); err != nil {
+				return fmt.Errorf("failed to cleanup spoke finalizers after deleting ManagedClusterAddon %w", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (odf *ODFVendor) cleanUpSpokeFinalizersForSyncDR(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer) error {
+	// Clear up any spoke finalizers, as there won't be any token-exchange-agent pod running on spoke
+	// to clear these out during mirrorpeer deletion
+	spokeFinalizers := []string{}
+	for _, finalizer := range mirrorPeer.GetFinalizers() {
+		if strings.HasSuffix(finalizer, utils.SpokeMirrorPeerFinalizer) {
+			spokeFinalizers = append(spokeFinalizers, finalizer)
+		}
+	}
+
+	if len(spokeFinalizers) > 0 {
+		odf.logger.Info("Removing spoke finalizers from MirrorPeer as tokenexchange addon is cleaned up", "count", len(spokeFinalizers), "finalizers", spokeFinalizers)
+		for _, finalizer := range spokeFinalizers {
+			controllerutil.RemoveFinalizer(mirrorPeer, finalizer)
+		}
+		if err := odf.client.Update(ctx, mirrorPeer); err != nil {
+			odf.logger.Error("Failed to remove spoke finalizers from MirrorPeer", "error", err)
+			return err
+		}
+	}
+
+	odf.logger.Info("Successfully removed spoke finalizers from MirrorPeer while cleaning up tokenexchange addon")
 	return nil
 }
 

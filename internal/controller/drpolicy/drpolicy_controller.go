@@ -15,8 +15,6 @@ import (
 	replicationv1alpha1 "github.com/csi-addons/kubernetes-csi-addons/api/replication.storage/v1alpha1"
 	templatev1 "github.com/openshift/api/template/v1"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
-	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -349,22 +347,6 @@ func (r *DRPolicyReconciler) createOrUpdateManifestWorkForVRCAndVGRC(ctx context
 		}
 		logger.Info("ManifestWork created/updated successfully", "ManifestWorkName", manifestWorkName, "VolumeReplicationClassName", vrc.Name)
 
-		// Skip creation of VGRC template if ODF version is less than 4.20 on providers, as storageconsumer.spec doesn't support
-		// VolumeGroupReplicationClass type
-		lt, err := utils.CompareSemverMajorMinorVersions(cInfo.ProviderInfo.Version, "4.20.0", utils.Lt)
-		if err != nil {
-			return fmt.Errorf("validation: unable to parse versions: error: %w", err)
-		}
-		if lt {
-			logger.Info("DF version in Managed Cluster doesn't support creation of VGRC templates, skipping creation of VGRC template", "Peer", pr.ClusterName, "error", err)
-			return nil
-		}
-
-		// Validate that the token-exchange-agent pods on managedclusters are updated properly before creating VGRC templates
-		if err = validateTokenExchangeAgentUpdated(ctx, r.HubClient, logger, cInfo.ProviderInfo.ProviderManagedClusterName, r.TestEnvFile); err != nil {
-			return err
-		}
-
 		vgrcmw := workv1.ManifestWork{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      vgrcManifestWorkName,
@@ -471,44 +453,6 @@ func getTemplateForVGRC(vgrc replicationv1alpha1.VolumeGroupReplicationClass, vg
 	}
 
 	return vgrcTemplateJson, nil
-}
-
-// validateTokenExchangeAgentUpdated validates that the token-exchange-agent pods on managedclusters are updated properly
-func validateTokenExchangeAgentUpdated(ctx context.Context, client client.Client, logger *slog.Logger, clusterName, testEnvFile string) error {
-	var managedClusterView viewv1beta1.ManagedClusterView
-	mcvNamespacedName := types.NamespacedName{
-		Namespace: clusterName,
-		Name:      utils.GetTokenExchangeManagedClusterViewName(clusterName),
-	}
-	if err := client.Get(ctx, mcvNamespacedName, &managedClusterView); err != nil {
-		logger.Error("Failed to get ManagedClusterView", "error", err)
-		return err
-	}
-
-	tokenExchangeDep := appsv1.Deployment{}
-	if err := json.Unmarshal(managedClusterView.Status.Result.Raw, &tokenExchangeDep); err != nil {
-		return fmt.Errorf("failed to unmarshal result data. %w", err)
-	}
-
-	tokenExchangeImage := utils.GetEnv("ADDON_IMAGE", testEnvFile)
-	tokenExchangeContainer := corev1.Container{}
-	for _, c := range tokenExchangeDep.Spec.Template.Spec.Containers {
-		if c.Name == utils.TokenExchangeDeployment {
-			tokenExchangeContainer = c
-		}
-	}
-	if tokenExchangeContainer.Name == "" {
-		return fmt.Errorf("container 'token-exchange-agent' not found in 'token-exchange-agent' deployment parsed from managedclusterview")
-	}
-	if tokenExchangeContainer.Image != tokenExchangeImage || tokenExchangeDep.Status.Replicas != 1 {
-		logger.Error("token-exchange-agent pods are not yet updated, waiting for update to complete",
-			"current token-exchange-agent image", tokenExchangeContainer.Image,
-			"expected token-exchange-agent image", tokenExchangeImage,
-			"replicas", tokenExchangeDep.Status.Replicas)
-		return utils.ErrRequeueReconcile
-	}
-
-	return nil
 }
 
 func getMirrorPeerForClusterSet(ctx context.Context, client client.Client, clusterSet []string) (*multiclusterv1alpha1.MirrorPeer, error) {
