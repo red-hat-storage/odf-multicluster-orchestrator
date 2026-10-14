@@ -1,7 +1,7 @@
 //go:build unit
 // +build unit
 
-package ramen
+package drpolicy
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/testutil"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
@@ -30,6 +31,8 @@ const (
 	scName      = "test-storagecluster"
 	scNamespace = "test-namespace"
 )
+
+var mgrScheme = testutil.TestScheme
 
 func TestDRPolicyReconcile(t *testing.T) {
 

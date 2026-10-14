@@ -1,4 +1,4 @@
-package ramen
+package drplacementcontrol
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -61,8 +62,8 @@ func (r *DRPlacementControlReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		pav.Spec.DRPCRef = corev1.ObjectReference{
-			APIVersion: ramenAPIVersion,
-			Kind:       drpcKind,
+			APIVersion: utils.RamenAPIVersion,
+			Kind:       utils.DRPCKind,
 			Name:       drpc.Name,
 			Namespace:  drpc.Namespace,
 			UID:        drpc.UID,

@@ -1,7 +1,7 @@
 //go:build unit
 // +build unit
 
-package ramen
+package protectedapplicationview
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/testutil"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	argov1alpha1 "github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
@@ -37,6 +38,8 @@ const (
 	pavTestCluster1      = "cluster-1"
 	pavTestCluster2      = "cluster-2"
 )
+
+var mgrScheme = testutil.TestScheme
 
 func TestPAVReconcile_ApplicationSet(t *testing.T) {
 	pav := createTestPAV()
@@ -455,7 +458,7 @@ func createTestDRPCForPAV() *ramenv1alpha1.DRPlacementControl {
 			PlacementRef: corev1.ObjectReference{
 				Name:      pavTestPlacementName,
 				Namespace: pavTestNamespace,
-				Kind:      placementKind,
+				Kind:      utils.PlacementKind,
 			},
 			DRPolicyRef: corev1.ObjectReference{
 				Name: pavTestDRPolicyName,
@@ -516,7 +519,7 @@ func createTestSubscriptionForPAV() *appsubv1.Subscription {
 			Placement: &plrv1alpha1.Placement{
 				PlacementRef: &corev1.ObjectReference{
 					Name: pavTestPlacementName,
-					Kind: placementKind,
+					Kind: utils.PlacementKind,
 				},
 			},
 		},

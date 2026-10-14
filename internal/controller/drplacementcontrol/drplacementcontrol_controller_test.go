@@ -1,13 +1,14 @@
 //go:build unit
 // +build unit
 
-package ramen
+package drplacementcontrol
 
 import (
 	"context"
 	"testing"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/testutil"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
@@ -24,6 +25,8 @@ const (
 	testNamespace    = "test-namespace"
 	testDRPolicyName = "test-drpolicy"
 )
+
+var mgrScheme = testutil.TestScheme
 
 func TestDRPCReconcile_CreatesPAVSpec(t *testing.T) {
 	drpc := createTestDRPC()
@@ -57,8 +60,8 @@ func TestDRPCReconcile_CreatesPAVSpec(t *testing.T) {
 		t.Errorf("Expected drpcRef.name %s, got %s", testDRPCName, pav.Spec.DRPCRef.Name)
 	}
 
-	if pav.Spec.DRPCRef.Kind != drpcKind {
-		t.Errorf("Expected drpcRef.kind %s, got %s", drpcKind, pav.Spec.DRPCRef.Kind)
+	if pav.Spec.DRPCRef.Kind != utils.DRPCKind {
+		t.Errorf("Expected drpcRef.kind %s, got %s", utils.DRPCKind, pav.Spec.DRPCRef.Kind)
 	}
 
 	// Verify owner reference
@@ -154,7 +157,7 @@ func createTestDRPC() *ramenv1alpha1.DRPlacementControl {
 		Spec: ramenv1alpha1.DRPlacementControlSpec{
 			PlacementRef: corev1.ObjectReference{
 				Name: "test-placement",
-				Kind: placementKind,
+				Kind: utils.PlacementKind,
 			},
 			DRPolicyRef: corev1.ObjectReference{
 				Name: testDRPolicyName,

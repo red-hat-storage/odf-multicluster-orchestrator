@@ -1,4 +1,4 @@
-package ramen
+package protectedapplicationview
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"time"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	argov1alpha1 "github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
@@ -36,11 +37,8 @@ const (
 	placementLabel                     = "cluster.open-cluster-management.io/placement"
 	applicationSetKind                 = "ApplicationSet"
 	subscriptionKind                   = "Subscription"
-	drpcKind                           = "DRPlacementControl"
-	placementKind                      = "Placement"
 	requeueAfterSeconds                = time.Duration(30 * time.Second)
 	subscriptionAnnotation             = "apps.open-cluster-management.io/subscriptions"
-	ramenAPIVersion                    = "ramendr.openshift.io/v1alpha1"
 	drPolicyKind                       = "DRPolicy"
 	subscriptionAPIVersion             = "apps.open-cluster-management.io/v1"
 	clusterDecisionResourceIndexName   = "spec.generators.clusterDecisionResource.placement"
@@ -277,7 +275,7 @@ func (r *ProtectedApplicationViewReconciler) updatePAVStatus(
 		PlacementInfo: &multiclusterv1alpha1.PlacementInfo{
 			PlacementRef: corev1.ObjectReference{
 				APIVersion: placementv1beta1.SchemeGroupVersion.String(),
-				Kind:       placementKind,
+				Kind:       utils.PlacementKind,
 				Name:       placement.Name,
 				Namespace:  placement.Namespace,
 			},
@@ -285,7 +283,7 @@ func (r *ProtectedApplicationViewReconciler) updatePAVStatus(
 		},
 		DRInfo: multiclusterv1alpha1.DRInfo{
 			DRPolicyRef: corev1.ObjectReference{
-				APIVersion: ramenAPIVersion,
+				APIVersion: utils.RamenAPIVersion,
 				Kind:       drPolicyKind,
 				Name:       drpc.Spec.DRPolicyRef.Name,
 			},
@@ -387,8 +385,8 @@ func (r *ProtectedApplicationViewReconciler) findApplicationForDRPC(
 	return ApplicationResult{
 		Type: multiclusterv1alpha1.DiscoveredType,
 		AppRef: corev1.ObjectReference{
-			APIVersion: ramenAPIVersion,
-			Kind:       drpcKind,
+			APIVersion: utils.RamenAPIVersion,
+			Kind:       utils.DRPCKind,
 			Name:       drpc.Name,
 			Namespace:  drpc.Namespace,
 		},
@@ -479,7 +477,7 @@ func (r *ProtectedApplicationViewReconciler) findSubscriptionsByPlacement(
 		if sub.Spec.Placement != nil &&
 			sub.Spec.Placement.PlacementRef != nil &&
 			sub.Spec.Placement.PlacementRef.Name == placement.Name &&
-			sub.Spec.Placement.PlacementRef.Kind == placementKind {
+			sub.Spec.Placement.PlacementRef.Kind == utils.PlacementKind {
 			matchingSubs = append(matchingSubs, sub)
 			logger.Info("Found Subscription for Placement",
 				"subscription", sub.Name,

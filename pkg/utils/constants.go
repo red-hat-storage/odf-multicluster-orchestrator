@@ -8,6 +8,9 @@ const (
 	AwsSecretAccessKey = "AWS_SECRET_ACCESS_KEY"
 
 	RamenHubOperatorConfigName = "ramen-hub-operator-config"
+	RamenAPIVersion            = "ramendr.openshift.io/v1alpha1"
+	DRPCKind                   = "DRPlacementControl"
+	PlacementKind              = "Placement"
 
 	S3ConfigurationNameAnnotationKey = "multicluster.odf.openshift.io/s3configuration"
 	HubOperatorNamespaceKey          = "hub.multicluster.odf.openshift.io/operator-namespace"
