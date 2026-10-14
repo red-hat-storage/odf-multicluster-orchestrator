@@ -12,9 +12,16 @@ import (
 )
 
 const (
-	clusterIDLabelKey                 = "clusterID"
-	OdfInfoClusterClaimNamespacedName = "odfinfo.odf.openshift.io"
+	clusterIDLabelKey                  = "clusterID"
+	OdfInfoClusterClaimNamespacedName  = "odfinfo.odf.openshift.io"
+	IbmScaleClusterClaimNamespacedName = "scale.spectrum.ibm.com"
 )
+
+// SupportedStorageVendorClaims lists all supported storage vendor cluster claim names
+var SupportedStorageVendorClaims = []string{
+	OdfInfoClusterClaimNamespacedName,
+	IbmScaleClusterClaimNamespacedName,
+}
 
 // GetManagedClusterById fetches a ManagedCluster by its cluster ID label
 func GetManagedClusterById(ctx context.Context, c client.Client, clusterId string) (*clusterv1.ManagedCluster, error) {
@@ -40,28 +47,63 @@ func GetManagedClusterById(ctx context.Context, c client.Client, clusterId strin
 	return &managedClusterList.Items[0], nil
 }
 
-func GetNamespacedNameForClusterInfo(managedCluster clusterv1.ManagedCluster) (types.NamespacedName, error) {
+// GetNamespacedNameFromClusterClaim extracts a namespaced name from a specific ClusterClaim
+func GetNamespacedNameFromClusterClaim(managedCluster *clusterv1.ManagedCluster, claimName string) (types.NamespacedName, error) {
 	clusterClaims := managedCluster.Status.ClusterClaims
 	for _, claim := range clusterClaims {
-		if claim.Name == OdfInfoClusterClaimNamespacedName {
+		if claim.Name == claimName {
 			namespacedName := strings.Split(claim.Value, "/")
 			if len(namespacedName) != 2 {
-				return types.NamespacedName{}, fmt.Errorf("invalid format for namespaced name claim: expected 'namespace/name', got '%s'", claim.Value)
+				return types.NamespacedName{}, fmt.Errorf("invalid format for namespaced name claim %q: expected 'namespace/name', got '%s'", claimName, claim.Value)
 			}
 			return types.NamespacedName{Namespace: namespacedName[0], Name: namespacedName[1]}, nil
 		}
 	}
 
-	return types.NamespacedName{}, fmt.Errorf("cannot find ClusterClaim %q in ManagedCluster status", OdfInfoClusterClaimNamespacedName)
+	return types.NamespacedName{}, fmt.Errorf("cannot find ClusterClaim %q in ManagedCluster status", claimName)
 }
 
-func HasRequiredODFKey(mc *clusterv1.ManagedCluster) bool {
+// GetAllStorageVendorConfigMaps returns a map of cluster claim name to ConfigMap namespaced name
+// for all supported storage vendors that have claims in the ManagedCluster
+func GetAllStorageVendorConfigMaps(managedCluster *clusterv1.ManagedCluster) map[string]types.NamespacedName {
+	result := make(map[string]types.NamespacedName)
+
+	for _, claimName := range SupportedStorageVendorClaims {
+		if nsName, err := GetNamespacedNameFromClusterClaim(managedCluster, claimName); err == nil {
+			result[claimName] = nsName
+		}
+	}
+
+	return result
+}
+
+// HasClusterClaim checks if a ManagedCluster has a specific cluster claim
+func HasClusterClaim(mc *clusterv1.ManagedCluster, claimName string) bool {
 	claims := mc.Status.ClusterClaims
 	for _, claim := range claims {
-		if claim.Name == OdfInfoClusterClaimNamespacedName {
+		if claim.Name == claimName {
 			return true
 		}
 	}
 	return false
+}
 
+// HasRequiredODFKey checks if the ManagedCluster has the ODF cluster claim
+func HasRequiredODFKey(mc *clusterv1.ManagedCluster) bool {
+	return HasClusterClaim(mc, OdfInfoClusterClaimNamespacedName)
+}
+
+// HasRequiredIbmScaleKey checks if the ManagedCluster has the IBM Storage Scale cluster claim
+func HasRequiredIbmScaleKey(mc *clusterv1.ManagedCluster) bool {
+	return HasClusterClaim(mc, IbmScaleClusterClaimNamespacedName)
+}
+
+// HasRequiredStorageVendorKey checks if the ManagedCluster has any supported storage vendor cluster claim
+func HasRequiredStorageVendorKey(mc *clusterv1.ManagedCluster) bool {
+	for _, claimName := range SupportedStorageVendorClaims {
+		if HasClusterClaim(mc, claimName) {
+			return true
+		}
+	}
+	return false
 }

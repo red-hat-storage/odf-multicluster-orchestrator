@@ -1,16 +1,14 @@
-package acm
+package managedcluster
 
 import (
 	"context"
 	"fmt"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"log/slog"
 
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
-	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -29,12 +27,15 @@ type ManagedClusterReconciler struct {
 	CurrentNamespace string
 }
 
+// +kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=managedclusters,verbs=get;list;watch
+// +kubebuilder:rbac:groups=view.open-cluster-management.io,resources=managedclusterviews,verbs=get;list;watch;create;update;patch;delete
+
 func (r *ManagedClusterReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	logger := r.Logger.With("ManagedCluster", req.NamespacedName)
 	logger.Info("Reconciling ManagedCluster")
 
-	var managedCluster clusterv1.ManagedCluster
-	if err := r.Client.Get(ctx, req.NamespacedName, &managedCluster); err != nil {
+	managedCluster := &clusterv1.ManagedCluster{}
+	if err := r.Client.Get(ctx, req.NamespacedName, managedCluster); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			logger.Error("Failed to get ManagedCluster", "error", err)
 		}
@@ -59,54 +60,69 @@ func (r *ManagedClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			if !ok {
 				return false
 			}
-			return utils.HasRequiredODFKey(obj)
+			return utils.HasRequiredStorageVendorKey(obj)
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
 			obj, ok := e.Object.(*clusterv1.ManagedCluster)
 			if !ok {
 				return false
 			}
-			return utils.HasRequiredODFKey(obj)
+			return utils.HasRequiredStorageVendorKey(obj)
 		},
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&clusterv1.ManagedCluster{}, builder.WithPredicates(managedClusterPredicate, predicate.ResourceVersionChangedPredicate{})).
 		Owns(&viewv1beta1.ManagedClusterView{}).
-		Owns(&corev1.ConfigMap{}).
 		Complete(r)
 }
 
-func (r *ManagedClusterReconciler) processManagedClusterViews(ctx context.Context, managedCluster clusterv1.ManagedCluster) error {
-	resourceType := "ConfigMap"
-	odfInfoConfigMapNamespacedName, err := utils.GetNamespacedNameForClusterInfo(managedCluster)
-	if err != nil {
-		return fmt.Errorf("error while getting NamespacedName of the %s. %w", resourceType, err)
+func (r *ManagedClusterReconciler) processManagedClusterViews(ctx context.Context, managedCluster *clusterv1.ManagedCluster) error {
+	// Get all storage vendor ConfigMaps for this ManagedCluster
+	vendorConfigMaps := utils.GetAllStorageVendorConfigMaps(managedCluster)
+
+	// If no storage vendor claims found, return
+	if len(vendorConfigMaps) == 0 {
+		return fmt.Errorf("no storage vendor cluster claims found in ManagedCluster %s", managedCluster.Name)
 	}
 
-	enabled := true
-	disabled := false
-	mcvOwnerRef := &metav1.OwnerReference{
-		APIVersion:         managedCluster.APIVersion,
-		Kind:               managedCluster.Kind,
-		UID:                managedCluster.UID,
-		Name:               managedCluster.Name,
-		Controller:         &enabled,
-		BlockOwnerDeletion: &disabled,
-	}
+	// Create ManagedClusterViews for each storage vendor ConfigMap
+	for claimName, configMapNamespacedName := range vendorConfigMaps {
+		var mcvName string
 
-	mcvName := utils.GetManagedClusterViewName(managedCluster.Name)
-	mcv, operationResult, err := utils.CreateOrUpdateManagedClusterView(ctx, r.Client, mcvName, odfInfoConfigMapNamespacedName.Name, odfInfoConfigMapNamespacedName.Namespace, resourceType, managedCluster.Name, mcvOwnerRef)
-	if err != nil {
-		return fmt.Errorf("failed to create or update ManagedClusterView. %w", err)
+		// Determine the MCV name based on the vendor
+		switch claimName {
+		case utils.OdfInfoClusterClaimNamespacedName:
+			mcvName = utils.GetODFManagedClusterViewName(managedCluster.Name)
+		case utils.IbmScaleClusterClaimNamespacedName:
+			mcvName = utils.GetIbmScaleManagedClusterViewName(managedCluster.Name)
+		default:
+			r.Logger.Info("Unknown storage vendor claim, Skipping", "ClaimName", claimName)
+			continue
+		}
 
-	}
-	r.Logger.Info(fmt.Sprintf("ManagedClusterView was %s", operationResult), "ManagedClusterView", mcv.Name)
+		// Create ManagedClusterView for the storage vendor ConfigMap
+		mcv, operationResult, err := utils.CreateOrUpdateManagedClusterView(
+			ctx,
+			r.Client,
+			r.Scheme,
+			managedCluster,
+			mcvName,
+			configMapNamespacedName.Name,
+			configMapNamespacedName.Namespace,
+			"ConfigMap",
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create or update ManagedClusterView for %s: %w", claimName, err)
+		}
+		r.Logger.Info(fmt.Sprintf("ManagedClusterView was %s", operationResult), "ManagedClusterView", mcv.Name, "Vendor", claimName)
 
-	// Clean up tokenexchange older MCVs as it is not required anymore for validation
-	// during upgrades
-	if err := r.cleanupTokenExchangeMCV(ctx, managedCluster.Name); err != nil {
-		return fmt.Errorf("failed to cleanup tokenexchange ManagedClusterView: %w", err)
+		// Cleanup ManagedClusterView for token-exchange-agent deployment (only for ODF)
+		if claimName == utils.OdfInfoClusterClaimNamespacedName {
+			if err := r.cleanupTokenExchangeMCV(ctx, managedCluster.Name); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil

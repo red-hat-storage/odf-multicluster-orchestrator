@@ -1,4 +1,4 @@
-package acm
+package managedclusterview
 
 import (
 	"context"
