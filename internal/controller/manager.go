@@ -276,6 +276,7 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 	if err = (&managedclusterview.ManagedClusterViewReconciler{
 		Client:           mgr.GetClient(),
 		Logger:           logger.With("controller", "ManagedClusterViewReconciler"),
+		Scheme:           mgr.GetScheme(),
 		TestEnvFile:      o.testEnvFile,
 		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {

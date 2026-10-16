@@ -12,9 +12,11 @@ import (
 )
 
 const (
-	ODFMCVNameTemplate      = "odf-multicluster-mcv-%s"
-	IbmScaleMCVNameTemplate = "scale-multicluster-mcv-%s"
-	TokenExchangeDeployment = "token-exchange-agent"
+	ODFMCVNameTemplatePrefix      = "odf-multicluster-mcv"
+	IbmScaleMCVNameTemplatePrefix = "scale-multicluster-mcv"
+	ODFMCVNameTemplate            = "odf-multicluster-mcv-%s"
+	IbmScaleMCVNameTemplate       = "scale-multicluster-mcv-%s"
+	TokenExchangeDeployment       = "token-exchange-agent"
 )
 
 var ErrRequeueReconcile = errors.New("requeue reconcile request")

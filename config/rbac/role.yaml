@@ -6,18 +6,6 @@ metadata:
 rules:
 - apiGroups:
   - ""
-  resourceNames:
-  - odf-client-info
-  resources:
-  - configmaps
-  verbs:
-  - create
-  - get
-  - list
-  - update
-  - watch
-- apiGroups:
-  - ""
   resources:
   - configmaps
   - services
