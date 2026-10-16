@@ -67,13 +67,191 @@ func Test_GetNamespacedNameForClusterInfo(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetNamespacedNameForClusterInfo(tt.args.managedCluster)
+			got, err := GetNamespacedNameFromClusterClaim(&tt.args.managedCluster, OdfInfoClusterClaimNamespacedName)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getNamespacedNameForClusterInfo() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("getNamespacedNameForClusterInfo() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_GetAllStorageVendorConfigMaps(t *testing.T) {
+	tests := []struct {
+		name           string
+		managedCluster clusterv1.ManagedCluster
+		want           map[string]types.NamespacedName
+	}{
+		{
+			name: "ODF only",
+			managedCluster: clusterv1.ManagedCluster{
+				Status: clusterv1.ManagedClusterStatus{
+					ClusterClaims: []clusterv1.ManagedClusterClaim{
+						{
+							Name:  OdfInfoClusterClaimNamespacedName,
+							Value: "openshift-storage/odf-info",
+						},
+					},
+				},
+			},
+			want: map[string]types.NamespacedName{
+				OdfInfoClusterClaimNamespacedName: {Namespace: "openshift-storage", Name: "odf-info"},
+			},
+		},
+		{
+			name: "IBM Storage Scale only",
+			managedCluster: clusterv1.ManagedCluster{
+				Status: clusterv1.ManagedClusterStatus{
+					ClusterClaims: []clusterv1.ManagedClusterClaim{
+						{
+							Name:  IbmScaleClusterClaimNamespacedName,
+							Value: "ibm-spectrum-scale/ibm-spectrum-scale-replicationinfo",
+						},
+					},
+				},
+			},
+			want: map[string]types.NamespacedName{
+				IbmScaleClusterClaimNamespacedName: {Namespace: "ibm-spectrum-scale", Name: "ibm-spectrum-scale-replicationinfo"},
+			},
+		},
+		{
+			name: "Both ODF and IBM Storage Scale",
+			managedCluster: clusterv1.ManagedCluster{
+				Status: clusterv1.ManagedClusterStatus{
+					ClusterClaims: []clusterv1.ManagedClusterClaim{
+						{
+							Name:  OdfInfoClusterClaimNamespacedName,
+							Value: "openshift-storage/odf-info",
+						},
+						{
+							Name:  IbmScaleClusterClaimNamespacedName,
+							Value: "ibm-spectrum-scale/ibm-spectrum-scale-replicationinfo",
+						},
+					},
+				},
+			},
+			want: map[string]types.NamespacedName{
+				OdfInfoClusterClaimNamespacedName:  {Namespace: "openshift-storage", Name: "odf-info"},
+				IbmScaleClusterClaimNamespacedName: {Namespace: "ibm-spectrum-scale", Name: "ibm-spectrum-scale-replicationinfo"},
+			},
+		},
+		{
+			name: "No storage vendor claims",
+			managedCluster: clusterv1.ManagedCluster{
+				Status: clusterv1.ManagedClusterStatus{
+					ClusterClaims: []clusterv1.ManagedClusterClaim{},
+				},
+			},
+			want: map[string]types.NamespacedName{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GetAllStorageVendorConfigMaps(&tt.managedCluster)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GetAllStorageVendorConfigMaps() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_HasRequiredStorageVendorKey(t *testing.T) {
+	tests := []struct {
+		name           string
+		managedCluster clusterv1.ManagedCluster
+		want           bool
+	}{
+		{
+			name: "Has ODF claim",
+			managedCluster: clusterv1.ManagedCluster{
+				Status: clusterv1.ManagedClusterStatus{
+					ClusterClaims: []clusterv1.ManagedClusterClaim{
+						{Name: OdfInfoClusterClaimNamespacedName, Value: "ns/name"},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "Has IBM Storage Scale claim",
+			managedCluster: clusterv1.ManagedCluster{
+				Status: clusterv1.ManagedClusterStatus{
+					ClusterClaims: []clusterv1.ManagedClusterClaim{
+						{Name: IbmScaleClusterClaimNamespacedName, Value: "ns/name"},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "Has both ODF and IBM Storage Scale claims",
+			managedCluster: clusterv1.ManagedCluster{
+				Status: clusterv1.ManagedClusterStatus{
+					ClusterClaims: []clusterv1.ManagedClusterClaim{
+						{Name: OdfInfoClusterClaimNamespacedName, Value: "ns/name"},
+						{Name: IbmScaleClusterClaimNamespacedName, Value: "ns/name"},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "No storage vendor claims",
+			managedCluster: clusterv1.ManagedCluster{
+				Status: clusterv1.ManagedClusterStatus{
+					ClusterClaims: []clusterv1.ManagedClusterClaim{
+						{Name: "some-other-claim", Value: "value"},
+					},
+				},
+			},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := HasRequiredStorageVendorKey(&tt.managedCluster); got != tt.want {
+				t.Errorf("HasRequiredStorageVendorKey() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_HasRequiredIbmScaleKey(t *testing.T) {
+	tests := []struct {
+		name           string
+		managedCluster clusterv1.ManagedCluster
+		want           bool
+	}{
+		{
+			name: "Has IBM Storage Scale claim",
+			managedCluster: clusterv1.ManagedCluster{
+				Status: clusterv1.ManagedClusterStatus{
+					ClusterClaims: []clusterv1.ManagedClusterClaim{
+						{Name: IbmScaleClusterClaimNamespacedName, Value: "ns/name"},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "Does not have IBM Storage Scale claim",
+			managedCluster: clusterv1.ManagedCluster{
+				Status: clusterv1.ManagedClusterStatus{
+					ClusterClaims: []clusterv1.ManagedClusterClaim{
+						{Name: OdfInfoClusterClaimNamespacedName, Value: "ns/name"},
+					},
+				},
+			},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := HasRequiredIbmScaleKey(&tt.managedCluster); got != tt.want {
+				t.Errorf("HasRequiredIbmScaleKey() = %v, want %v", got, tt.want)
 			}
 		})
 	}

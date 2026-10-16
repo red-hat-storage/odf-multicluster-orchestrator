@@ -8,10 +8,11 @@ import (
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/s3config"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/tokenexchange"
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/acm"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/clusterversion"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/drplacementcontrol"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/drpolicy"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/managedcluster"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/managedclusterview"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/mirrorpeer"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/protectedapplicationview"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/s3configuration"
@@ -261,10 +262,10 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 	}
 	// +kubebuilder:scaffold:builder
 
-	if err = (&acm.ManagedClusterReconciler{
+	if err = (&managedcluster.ManagedClusterReconciler{
 		Client:           mgr.GetClient(),
 		Scheme:           mgr.GetScheme(),
-		Logger:           logger.With("controller", "acm.ManagedClusterReconciler"),
+		Logger:           logger.With("controller", "ManagedClusterReconciler"),
 		TestEnvFile:      o.testEnvFile,
 		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
@@ -272,9 +273,9 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 		os.Exit(1)
 	}
 
-	if err = (&acm.ManagedClusterViewReconciler{
+	if err = (&managedclusterview.ManagedClusterViewReconciler{
 		Client:           mgr.GetClient(),
-		Logger:           logger.With("controller", "acm.ManagedClusterViewReconciler"),
+		Logger:           logger.With("controller", "ManagedClusterViewReconciler"),
 		TestEnvFile:      o.testEnvFile,
 		CurrentNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {

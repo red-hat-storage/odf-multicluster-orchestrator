@@ -4,37 +4,51 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
 	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 const (
-	MCVNameTemplate         = "odf-multicluster-mcv-%s"
+	ODFMCVNameTemplate      = "odf-multicluster-mcv-%s"
+	IbmScaleMCVNameTemplate = "scale-multicluster-mcv-%s"
 	TokenExchangeDeployment = "token-exchange-agent"
 )
 
 var ErrRequeueReconcile = errors.New("requeue reconcile request")
 
-func GetManagedClusterViewName(clusterName string) string {
-	return fmt.Sprintf(MCVNameTemplate, clusterName)
+func GetODFManagedClusterViewName(clusterName string) string {
+	return fmt.Sprintf(ODFMCVNameTemplate, clusterName)
+}
+
+func GetIbmScaleManagedClusterViewName(clusterName string) string {
+	return fmt.Sprintf(IbmScaleMCVNameTemplate, clusterName)
 }
 
 func GetTokenExchangeManagedClusterViewName(clusterName string) string {
-	return fmt.Sprintf("%s-%s", GetManagedClusterViewName(clusterName), TokenExchangeDeployment)
+	return fmt.Sprintf("%s-%s", GetODFManagedClusterViewName(clusterName), TokenExchangeDeployment)
 }
 
-func CreateOrUpdateManagedClusterView(ctx context.Context, client ctrlClient.Client, mcvName, resourceToFindName string, resourceToFindNamespace string, resourceToFindType string, clusterName string, ownerRef *metav1.OwnerReference) (*viewv1beta1.ManagedClusterView, controllerutil.OperationResult, error) {
-	mcv := &viewv1beta1.ManagedClusterView{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      mcvName,
-			Namespace: clusterName,
-		},
-	}
+// CreateOrUpdateManagedClusterView creates or updates a ManagedClusterView resource.
+// It uses SetControllerReference to establish ownership with the provided ManagedCluster.
+func CreateOrUpdateManagedClusterView(
+	ctx context.Context,
+	client ctrlClient.Client,
+	scheme *runtime.Scheme,
+	managedCluster *clusterv1.ManagedCluster,
+	mcvName string,
+	resourceToFindName string,
+	resourceToFindNamespace string,
+	resourceToFindType string,
+) (*viewv1beta1.ManagedClusterView, controllerutil.OperationResult, error) {
+	mcv := &viewv1beta1.ManagedClusterView{}
+	mcv.Name = mcvName
+	mcv.Namespace = managedCluster.Name
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, client, mcv, func() error {
+		// Set the spec
 		mcv.Spec = viewv1beta1.ViewSpec{
 			Scope: viewv1beta1.ViewScope{
 				Name:      resourceToFindName,
@@ -43,15 +57,12 @@ func CreateOrUpdateManagedClusterView(ctx context.Context, client ctrlClient.Cli
 			},
 		}
 
-		if mcv.Labels == nil {
-			mcv.Labels = make(map[string]string)
-		}
+		AddLabel(mcv, CreatedByLabelKey, "odf-multicluster-managedcluster-controller")
+		AddLabel(mcv, HubRecoveryLabel, "")
 
-		mcv.Labels[CreatedByLabelKey] = "odf-multicluster-managedcluster-controller"
-		mcv.Labels[HubRecoveryLabel] = ""
-
-		if ownerRef != nil {
-			mcv.OwnerReferences = []metav1.OwnerReference{*ownerRef}
+		// Set controller reference - this establishes ownership
+		if err := controllerutil.SetControllerReference(managedCluster, mcv, scheme); err != nil {
+			return fmt.Errorf("failed to set controller reference: %w", err)
 		}
 
 		return nil

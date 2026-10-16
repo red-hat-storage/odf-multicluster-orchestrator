@@ -1,7 +1,7 @@
 //go:build unit
 // +build unit
 
-package acm
+package managedclusterview
 
 import (
 	"context"
