@@ -42,7 +42,8 @@ const (
 
 // VendorType for a mirrorpeer
 const (
-	ODF VendorType = "odf"
+	ODF             VendorType = "odf"
+	IbmStorageScale VendorType = "ibmstoragescale"
 )
 
 // PhaseMessage for a mirrorpeer
@@ -122,7 +123,7 @@ type PeerRef struct {
 type MirrorPeerSpec struct {
 	// StorageVendor represents the type of storage vendor for which MirrorPeer is created.
 	// +kubebuilder:default=odf
-	// +kubebuilder:validation:Enum=odf;
+	// +kubebuilder:validation:Enum=odf;ibmstoragescale;
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec.type is immutable."
 	// +optional
 	StorageVendor VendorType `json:"storageVendor,omitempty"`

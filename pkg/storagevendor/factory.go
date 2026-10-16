@@ -21,10 +21,12 @@ import (
 	"fmt"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/storagevendor/ibmstoragescale"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/storagevendor/odf"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	"log/slog"
+
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -33,6 +35,8 @@ func New(ctx context.Context, cl client.Client, scheme *runtime.Scheme, logger *
 	switch vendorType {
 	case multiclusterv1alpha1.ODF:
 		return odf.NewODFVendor(ctx, cl, scheme, logger, currentNamespace)
+	case multiclusterv1alpha1.IbmStorageScale:
+		return ibmstoragescale.NewIbmStorageScaleVendor(ctx, cl, scheme, logger, currentNamespace)
 	default:
 		return nil, fmt.Errorf("unsupported storage vendor: %s", vendorType)
 	}
