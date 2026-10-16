@@ -17,10 +17,12 @@ func CreateOrUpdateManifestWork(ctx context.Context, c client.Client, name strin
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
-			OwnerReferences: []metav1.OwnerReference{
-				ownerRef,
-			},
 		},
+	}
+
+	// Only add ownerReference if it's valid (not empty)
+	if ownerRef.Name != "" && ownerRef.UID != "" {
+		mw.ObjectMeta.OwnerReferences = []metav1.OwnerReference{ownerRef}
 	}
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c, &mw, func() error {
@@ -65,4 +67,29 @@ func GetManifestWork(ctx context.Context, c client.Client, manifestWorkName stri
 	}
 
 	return &manifestWork, nil
+}
+
+// IsManifestWorkApplied checks the status of a ManifestWork.
+// Returns true if WorkApplied, WorkAvailable is true and WorkDegraded is not true.
+func IsManifestWorkApplied(mw *workv1.ManifestWork) bool {
+
+	var applied, available, degraded bool
+	conditions := mw.Status.Conditions
+
+	if len(conditions) > 0 {
+		for _, condition := range conditions {
+			if condition.Status == metav1.ConditionTrue {
+				switch {
+				case condition.Type == workv1.WorkApplied:
+					applied = true
+				case condition.Type == workv1.WorkAvailable:
+					available = true
+				case condition.Type == workv1.WorkDegraded:
+					degraded = true
+				}
+			}
+		}
+	}
+
+	return applied && available && !degraded
 }

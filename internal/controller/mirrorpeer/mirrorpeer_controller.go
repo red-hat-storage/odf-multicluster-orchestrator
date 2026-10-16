@@ -17,31 +17,37 @@ limitations under the License.
 package mirrorpeer
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/storagevendor"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/storagevendor/ibmstoragescale"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/storagevendor/odf"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
+	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	manifestworkv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -223,6 +229,12 @@ func (r *MirrorPeerReconciler) reconcilePhases(ctx context.Context, logger *slog
 	utils.SetConfiguredFalseCondition(&mirrorPeer.Status.Conditions, mirrorPeer.Generation, multiclusterv1alpha1.MessageConfigurationInProgress, multiclusterv1alpha1.ReasonConfigurationInProgress)
 
 	if res, err := vendor.ConfigureStorageForDR(ctx, mirrorPeer); err != nil || !res.IsZero() {
+		// Set error status before returning so user can see the actual failure
+		mirrorPeer.Status.Phase = multiclusterv1alpha1.Failed
+		if err != nil {
+			mirrorPeer.Status.Message = multiclusterv1alpha1.ConfigurationFailed
+			utils.SetConfiguredFalseCondition(&mirrorPeer.Status.Conditions, mirrorPeer.Generation, err.Error(), multiclusterv1alpha1.ReasonConfigurationFailed)
+		}
 		return res, err
 	}
 
@@ -331,8 +343,67 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return reqs
 	}
 
+	crdManifestWorkToMirrorPeerMapFunc := func(ctx context.Context, object client.Object) []ctrl.Request {
+		r.Logger.Debug("Mapping CRD ManifestWork to MirrorPeer", "ManifestWork", client.ObjectKeyFromObject(object))
+		var reqs []ctrl.Request
+		mw, ok := object.(*manifestworkv1.ManifestWork)
+		if !ok {
+			r.Logger.Debug("Unable to cast object into ManifestWork. Not requeing any requests.")
+			return reqs
+		}
+
+		// Find all MirrorPeers that reference this cluster
+		var mpList multiclusterv1alpha1.MirrorPeerList
+		err := r.Client.List(ctx, &mpList)
+		if err != nil {
+			r.Logger.Debug("Unable to fetch list of all MirrorPeers. Not requeing any requests.")
+			return reqs
+		}
+
+		for _, mp := range mpList.Items {
+			for _, peer := range mp.Spec.Items {
+				if peer.ClusterName == mw.Namespace {
+					reqs = append(reqs, reconcile.Request{NamespacedName: types.NamespacedName{Name: mp.Name}})
+					break
+				}
+			}
+		}
+		r.Logger.Info("MirrorPeer reconcile requests generated based on CRD ManifestWork change.", "RequestCount", len(reqs), "Requests", reqs)
+		return reqs
+	}
+
+	// The OCM agent refreshes ManagedClusterView status periodically, so only react when the result changes.
+	mcvResultChangedPredicate := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldMCV, okOld := e.ObjectOld.(*viewv1beta1.ManagedClusterView)
+			newMCV, okNew := e.ObjectNew.(*viewv1beta1.ManagedClusterView)
+			if !okOld || !okNew {
+				return false
+			}
+			return !bytes.Equal(oldMCV.Status.Result.Raw, newMCV.Status.Result.Raw)
+		},
+	}
+
+	// Only react to ManifestWork status condition changes, not periodic status updates.
+	manifestWorkStatusChangedPredicate := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldMW, okOld := e.ObjectOld.(*manifestworkv1.ManifestWork)
+			newMW, okNew := e.ObjectNew.(*manifestworkv1.ManifestWork)
+			if !okOld || !okNew {
+				return false
+			}
+
+			// Trigger reconcile if status conditions changed
+			return !reflect.DeepEqual(oldMW.Status.Conditions, newMW.Status.Conditions)
+		},
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Owns(&viewv1beta1.ManagedClusterView{}, builder.WithPredicates(mcvResultChangedPredicate)).
+		Owns(&manifestworkv1.ManifestWork{}, builder.WithPredicates(
+			predicate.Or(predicate.GenerationChangedPredicate{}, manifestWorkStatusChangedPredicate),
+		)).
 		Watches(&addonapiv1alpha1.ManagedClusterAddOn{}, handler.EnqueueRequestsFromMapFunc(addonToMirrorPeerMapFunc),
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(object client.Object) bool {
 				mca, ok := object.(*addonapiv1alpha1.ManagedClusterAddOn)
@@ -353,10 +424,16 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			builder.WithPredicates(
 				predicate.Or(
 					utils.NamePredicate(odf.ClientInfoConfigMapName),
+					utils.NamePredicate(ibmstoragescale.IbmStorageScaleConfigMapName),
 					utils.NamePredicate(utils.RamenHubOperatorConfigName),
 				),
 				utils.NamespacePredicate(r.CurrentNamespace),
 				utils.EventTypePredicate(true, true, true, true),
+			)).
+		Watches(&manifestworkv1.ManifestWork{}, handler.EnqueueRequestsFromMapFunc(crdManifestWorkToMirrorPeerMapFunc),
+			builder.WithPredicates(
+				utils.NamePredicate(utils.ManifestCRDsMWName),
+				manifestWorkStatusChangedPredicate,
 			)).
 		Complete(r)
 }

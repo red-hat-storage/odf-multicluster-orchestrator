@@ -28,4 +28,23 @@ const (
 	TLSProfileServer = "console"
 
 	AddonVersionAnnotationKey = "multicluster.odf.openshift.io/version"
+
+	// SourceManifestCRDPath is the path to the SourceManifest CRD YAML file in the embedded FS.
+	SourceManifestCRDPath = "multicluster.odf.openshift.io_sourcemanifests.yaml"
+
+	// AppliedManifestCRDPath is the path to the AppliedManifest CRD YAML file in the embedded FS.
+	AppliedManifestCRDPath = "multicluster.odf.openshift.io_appliedmanifests.yaml"
+
+	// ManifestCRDsMWName is the name of the ManifestWork that installs
+	// the SourceManifest and AppliedManifest CRDs to managed clusters.
+	ManifestCRDsMWName = "df-mco-manifest-crds"
+
+	// KlusterletRolePath is the path to the ClusterRole for klusterlet to manage manifest CRDs in the embedded FS.
+	KlusterletRolePath = "klusterlet_role.yaml"
+
+	// KlusterletRoleBindingPath is the path to the ClusterRoleBinding for klusterlet in the embedded FS.
+	KlusterletRoleBindingPath = "klusterlet_rolebinding.yaml"
+
+	// ManifestRBACMWName is the name of the ManifestWork that installs RBAC for manifest CRDs.
+	ManifestRBACMWName = "df-mco-manifest-rbac"
 )
