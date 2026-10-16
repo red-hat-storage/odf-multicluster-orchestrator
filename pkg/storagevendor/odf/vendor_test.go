@@ -30,6 +30,7 @@ import (
 
 	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -411,7 +412,7 @@ func TestDeleteManagedClusterAddon(t *testing.T) {
 	})
 }
 
-func TestEnsureReplicationReady(t *testing.T) {
+func TestConfigureStorageForDR(t *testing.T) {
 	ctx := context.TODO()
 	scheme := mgrScheme
 	os.Setenv("POD_NAMESPACE", "openshift-operators")
@@ -429,21 +430,17 @@ func TestEnsureReplicationReady(t *testing.T) {
 		}
 
 		clientInfoMap := map[string]string{
-			"cluster1_test-storagecluster": "{\"providerInfo\":{\"version\":\"5.0.0\"}}",
-			"cluster2_test-storagecluster": "{\"providerInfo\":{\"version\":\"5.0.0\"}}",
+			"cluster1_test-storagecluster": "{\"providerInfo\":{\"version\":\"5.0.0\",\"providerManagedClusterName\":\"cluster1\"}}",
+			"cluster2_test-storagecluster": "{\"providerInfo\":{\"version\":\"5.0.0\",\"providerManagedClusterName\":\"cluster2\"}}",
 		}
 
 		odfClientInfoConfigMap := makeODFClientInfoConfigMap(utils.GetEnv("POD_NAMESPACE"), clientInfoMap)
 
-		managedcluster1 := clusterv1.ManagedCluster{
-			ObjectMeta: metav1.ObjectMeta{Name: "cluster1"},
-		}
-		managedcluster2 := clusterv1.ManagedCluster{
-			ObjectMeta: metav1.ObjectMeta{Name: "cluster2"},
-		}
+		addon1 := makeManagedClusterAddOn(mirrorPeer, "cluster1")
+		addon2 := makeManagedClusterAddOn(mirrorPeer, "cluster2")
 
 		fakeClient := fake.NewClientBuilder().WithScheme(scheme).
-			WithObjects(mirrorPeer, odfClientInfoConfigMap, &managedcluster1, &managedcluster2).
+			WithObjects(mirrorPeer, odfClientInfoConfigMap, addon1, addon2).
 			WithStatusSubresource(mirrorPeer).
 			Build()
 
@@ -461,10 +458,25 @@ func TestEnsureReplicationReady(t *testing.T) {
 			t.Error("expected no requeue for sync type")
 		}
 
-		// Verify ClusterManagementAddOn was created
+		// Verify ClusterManagementAddOn was not created for non-async DR type
 		var cma addonapiv1alpha1.ClusterManagementAddOn
 		if err := fakeClient.Get(ctx, types.NamespacedName{Name: utils.TokenExchangeName}, &cma); err != nil {
-			t.Error("Failed to create ClusterManagementAddOn")
+			if !errors.IsNotFound(err) {
+				t.Error("Failed to get ClusterManagementAddOn")
+			}
+		}
+
+		// Verify ManagedClusterAddOn was not created for non-async DR type
+		var mca1, mca2 addonapiv1alpha1.ManagedClusterAddOn
+		if err := fakeClient.Get(ctx, types.NamespacedName{Name: utils.TokenExchangeName, Namespace: "cluster1"}, &mca1); err != nil {
+			if !errors.IsNotFound(err) {
+				t.Error("Failed to get ManagedClusterAddOn")
+			}
+		}
+		if err := fakeClient.Get(ctx, types.NamespacedName{Name: utils.TokenExchangeName, Namespace: "cluster2"}, &mca2); err != nil {
+			if !errors.IsNotFound(err) {
+				t.Error("Failed to get ManagedClusterAddOn")
+			}
 		}
 	})
 }
@@ -546,7 +558,8 @@ func TestCleanupResources(t *testing.T) {
 		odfClientInfoConfigMap := makeODFClientInfoConfigMap(utils.GetEnv("POD_NAMESPACE"), syncClientInfoMap)
 
 		fakeClient := fake.NewClientBuilder().WithScheme(scheme).
-			WithObjects(odfClientInfoConfigMap).
+			WithObjects(mirrorPeer, odfClientInfoConfigMap).
+			WithStatusSubresource(mirrorPeer).
 			Build()
 
 		vendor, err := NewODFVendor(ctx, fakeClient, scheme, utils.GetLogger(utils.GetZapLogger(true)), utils.GetEnv("POD_NAMESPACE"))
@@ -554,13 +567,13 @@ func TestCleanupResources(t *testing.T) {
 			t.Fatalf("Failed to create ODF vendor: %v", err)
 		}
 
-		// CleanupResources for sync type should skip async-specific cleanup (removeClientIDFromClusterPairingConfigMap)
-		// and only try to delete managed cluster addons (which don't exist in this test, simulating they're already cleaned up)
+		// CleanupResources for sync type should skip async-specific cleanup like removeClientIDFromClusterPairingConfigMap,
+		// ManagedClusterAddons (which don't exist in this test, simulating they're already cleaned up)
 		result, err := vendor.CleanupResources(ctx, mirrorPeer)
 
 		// We expect an error here because the addons don't exist (they may have been cleaned up already)
 		// In a real scenario, the controller would handle this gracefully
-		if err == nil {
+		if err != nil {
 			if result.RequeueAfter != 0 {
 				t.Error("expected no requeue after cleanup")
 			}

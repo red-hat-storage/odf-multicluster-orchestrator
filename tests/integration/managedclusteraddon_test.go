@@ -66,7 +66,7 @@ var _ = Describe("ManagedClusterAddOn creation, updation and deletion", func() {
 			os.Setenv("POD_NAMESPACE", "openshift-operators")
 			newMirrorPeer := mirrorPeer1.DeepCopy()
 			newMirrorPeer.Spec = multiclusterv1alpha1.MirrorPeerSpec{
-				Type: "sync",
+				Type: "async",
 				Items: []multiclusterv1alpha1.PeerRef{
 					{
 						ClusterName: "cluster1",

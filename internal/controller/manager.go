@@ -263,6 +263,7 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 
 	if err = (&acm.ManagedClusterReconciler{
 		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
 		Logger:           logger.With("controller", "acm.ManagedClusterReconciler"),
 		TestEnvFile:      o.testEnvFile,
 		CurrentNamespace: currentNamespace,

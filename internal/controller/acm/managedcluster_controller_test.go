@@ -7,6 +7,7 @@ import (
 	"context"
 	"testing"
 
+	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
@@ -19,12 +20,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestManagedClusterReconcile(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = clusterv1.AddToScheme(scheme)
-	_ = viewv1beta1.AddToScheme(scheme)
+var mgrScheme = runtime.NewScheme()
 
-	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+func TestManagedClusterReconcile(t *testing.T) {
+	_ = clusterv1.AddToScheme(mgrScheme)
+	_ = viewv1beta1.AddToScheme(mgrScheme)
+	_ = multiclusterv1alpha1.AddToScheme(mgrScheme)
+
+	client := fake.NewClientBuilder().WithScheme(mgrScheme).Build()
 	logger := utils.GetLogger(utils.GetZapLogger(true))
 
 	reconciler := &ManagedClusterReconciler{
@@ -66,11 +69,11 @@ func TestManagedClusterReconcile(t *testing.T) {
 }
 
 func TestProcessManagedClusterViews(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = clusterv1.AddToScheme(scheme)
-	_ = viewv1beta1.AddToScheme(scheme)
+	_ = clusterv1.AddToScheme(mgrScheme)
+	_ = viewv1beta1.AddToScheme(mgrScheme)
+	_ = multiclusterv1alpha1.AddToScheme(mgrScheme)
 
-	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	client := fake.NewClientBuilder().WithScheme(mgrScheme).Build()
 	logger := utils.GetLogger(utils.GetZapLogger(true))
 
 	reconciler := &ManagedClusterReconciler{
