@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/addons/setup"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/controllers/utils"
 
 	corev1 "k8s.io/api/core/v1"
@@ -42,6 +43,7 @@ func generateBlueSecret(
 			Namespace: managedCluster,
 			Labels: map[string]string{
 				utils.SecretLabelTypeKey: string(secretType),
+				utils.CreatedByLabelKey:  string(setup.TokenExchangeName),
 				utils.HubRecoveryLabel:   "",
 			},
 			Annotations: annotations,
