@@ -18,6 +18,8 @@ package mirrorpeer
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -32,6 +34,7 @@ import (
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
@@ -121,6 +124,17 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	vendorType := mirrorPeer.Spec.StorageVendor
+	if vendorType == "" {
+		if err := r.createS3Configuration(ctx, logger, mirrorPeer); err != nil {
+			return ctrl.Result{}, err
+		}
+		mirrorPeer.Spec.StorageVendor = multiclusterv1alpha1.ODF
+		if err := r.Client.Update(ctx, mirrorPeer); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
 	result, reconcileErr := r.reconcilePhases(ctx, logger, mirrorPeer)
 
 	statusErr := r.Client.Status().Update(ctx, mirrorPeer)
@@ -140,10 +154,6 @@ func (r *MirrorPeerReconciler) reconcilePhases(ctx context.Context, logger *slog
 	mirrorPeer.Status.Phase = multiclusterv1alpha1.Initializing
 
 	vendorType := mirrorPeer.Spec.StorageVendor
-	if vendorType == "" {
-		vendorType = multiclusterv1alpha1.ODF // default
-	}
-
 	vendor, err := storagevendor.New(ctx, r.Client, r.Scheme, logger, r.CurrentNamespace, vendorType)
 	if err != nil {
 		logger.Error("Failed to create storage vendor", "vendor", vendorType, "error", err)
@@ -350,6 +360,218 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				utils.EventTypePredicate(true, true, true, true),
 			)).
 		Complete(r)
+}
+
+func (r *MirrorPeerReconciler) createS3Configuration(ctx context.Context, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer) error {
+	logger.Info("Checking if S3Configuration needs to be created for upgrade", "MirrorPeer", mirrorPeer.Name)
+
+	// Only proceed if ManageS3 was enabled (deprecated field from 5.1)
+	if !mirrorPeer.Spec.ManageS3 {
+		logger.Info("ManageS3 is false, no S3Configuration resource to be created", "MirrorPeer", mirrorPeer.Name)
+		return nil
+	}
+
+	// Step 1: Collect s3ProfileNames from existing DRClusters
+	type drClusterInfo struct {
+		clusterName   string
+		s3ProfileName string
+		drCluster     *ramenv1alpha1.DRCluster
+	}
+
+	drClusterInfoList := []drClusterInfo{}
+
+	for _, peerRef := range mirrorPeer.Spec.Items {
+		drCluster := &ramenv1alpha1.DRCluster{}
+		drCluster.Name = peerRef.ClusterName
+		if err := r.Get(ctx, client.ObjectKeyFromObject(drCluster), drCluster); err != nil {
+			if k8serrors.IsNotFound(err) {
+				logger.Info("DRCluster not found, S3 may not have been configured", "ClusterName", peerRef.ClusterName)
+				continue
+			}
+			logger.Error("Failed to get DRCluster", "error", err, "ClusterName", peerRef.ClusterName)
+			return err
+		}
+
+		drClusterInfoList = append(drClusterInfoList, drClusterInfo{
+			clusterName:   peerRef.ClusterName,
+			s3ProfileName: drCluster.Spec.S3ProfileName,
+			drCluster:     drCluster,
+		})
+		logger.Info("Found DRCluster with s3ProfileName", "cluster", peerRef.ClusterName, "s3ProfileName", drCluster.Spec.S3ProfileName)
+
+	}
+
+	if len(drClusterInfoList) == 0 {
+		logger.Info("No DRClusters with s3ProfileName found, S3 was not configured in 5.0")
+		return nil
+	}
+
+	// Step 2: Group clusters by s3ProfileName
+	// In MDR (sync): both clusters share the same s3ProfileName -> one S3Configuration
+	// In RDR (async): each cluster has its own s3ProfileName -> two S3Configurations
+	s3ProfileGroups := make(map[string][]string) // s3ProfileName -> list of cluster names
+
+	for _, info := range drClusterInfoList {
+		s3ProfileGroups[info.s3ProfileName] = append(s3ProfileGroups[info.s3ProfileName], info.clusterName)
+	}
+
+	logger.Info("Grouped clusters by s3ProfileName", "groups", s3ProfileGroups)
+
+	// Step 3: Create S3Configuration for each unique s3ProfileName
+	for s3ProfileName, managedClusters := range s3ProfileGroups {
+		if err := r.createS3ConfigForProfile(ctx, logger, mirrorPeer, s3ProfileName, managedClusters); err != nil {
+			return err
+		}
+	}
+
+	// Step 4: Remove MirrorPeer ownerRef from all DRClusters
+	for i := range drClusterInfoList {
+		drCluster := drClusterInfoList[i].drCluster
+		owners := drCluster.GetOwnerReferences()
+
+		if idx := slices.IndexFunc(owners, func(owner metav1.OwnerReference) bool {
+			return owner.Kind == "MirrorPeer" && owner.Name == mirrorPeer.Name
+		}); idx != -1 {
+			newOwners := append(owners[:idx], owners[idx+1:]...)
+			drCluster.SetOwnerReferences(newOwners)
+			if err := r.Update(ctx, drCluster); err != nil {
+				logger.Error("Failed to remove MirrorPeer ownerRef from DRCluster", "error", err, "cluster", drCluster.Name)
+				return err
+			}
+			logger.Info("Successfully removed MirrorPeer ownerRef from DRCluster", "cluster", drCluster.Name)
+		}
+	}
+
+	logger.Info("Successfully completed S3Configuration migration", "MirrorPeer", mirrorPeer.Name)
+	return nil
+}
+
+func (r *MirrorPeerReconciler) createS3ConfigForProfile(ctx context.Context, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer, s3ProfileName string, managedClusters []string) error {
+	logger.Info("Creating S3Configuration for profile", "s3ProfileName", s3ProfileName, "managedClusters", managedClusters)
+
+	// Check if S3Configuration already exists
+	s3Config := &multiclusterv1alpha1.S3Configuration{}
+	s3Config.Name = s3ProfileName
+	if err := r.Get(ctx, client.ObjectKeyFromObject(s3Config), s3Config); client.IgnoreNotFound(err) != nil {
+		logger.Error("Failed to check for existing S3Configuration", "error", err)
+		return err
+	}
+	if s3Config.UID != "" {
+		logger.Info("S3Configuration already exists, skipping creation", "S3Configuration", s3ProfileName)
+		return nil
+	}
+
+	// Step 1: Generate OBC name using the same logic from 5.0
+	obcName := generateLegacyOBCName(mirrorPeer)
+	logger.Info("Generated legacy OBC name", "obcName", obcName)
+
+	// Step 2: Determine provider cluster and OBC namespace
+	// Use the same logic as getConfig() in vendor.go
+	var providerCluster string
+	var obcNamespace string
+
+	// Check if this MirrorPeer uses StorageClient (provider mode)
+	vendorType := mirrorPeer.Spec.StorageVendor
+	if vendorType == "" {
+		vendorType = multiclusterv1alpha1.ODF // default
+	}
+
+	vendor, err := storagevendor.New(ctx, r.Client, r.Scheme, logger, r.CurrentNamespace, vendorType)
+	if err != nil {
+		logger.Error("Failed to create storage vendor", "vendor", vendorType, "error", err)
+		return err
+	}
+
+	odfVendor, ok := vendor.(*odf.ODFVendor)
+	if !ok {
+		return fmt.Errorf("vendor is not ODF type")
+	}
+
+	configs, err := odfVendor.GetConfig(mirrorPeer)
+	if err != nil {
+		logger.Error("Failed to get addon config", "error", err)
+		return err
+	}
+
+	// Find the config for one of the managed clusters
+	for _, config := range configs {
+		for _, clusterName := range managedClusters {
+			if config.Namespace == clusterName {
+				providerCluster = config.Namespace
+				obcNamespace = config.InstallNamespace
+				logger.Info("Determined provider cluster and OBC namespace from config",
+					"providerCluster", providerCluster,
+					"obcNamespace", obcNamespace)
+				break
+			}
+		}
+		if providerCluster != "" {
+			break
+		}
+	}
+
+	// Step 3: Determine storage class name
+	// In 5.0, it was {obcNamespace}.noobaa.io
+	storageClassName := fmt.Sprintf("%s.noobaa.io", obcNamespace)
+
+	// Step 4: Create the S3Configuration CR
+	s3Config = &multiclusterv1alpha1.S3Configuration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: s3ProfileName,
+			Annotations: map[string]string{
+				"multicluster.odf.openshift.io/migrated-from-mirrorpeer": mirrorPeer.Name,
+			},
+		},
+		Spec: multiclusterv1alpha1.S3ConfigurationSpec{
+			InternalS3: &multiclusterv1alpha1.InternalS3Spec{
+				ProviderCluster:  providerCluster,
+				StorageClassName: storageClassName,
+				Namespace:        obcNamespace,
+				OBCName:          obcName,
+			},
+			ManagedClusters: managedClusters,
+		},
+	}
+
+	logger.Info("Creating S3Configuration",
+		"name", s3ProfileName,
+		"obcName", obcName,
+		"providerCluster", providerCluster,
+		"namespace", obcNamespace,
+		"storageClassName", storageClassName,
+		"managedClusters", managedClusters)
+
+	if err := r.Create(ctx, s3Config); err != nil {
+		if k8serrors.IsAlreadyExists(err) {
+			logger.Info("S3Configuration already exists (created by concurrent reconcile)", "name", s3ProfileName)
+			return nil
+		}
+		logger.Error("Failed to create S3Configuration", "error", err)
+		return err
+	}
+
+	logger.Info("Successfully created S3Configuration", "name", s3ProfileName)
+	return nil
+}
+
+// generateLegacyOBCName replicates the 5.0 bucket naming logic
+// In 5.0: odrbucket-{first12CharsOfSha1(concatenatedClusterNames)}
+func generateLegacyOBCName(mirrorPeer *multiclusterv1alpha1.MirrorPeer) string {
+	// Concatenate cluster names in the order they appear (same as 5.0)
+	var peerAccumulator string
+	for _, peer := range mirrorPeer.Spec.Items {
+		peerAccumulator += peer.ClusterName
+	}
+
+	// Generate SHA1 checksum (same as 5.0 utils.GenerateUniqueIdForMirrorPeer)
+	checksum := sha1.Sum([]byte(peerAccumulator))
+
+	// Encode to hex and take first 12 characters
+	hexHash := hex.EncodeToString(checksum[:])
+
+	// Return odrbucket + "-" + first 12 chars
+	// Total: 10 (odrbucket) + 1 (-) + 12 (hash) = 23 chars
+	return fmt.Sprintf("odrbucket-%s", hexHash[:12])
 }
 
 // isMirrorPeerValid validates the MirrorPeer CR

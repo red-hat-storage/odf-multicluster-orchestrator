@@ -154,7 +154,7 @@ func (odf *ODFVendor) CleanupResources(ctx context.Context, mirrorPeer *multiclu
 	return ctrl.Result{}, nil
 }
 
-func (odf *ODFVendor) getConfig(mp *multiclusterv1alpha1.MirrorPeer) ([]ManagedClusterAddonConfig, error) {
+func (odf *ODFVendor) GetConfig(mp *multiclusterv1alpha1.MirrorPeer) ([]ManagedClusterAddonConfig, error) {
 	managedClusterAddonsConfig := make([]ManagedClusterAddonConfig, 0)
 
 	// Check if the MirrorPeer contains StorageClient reference
@@ -221,7 +221,7 @@ func (odf *ODFVendor) processManagedClusterAddon(ctx context.Context, mirrorPeer
 		return err
 	}
 
-	addonConfigs, err := odf.getConfig(mirrorPeer)
+	addonConfigs, err := odf.GetConfig(mirrorPeer)
 	if err != nil {
 		return fmt.Errorf("failed to get managedclusteraddon config %w", err)
 	}
@@ -326,7 +326,7 @@ func (odf *ODFVendor) removeClientIDFromClusterPairingConfigMap(ctx context.Cont
 }
 
 func (odf *ODFVendor) deleteManagedClusterAddon(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer) error {
-	addonConfigs, err := odf.getConfig(mirrorPeer)
+	addonConfigs, err := odf.GetConfig(mirrorPeer)
 	if err != nil {
 		return fmt.Errorf("failed to get managedclusteraddon config %w", err)
 	}
@@ -378,7 +378,7 @@ func (odf *ODFVendor) deleteManagedClusterAddon(ctx context.Context, mirrorPeer 
 }
 
 func (odf *ODFVendor) cleanUpManagedClusterAddonForSyncDR(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer) error {
-	addonConfigs, err := odf.getConfig(mirrorPeer)
+	addonConfigs, err := odf.GetConfig(mirrorPeer)
 	if err != nil {
 		return fmt.Errorf("failed to get managedclusteraddon config %w", err)
 	}
