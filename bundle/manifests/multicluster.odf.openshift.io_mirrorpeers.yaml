@@ -99,6 +99,7 @@ spec:
                   which MirrorPeer is created.
                 enum:
                 - odf
+                - ibmstoragescale
                 type: string
                 x-kubernetes-validations:
                 - message: spec.type is immutable.
