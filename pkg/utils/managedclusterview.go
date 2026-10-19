@@ -12,19 +12,19 @@ import (
 )
 
 const (
-	ODFMCVNameTemplate      = "odf-multicluster-mcv-%s"
-	IbmScaleMCVNameTemplate = "scale-multicluster-mcv-%s"
+	ODFMCVNamePrefix        = "odf-multicluster-mcv"
+	IbmScaleMCVNamePrefix   = "scale-multicluster-mcv"
 	TokenExchangeDeployment = "token-exchange-agent"
 )
 
 var ErrRequeueReconcile = errors.New("requeue reconcile request")
 
 func GetODFManagedClusterViewName(clusterName string) string {
-	return fmt.Sprintf(ODFMCVNameTemplate, clusterName)
+	return fmt.Sprintf("%s-%s", ODFMCVNamePrefix, clusterName)
 }
 
 func GetIbmScaleManagedClusterViewName(clusterName string) string {
-	return fmt.Sprintf(IbmScaleMCVNameTemplate, clusterName)
+	return fmt.Sprintf("%s-%s", IbmScaleMCVNamePrefix, clusterName)
 }
 
 func GetTokenExchangeManagedClusterViewName(clusterName string) string {
