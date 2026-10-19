@@ -28,7 +28,7 @@ jobs:
     - name: Lint
       uses: golangci/golangci-lint-action@v7
       with:
-        version: v2.8.0
+        version: v2.14.0
 
   kube-linter:
     name: Kube YAML
