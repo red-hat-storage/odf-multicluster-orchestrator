@@ -19,6 +19,7 @@ package ibmstoragescale
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 
@@ -65,9 +66,25 @@ func (v *IbmStorageScaleVendor) ValidateVersion(ctx context.Context, mirrorPeer 
 
 // ConfigureStorageForDR sets up DR resources for IBM Storage Scale.
 func (v *IbmStorageScaleVendor) ConfigureStorageForDR(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
-	// Placeholder: for each PeerRef — read sourceManifests from the local configmap, create the
-	// SourceManifest MCV, create the ManifestWork (AppliedManifest) on the peer, create the
-	// status MCV, and reflect status onto the MirrorPeer.
+	// read every source cluster's SourceManifests.
+	notReady := false
+	for _, item := range mirrorPeer.Spec.Items {
+		// TODO(phase 3): push these payloads to the peer as an AppliedManifest via ManifestWork.
+		_, ready, err := v.readSourceManifests(ctx, mirrorPeer, item)
+		if err != nil {
+			v.logger.Error("Failed to read SourceManifests", "cluster", item.ClusterName, "error", err)
+			return ctrl.Result{}, err
+		}
+		if !ready {
+			notReady = true
+		}
+	}
+	if notReady {
+		return ctrl.Result{RequeueAfter: time.Second}, nil
+	}
+
+	// TODO create the ManifestWork (AppliedManifest) on the peer.
+	// TODO create the status MCV and reflect status onto the MirrorPeer.
 	return ctrl.Result{}, nil
 }
 
