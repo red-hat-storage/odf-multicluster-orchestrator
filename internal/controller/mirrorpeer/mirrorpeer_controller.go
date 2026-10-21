@@ -17,6 +17,7 @@ limitations under the License.
 package mirrorpeer
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -26,10 +27,12 @@ import (
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/storagevendor"
+	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/storagevendor/ibmstoragescale"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/storagevendor/odf"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
+	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,6 +42,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -322,8 +326,21 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return reqs
 	}
 
+	// The OCM agent refreshes ManagedClusterView status periodically, so only react when the result changes.
+	mcvResultChangedPredicate := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldMCV, okOld := e.ObjectOld.(*viewv1beta1.ManagedClusterView)
+			newMCV, okNew := e.ObjectNew.(*viewv1beta1.ManagedClusterView)
+			if !okOld || !okNew {
+				return false
+			}
+			return !bytes.Equal(oldMCV.Status.Result.Raw, newMCV.Status.Result.Raw)
+		},
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Owns(&viewv1beta1.ManagedClusterView{}, builder.WithPredicates(mcvResultChangedPredicate)).
 		Watches(&addonapiv1alpha1.ManagedClusterAddOn{}, handler.EnqueueRequestsFromMapFunc(addonToMirrorPeerMapFunc),
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(object client.Object) bool {
 				mca, ok := object.(*addonapiv1alpha1.ManagedClusterAddOn)
@@ -344,6 +361,7 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			builder.WithPredicates(
 				predicate.Or(
 					utils.NamePredicate(odf.ClientInfoConfigMapName),
+					utils.NamePredicate(ibmstoragescale.IbmStorageScaleConfigMapName),
 					utils.NamePredicate(utils.RamenHubOperatorConfigName),
 				),
 				utils.NamespacePredicate(r.CurrentNamespace),
