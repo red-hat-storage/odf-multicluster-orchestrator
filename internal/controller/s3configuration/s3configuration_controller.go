@@ -239,10 +239,20 @@ func (r *S3ConfigurationReconciler) reconcilePhases(ctx context.Context, logger 
 	}
 
 	s3Config.Status.Phase = multiclusterv1alpha1.S3ConfigurationPhasePending
+
+	updateRequired := false
 	// Add finalizer if not present
 	if controllerutil.AddFinalizer(s3Config, S3ConfigurationFinalizer) {
+		updateRequired = true
+	}
+
+	if utils.AddLabel(s3Config, utils.HubRecoveryLabel, "") {
+		updateRequired = true
+	}
+
+	if updateRequired {
 		if err := r.Update(ctx, s3Config); err != nil {
-			logger.Error("Failed to add finalizer", "error", err)
+			logger.Error("Failed to update S3Configuration resource", "error", err)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: time.Second}, nil
@@ -277,6 +287,16 @@ func (r *S3ConfigurationReconciler) reconcilePhases(ctx context.Context, logger 
 		// External S3: the user has already created the secret on the hub.
 		secret.Name = s3Config.Spec.ExternalS3.SecretRef.Name
 		secret.Namespace = s3Config.Spec.ExternalS3.SecretRef.Namespace
+
+		if err := r.Client.Get(ctx, client.ObjectKeyFromObject(secret), secret); err != nil {
+			return reconcile.Result{}, fmt.Errorf("failed to get the secret for External S3: %w", err)
+		}
+
+		if utils.AddLabel(secret, utils.HubRecoveryLabel, "") {
+			if err := r.Update(ctx, secret); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to update secret with Hub Recovery label: %w", err)
+			}
+		}
 	}
 
 	if err := r.validateSecret(ctx, logger, secret); err != nil {
