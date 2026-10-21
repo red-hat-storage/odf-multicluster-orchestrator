@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 const (
@@ -133,6 +134,10 @@ func (r *S3SecretReconciler) syncBlueSecretForS3(ctx context.Context, name strin
 	if err != nil {
 		return fmt.Errorf("failed to create secret from the managed cluster secret %q in namespace %q for the hub cluster in namespace %q: %v", secret.Name, secret.Namespace, r.SpokeClusterName, err)
 	}
+	if err := controllerutil.SetOwnerReference(mirrorPeer, newSecret, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set owner reference on secret %q in namespace %q: %v", secret.Name, secret.Namespace, err)
+	}
+
 	if err = r.HubClient.Create(ctx, newSecret, &client.CreateOptions{}); err != nil {
 		if errors.IsAlreadyExists(err) {
 			r.Logger.Info("Secret already exists on hub cluster, attempting to update", "secret", newSecret.Name, "namespace", newSecret.Namespace)
