@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
@@ -29,9 +30,6 @@ const (
 	S3RouteName               = "s3"
 	DefaultS3EndpointProtocol = "https"
 	DefaultS3Region           = "noobaa"
-
-	// S3ConfigAddonFinalizer is the finalizer added to OBC to ensure cleanup of hub secrets
-	S3ConfigAddonFinalizer = "s3config.multicluster.odf.openshift.io/cleanup"
 )
 
 // S3ConfigAddonReconciler reconciles OBCs created by S3Configuration
@@ -94,21 +92,6 @@ func (r *S3ConfigAddonReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	// Handle deletion
-	if !obc.DeletionTimestamp.IsZero() {
-		return r.handleOBCDeletion(ctx, logger, &obc)
-	}
-
-	// Add finalizer if not present
-	if controllerutil.AddFinalizer(&obc, S3ConfigAddonFinalizer) {
-		logger.Info("Adding finalizer to OBC")
-		if err := r.SpokeClient.Update(ctx, &obc); err != nil {
-			logger.Error("Failed to add finalizer to OBC", "error", err)
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{Requeue: true}, nil
-	}
-
 	// Check if OBC is bound
 	if obc.Status.Phase != obv1alpha1.ObjectBucketClaimStatusPhaseBound {
 		logger.Info("OBC is not in 'Bound' status, requeuing", "status", obc.Status.Phase)
@@ -123,7 +106,7 @@ func (r *S3ConfigAddonReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	logger.Info("Syncing OBC secret to hub", "s3ConfigName", s3ConfigName)
 
-	if err := r.syncSecretToHub(ctx, &obc, logger); err != nil {
+	if err := r.syncSecretToHub(ctx, logger, &obc); err != nil {
 		logger.Error("Failed to sync secret to hub", "error", err)
 		return ctrl.Result{}, err
 	}
@@ -132,44 +115,8 @@ func (r *S3ConfigAddonReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return ctrl.Result{}, nil
 }
 
-// handleOBCDeletion handles OBC deletion and cleans up the hub secret
-func (r *S3ConfigAddonReconciler) handleOBCDeletion(ctx context.Context, logger *slog.Logger, obc *obv1alpha1.ObjectBucketClaim) (ctrl.Result, error) {
-	logger.Info("Handling OBC deletion")
-
-	if !controllerutil.ContainsFinalizer(obc, S3ConfigAddonFinalizer) {
-		logger.Info("Finalizer not present, nothing to clean up")
-		return ctrl.Result{}, nil
-	}
-
-	// Delete secret from hub
-	hubSecret := &corev1.Secret{}
-	hubSecret.Name = obc.Name
-	hubSecret.Namespace = r.SpokeClusterName
-
-	logger.Info("Deleting secret from hub", "secret", hubSecret.Name, "namespace", hubSecret.Namespace)
-	if err := r.HubClient.Delete(ctx, hubSecret); err != nil {
-		if !errors.IsNotFound(err) {
-			logger.Error("Failed to delete hub secret", "error", err)
-			return ctrl.Result{}, err
-		}
-		logger.Info("Hub secret already deleted or not found")
-	} else {
-		logger.Info("Successfully deleted hub secret")
-	}
-
-	// Remove finalizer
-	controllerutil.RemoveFinalizer(obc, S3ConfigAddonFinalizer)
-	if err := r.SpokeClient.Update(ctx, obc); err != nil {
-		logger.Error("Failed to remove finalizer from OBC", "error", err)
-		return ctrl.Result{}, err
-	}
-
-	logger.Info("Finalizer removed from OBC, cleanup complete")
-	return ctrl.Result{}, nil
-}
-
 // syncSecretToHub syncs the OBC secret from spoke to hub
-func (r *S3ConfigAddonReconciler) syncSecretToHub(ctx context.Context, obc *obv1alpha1.ObjectBucketClaim, logger *slog.Logger) error {
+func (r *S3ConfigAddonReconciler) syncSecretToHub(ctx context.Context, logger *slog.Logger, obc *obv1alpha1.ObjectBucketClaim) error {
 	// Fetch OBC secret from spoke
 	var obcSecret corev1.Secret
 	if err := r.SpokeClient.Get(ctx, client.ObjectKey{
@@ -208,6 +155,12 @@ func (r *S3ConfigAddonReconciler) syncSecretToHub(ctx context.Context, obc *obv1
 
 	// Get S3Configuration name from OBC annotations
 	s3ConfigName := obc.Annotations[utils.S3ConfigurationNameAnnotationKey]
+	var s3Config multiclusterv1alpha1.S3Configuration
+	if err := r.HubClient.Get(ctx, client.ObjectKey{
+		Name: s3ConfigName,
+	}, &s3Config); err != nil {
+		return fmt.Errorf("failed to retrieve S3Config %q for OBC %q: %w", s3ConfigName, obc.Name, err)
+	}
 
 	// Create secret on hub - use cluster namespace for organization
 	hubSecret := &corev1.Secret{
@@ -228,6 +181,9 @@ func (r *S3ConfigAddonReconciler) syncSecretToHub(ctx context.Context, obc *obv1
 	utils.AddLabel(hubSecret, utils.CreatedByLabelKey, utils.S3ConfigAddonName)
 	utils.AddLabel(hubSecret, utils.HubRecoveryLabel, "")
 	utils.AddAnnotation(hubSecret, utils.S3ConfigurationNameAnnotationKey, s3ConfigName)
+	if err := controllerutil.SetOwnerReference(&s3Config, hubSecret, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set S3Config %q as ownerref of hub S3 secret: %w", s3Config.Name, err)
+	}
 
 	// Create or update secret on hub
 	if err := r.HubClient.Create(ctx, hubSecret); err != nil {

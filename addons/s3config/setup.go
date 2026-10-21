@@ -154,17 +154,72 @@ func (a *S3ConfigAddons) csrApproveCheck(cluster *clusterv1.ManagedCluster, addo
 // permissionConfig generates RBAC permissions for s3config addon agent on hub
 func (a *S3ConfigAddons) permissionConfig(cluster *clusterv1.ManagedCluster, addon *addonapiv1alpha1.ManagedClusterAddOn) error {
 	groups := agent.DefaultGroups(cluster.Name, a.AddonName)
+	user := agent.DefaultUser(cluster.Name, a.AddonName, a.AddonName)
 	clusterName := cluster.Name
 	ctx := context.TODO()
 
-	// Hub cluster role for accessing secrets in cluster namespace
+	// Hub cluster role for accessing s3Configuration resource on hub cluster
+	clusterrole := rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "open-cluster-management:s3config:agent",
+		},
+	}
+	_, err := controllerutil.CreateOrUpdate(ctx, a.Client, &clusterrole, func() error {
+		clusterrole.Rules = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"multicluster.odf.openshift.io"},
+				Resources: []string{"s3configuration"},
+				Verbs:     []string{"get", "list", "watch", "update", "patch"},
+			},
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	clusterrolebinding := rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "open-cluster-management:s3config:agent",
+		},
+	}
+	_, err = controllerutil.CreateOrUpdate(ctx, a.Client, &clusterrolebinding, func() error {
+		if clusterrolebinding.CreationTimestamp.IsZero() {
+			clusterrolebinding.RoleRef = rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "ClusterRole",
+				Name:     "open-cluster-management:s3config:agent",
+			}
+		}
+		uSub := rbacv1.Subject{
+			Kind:     "User",
+			Name:     user,
+			APIGroup: "rbac.authorization.k8s.io",
+		}
+		gSub := rbacv1.Subject{
+			Kind:     "Group",
+			Name:     groups[0],
+			APIGroup: "rbac.authorization.k8s.io",
+		}
+		if !slices.Contains(clusterrolebinding.Subjects, uSub) {
+			clusterrolebinding.Subjects = append(clusterrolebinding.Subjects, uSub)
+		}
+		if !slices.Contains(clusterrolebinding.Subjects, gSub) {
+			clusterrolebinding.Subjects = append(clusterrolebinding.Subjects, gSub)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
 	role := rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "open-cluster-management:s3config:agent",
 			Namespace: clusterName,
 		},
 	}
-	_, err := controllerutil.CreateOrUpdate(ctx, a.Client, &role, func() error {
+	_, err = controllerutil.CreateOrUpdate(ctx, a.Client, &role, func() error {
 		role.Rules = []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{""},

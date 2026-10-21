@@ -18,11 +18,13 @@ package s3config
 
 import (
 	"context"
-	"github.com/stretchr/testify/assert"
 	"log/slog"
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
+	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	obv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
@@ -77,17 +79,8 @@ func TestReconcile_OBCNotBound(t *testing.T) {
 		},
 	}
 
-	// First reconcile adds finalizer
+	// After reconcile check OBC status
 	result, err := r.Reconcile(ctx, req)
-	if err != nil {
-		t.Errorf("Reconcile() should not return error for adding finalizer. Error: %s", err)
-	}
-	if !result.Requeue {
-		t.Error("Reconcile() should requeue after adding finalizer")
-	}
-
-	// Second reconcile checks OBC status
-	result, err = r.Reconcile(ctx, req)
 	if err != nil {
 		t.Errorf("Reconcile() should not return error for unbound OBC. Error: %s", err)
 	}
@@ -117,14 +110,8 @@ func TestReconcile_OBCMissingAnnotation(t *testing.T) {
 		},
 	}
 
-	// First reconcile adds finalizer
+	// Reconcile should fail due to missing annotation
 	_, err := r.Reconcile(ctx, req)
-	if err != nil {
-		t.Errorf("Reconcile() should not return error for adding finalizer. Error: %s", err)
-	}
-
-	// Second reconcile should fail due to missing annotation
-	_, err = r.Reconcile(ctx, req)
 	if err == nil {
 		t.Error("Reconcile() should return error when S3Configuration annotation is missing")
 	}
@@ -185,17 +172,8 @@ func TestReconcile_SuccessfulSync(t *testing.T) {
 		},
 	}
 
-	// First reconcile adds finalizer
+	// Reconcile should sync the secret
 	result, err := r.Reconcile(ctx, req)
-	if err != nil {
-		t.Errorf("Reconcile() failed on adding finalizer. Error: %s", err)
-	}
-	if !result.Requeue {
-		t.Error("Reconcile() should requeue after adding finalizer")
-	}
-
-	// Second reconcile syncs the secret
-	result, err = r.Reconcile(ctx, req)
 	if err != nil {
 		t.Errorf("Reconcile() failed. Error: %s", err)
 	}
@@ -241,6 +219,9 @@ func TestSyncSecretToHub_DefaultRegion(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-obc",
 			Namespace: "test-namespace",
+			Annotations: map[string]string{
+				utils.S3ConfigurationNameAnnotationKey: "test-s3config",
+			},
 		},
 	}
 
@@ -280,7 +261,7 @@ func TestSyncSecretToHub_DefaultRegion(t *testing.T) {
 	ctx := context.TODO()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	err := r.syncSecretToHub(ctx, obc, logger)
+	err := r.syncSecretToHub(ctx, logger, obc)
 	if err != nil {
 		t.Errorf("syncSecretToHub() failed. Error: %s", err)
 	}
@@ -306,6 +287,9 @@ func TestSyncSecretToHub_UpdateExisting(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-obc",
 			Namespace: "test-namespace",
+			Annotations: map[string]string{
+				utils.S3ConfigurationNameAnnotationKey: "test-s3config",
+			},
 		},
 	}
 
@@ -360,7 +344,7 @@ func TestSyncSecretToHub_UpdateExisting(t *testing.T) {
 	ctx := context.TODO()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	err := r.syncSecretToHub(ctx, obc, logger)
+	err := r.syncSecretToHub(ctx, logger, obc)
 	if err != nil {
 		t.Errorf("syncSecretToHub() failed. Error: %s", err)
 	}
@@ -391,6 +375,9 @@ func TestSyncSecretToHub_MissingSecret(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-obc",
 			Namespace: "test-namespace",
+			Annotations: map[string]string{
+				utils.S3ConfigurationNameAnnotationKey: "test-s3config",
+			},
 		},
 	}
 
@@ -398,7 +385,7 @@ func TestSyncSecretToHub_MissingSecret(t *testing.T) {
 	ctx := context.TODO()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	err := r.syncSecretToHub(ctx, obc, logger)
+	err := r.syncSecretToHub(ctx, logger, obc)
 	if err == nil {
 		t.Error("syncSecretToHub() should return error when OBC secret is missing")
 	}
@@ -409,6 +396,9 @@ func TestSyncSecretToHub_MissingConfigMap(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-obc",
 			Namespace: "test-namespace",
+			Annotations: map[string]string{
+				utils.S3ConfigurationNameAnnotationKey: "test-s3config",
+			},
 		},
 	}
 
@@ -427,7 +417,7 @@ func TestSyncSecretToHub_MissingConfigMap(t *testing.T) {
 	ctx := context.TODO()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	err := r.syncSecretToHub(ctx, obc, logger)
+	err := r.syncSecretToHub(ctx, logger, obc)
 	if err == nil {
 		t.Error("syncSecretToHub() should return error when OBC ConfigMap is missing")
 	}
@@ -438,6 +428,9 @@ func TestSyncSecretToHub_MissingRoute(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-obc",
 			Namespace: "test-namespace",
+			Annotations: map[string]string{
+				utils.S3ConfigurationNameAnnotationKey: "test-s3config",
+			},
 		},
 	}
 
@@ -466,79 +459,9 @@ func TestSyncSecretToHub_MissingRoute(t *testing.T) {
 	ctx := context.TODO()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	err := r.syncSecretToHub(ctx, obc, logger)
+	err := r.syncSecretToHub(ctx, logger, obc)
 	if err == nil {
 		t.Error("syncSecretToHub() should return error when S3 Route is missing")
-	}
-}
-
-func TestReconcile_OBCDeletion(t *testing.T) {
-	now := metav1.Now()
-	obc := &obv1alpha1.ObjectBucketClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-obc",
-			Namespace: "test-namespace",
-			Annotations: map[string]string{
-				utils.S3ConfigurationNameAnnotationKey: "test-s3config",
-			},
-			Finalizers:        []string{S3ConfigAddonFinalizer},
-			DeletionTimestamp: &now,
-		},
-		Status: obv1alpha1.ObjectBucketClaimStatus{
-			Phase: obv1alpha1.ObjectBucketClaimStatusPhaseBound,
-		},
-	}
-
-	// Hub secret that should be deleted
-	hubSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-obc",
-			Namespace: "cluster1",
-			Labels: map[string]string{
-				utils.CreatedByLabelKey: utils.S3ConfigAddonName,
-			},
-		},
-		Data: map[string][]byte{
-			utils.AwsAccessKeyId: []byte("test-key"),
-		},
-	}
-
-	r := getFakeS3ConfigAddonReconciler(t, obc, hubSecret)
-	ctx := context.TODO()
-	req := ctrl.Request{
-		NamespacedName: types.NamespacedName{
-			Name:      "test-obc",
-			Namespace: "test-namespace",
-		},
-	}
-
-	result, err := r.Reconcile(ctx, req)
-	if err != nil {
-		t.Errorf("Reconcile() failed during deletion. Error: %s", err)
-	}
-	if result.RequeueAfter != 0 || result.Requeue {
-		t.Error("Reconcile() should not requeue after successful deletion cleanup")
-	}
-
-	// Verify hub secret was deleted
-	foundSecret := &corev1.Secret{}
-	err = r.HubClient.Get(ctx, types.NamespacedName{
-		Name:      "test-obc",
-		Namespace: "cluster1",
-	}, foundSecret)
-	if err == nil {
-		t.Error("Hub secret should have been deleted")
-	}
-
-	// OBC will be fully deleted after finalizer is removed (since DeletionTimestamp is set)
-	// This is expected Kubernetes behavior - verify the OBC is gone
-	updatedOBC := &obv1alpha1.ObjectBucketClaim{}
-	err = r.SpokeClient.Get(ctx, types.NamespacedName{
-		Name:      "test-obc",
-		Namespace: "test-namespace",
-	}, updatedOBC)
-	if err == nil {
-		t.Error("OBC should have been deleted after finalizer removal")
 	}
 }
 
@@ -551,10 +474,28 @@ func getFakeS3ConfigAddonReconciler(t *testing.T, initObjs ...runtime.Object) S3
 	assert.NoError(t, err)
 	err = routev1.AddToScheme(scheme)
 	assert.NoError(t, err)
+	err = multiclusterv1alpha1.AddToScheme(scheme)
+	assert.NoError(t, err)
 
 	// Separate objects for spoke and hub clients
 	spokeObjs := []runtime.Object{}
 	hubObjs := []runtime.Object{}
+
+	s3Config := &multiclusterv1alpha1.S3Configuration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-s3config",
+		},
+		Spec: multiclusterv1alpha1.S3ConfigurationSpec{
+			InternalS3: &multiclusterv1alpha1.InternalS3Spec{
+				ProviderCluster:  "cluster1",
+				StorageClassName: "test-storage-class",
+				Namespace:        "test-namespace",
+			},
+			ManagedClusters: []string{"cluster1", "cluster2"},
+		},
+	}
+
+	// hubObjs = append(hubObjs, s3Config)
 
 	for _, obj := range initObjs {
 		switch o := obj.(type) {
@@ -580,6 +521,7 @@ func getFakeS3ConfigAddonReconciler(t *testing.T, initObjs ...runtime.Object) S3
 	hubClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithRuntimeObjects(hubObjs...).
+		WithObjects(s3Config).
 		Build()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
