@@ -1,6 +1,6 @@
 module github.com/red-hat-storage/odf-multicluster-orchestrator/api
 
-go 1.25.10
+go 1.26.7
 
 require (
 	github.com/ramendr/ramen/api v0.1.0-rc1
