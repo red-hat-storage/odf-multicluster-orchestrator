@@ -226,6 +226,7 @@ func (r *S3ConfigAddonReconciler) syncSecretToHub(ctx context.Context, obc *obv1
 	}
 
 	utils.AddLabel(hubSecret, utils.CreatedByLabelKey, utils.S3ConfigAddonName)
+	utils.AddLabel(hubSecret, utils.HubRecoveryLabel, "")
 	utils.AddAnnotation(hubSecret, utils.S3ConfigurationNameAnnotationKey, s3ConfigName)
 
 	// Create or update secret on hub
