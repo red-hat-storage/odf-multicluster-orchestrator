@@ -141,6 +141,7 @@ func TestS3SecretReconciler_Reconcile(t *testing.T) {
 		SpokeClient:      fakeSpokeClient,
 		SpokeClusterName: "cluster1",
 		Logger:           logger,
+		Scheme:           scheme,
 	}
 
 	req := ctrl.Request{
