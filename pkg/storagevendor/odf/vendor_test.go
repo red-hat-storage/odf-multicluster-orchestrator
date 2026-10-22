@@ -580,3 +580,118 @@ func TestCleanupResources(t *testing.T) {
 		}
 	})
 }
+
+func TestCreateStorageClusterPeerIncludesTLSManifests(t *testing.T) {
+	ctx := context.Background()
+	const mirrorPeerUID = types.UID("mirror-peer-uid")
+
+	sideA := ClientInfo{ProviderInfo: ProviderInfo{
+		ProviderManagedClusterName:    "side-a",
+		NamespacedName:                types.NamespacedName{Namespace: "openshift-storage"},
+		StorageProviderPublicEndpoint: "https://side-a.example.com",
+		TLSInfo: TLSInfo{
+			ServerSAN:       "side-a-server",
+			ServerCMContent: "side-a-server-ca",
+			ClientSAN:       "side-a-client",
+			ClientCMContent: "side-a-client-ca",
+			ClientCertName:  "side-a-client-cert",
+		},
+	}}
+	sideB := ClientInfo{ProviderInfo: ProviderInfo{
+		ProviderManagedClusterName:    "side-b",
+		NamespacedName:                types.NamespacedName{Namespace: "openshift-storage"},
+		StorageProviderPublicEndpoint: "https://side-b.example.com",
+		TLSInfo: TLSInfo{
+			ServerSAN:       "side-b-server",
+			ServerCMContent: "side-b-server-ca",
+			ClientSAN:       "side-b-client",
+			ClientCMContent: "side-b-client-ca",
+			ClientCertName:  "side-b-client-cert",
+		},
+	}}
+	marshalClientInfo := func(info ClientInfo) string {
+		t.Helper()
+		data, err := json.Marshal(info)
+		if err != nil {
+			t.Fatalf("failed to marshal client info: %v", err)
+		}
+		return string(data)
+	}
+
+	peer := &multiclusterv1alpha1.MirrorPeer{
+		ObjectMeta: metav1.ObjectMeta{Name: "mirror-peer", UID: mirrorPeerUID},
+		Spec: multiclusterv1alpha1.MirrorPeerSpec{Items: []multiclusterv1alpha1.PeerRef{
+			{ClusterName: "cluster-a", StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{Name: "storagecluster"}},
+			{ClusterName: "cluster-b", StorageClusterRef: multiclusterv1alpha1.StorageClusterRef{Name: "storagecluster"}},
+		}},
+	}
+	clientInfoMap := map[string]string{
+		"cluster-a_storagecluster": marshalClientInfo(sideA),
+		"cluster-b_storagecluster": marshalClientInfo(sideB),
+	}
+	fakeClient := fake.NewClientBuilder().WithScheme(mgrScheme).WithObjects(
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: string(mirrorPeerUID), Namespace: "side-a"}, Data: map[string][]byte{utils.SecretDataKey: []byte("side-a-token")}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: string(mirrorPeerUID), Namespace: "side-b"}, Data: map[string][]byte{utils.SecretDataKey: []byte("side-b-token")}},
+	).Build()
+
+	if err := createStorageClusterPeer(ctx, fakeClient, utils.GetLogger(utils.GetZapLogger(true)), peer, clientInfoMap); err != nil {
+		t.Fatalf("createStorageClusterPeer returned an error: %v", err)
+	}
+
+	for _, tc := range []struct {
+		providerName string
+		remoteName   string
+		remoteTLS    TLSInfo
+		localTLS     TLSInfo
+	}{
+		{providerName: "side-a", remoteName: "side-b", remoteTLS: sideB.ProviderInfo.TLSInfo, localTLS: sideA.ProviderInfo.TLSInfo},
+		{providerName: "side-b", remoteName: "side-a", remoteTLS: sideA.ProviderInfo.TLSInfo, localTLS: sideB.ProviderInfo.TLSInfo},
+	} {
+		var manifestWork workv1.ManifestWork
+		key := types.NamespacedName{Name: "storageclusterpeer-" + tc.providerName, Namespace: tc.providerName}
+		if err := fakeClient.Get(ctx, key, &manifestWork); err != nil {
+			t.Fatalf("failed to get ManifestWork %s: %v", key, err)
+		}
+		manifests := manifestWork.Spec.Workload.Manifests
+		if len(manifests) != 3 {
+			t.Fatalf("expected two CA ConfigMaps and one peer manifest, got %d manifests", len(manifests))
+		}
+
+		remotePeerName := getStorageClusterPeerName(tc.remoteName)
+		for i, expected := range []struct {
+			name    string
+			content string
+		}{
+			{name: remotePeerName + "-server-ca", content: tc.remoteTLS.ServerCMContent},
+			{name: remotePeerName + "-client-ca", content: tc.remoteTLS.ClientCMContent},
+		} {
+			var configMap corev1.ConfigMap
+			if err := json.Unmarshal(manifests[i].RawExtension.Raw, &configMap); err != nil {
+				t.Fatalf("failed to decode CA ConfigMap manifest %d: %v", i, err)
+			}
+			if configMap.Name != expected.name || configMap.Data["ca.crt"] != expected.content {
+				t.Errorf("unexpected CA ConfigMap: got %q with ca.crt %q", configMap.Name, configMap.Data["ca.crt"])
+			}
+		}
+
+		var peerManifest storageClusterPeerManifest
+		if err := json.Unmarshal(manifests[2].RawExtension.Raw, &peerManifest); err != nil {
+			t.Fatalf("failed to decode StorageClusterPeer manifest: %v", err)
+		}
+		if peerManifest.Spec.ServerCAConfigMap.Name != remotePeerName+"-server-ca" || peerManifest.Spec.ServerCAConfigMap.Key != "ca.crt" {
+			t.Errorf("unexpected server CA reference: %#v", peerManifest.Spec.ServerCAConfigMap)
+		}
+		if peerManifest.Spec.ServerSAN != tc.remoteTLS.ServerSAN {
+			t.Errorf("expected remote server SAN %q, got %q", tc.remoteTLS.ServerSAN, peerManifest.Spec.ServerSAN)
+		}
+		if peerManifest.Spec.ClientCertSecret.Name != tc.localTLS.ClientCertName {
+			t.Errorf("expected local client certificate %q, got %q", tc.localTLS.ClientCertName, peerManifest.Spec.ClientCertSecret.Name)
+		}
+		if peerManifest.Spec.ClientCAConfigMap.Name != remotePeerName+"-client-ca" {
+			t.Errorf("unexpected client CA reference: %q", peerManifest.Spec.ClientCAConfigMap.Name)
+		}
+		if peerManifest.Spec.ClientSAN != tc.remoteTLS.ClientSAN {
+			t.Errorf("expected remote client SAN %q, got %q", tc.remoteTLS.ClientSAN, peerManifest.Spec.ClientSAN)
+		}
+	}
+}

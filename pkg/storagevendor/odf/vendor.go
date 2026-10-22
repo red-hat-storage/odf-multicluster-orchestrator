@@ -14,6 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package odf contains ODF storage vendor integration helpers.
+// +kubebuilder:skip
+//
+// Skip CRD generation because this package contains manifest helper types, not
+// API version types. Otherwise controller-gen may interpret their embedded
+// Kubernetes metadata as an API root.
 package odf
 
 import (
@@ -316,7 +322,7 @@ func (odf *ODFVendor) removeClientIDFromClusterPairingConfigMap(ctx context.Cont
 			UID:        mirrorPeer.UID,
 		}
 
-		_, err = utils.CreateOrUpdateManifestWork(ctx, odf.client, manifestWorkName, providerName, updatedObjJson, []workv1.ManifestConfigOption{}, ownerRef)
+		_, err = utils.CreateOrUpdateManifestWork(ctx, odf.client, manifestWorkName, providerName, []workv1.ManifestConfigOption{}, ownerRef, updatedObjJson)
 		if err != nil {
 			return fmt.Errorf("failed to update ManifestWork for provider %s: %w", providerName, err)
 		}
@@ -522,11 +528,69 @@ func createStorageClusterPeer(ctx context.Context, client client.Client, logger 
 				ApiEndpoint:     apiEndpoint,
 			},
 		}
-		storageClusterPeerJson, err := json.Marshal(storageClusterPeer)
+
+		storageClusterPeerSpec := storageClusterPeerManifestSpec{
+			StorageClusterPeerSpec: storageClusterPeer.Spec,
+		}
+		var manifests [][]byte
+		currentTLSInfo := currentClient.ProviderInfo.TLSInfo
+		oppositeTLSInfo := oppositeClient.ProviderInfo.TLSInfo
+		serverCAConfigMapName := storageClusterPeerName + "-server-ca"
+		serverCAConfigMap := corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "ConfigMap",
+				APIVersion: corev1.SchemeGroupVersion.String(),
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      serverCAConfigMapName,
+				Namespace: storageClusterPeer.Namespace,
+			},
+			Data: map[string]string{"ca.crt": oppositeTLSInfo.ServerCMContent},
+		}
+		serverCAConfigMapJSON, err := json.Marshal(serverCAConfigMap)
+		if err != nil {
+			return fmt.Errorf("failed to marshal server CA ConfigMap %s: %w", serverCAConfigMapName, err)
+		}
+		manifests = append(manifests, serverCAConfigMapJSON)
+
+		storageClusterPeerSpec.ServerCAConfigMap = corev1.ConfigMapKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: serverCAConfigMapName},
+			Key:                  "ca.crt",
+		}
+		storageClusterPeerSpec.ServerSAN = oppositeTLSInfo.ServerSAN
+		storageClusterPeerSpec.ClientCertSecret = corev1.LocalObjectReference{Name: currentTLSInfo.ClientCertName}
+
+		clientCAConfigMapName := storageClusterPeerName + "-client-ca"
+		clientCAConfigMap := corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "ConfigMap",
+				APIVersion: corev1.SchemeGroupVersion.String(),
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clientCAConfigMapName,
+				Namespace: storageClusterPeer.Namespace,
+			},
+			Data: map[string]string{"ca.crt": oppositeTLSInfo.ClientCMContent},
+		}
+		clientCAConfigMapJSON, err := json.Marshal(clientCAConfigMap)
+		if err != nil {
+			return fmt.Errorf("failed to marshal client CA ConfigMap %s: %w", clientCAConfigMapName, err)
+		}
+		manifests = append(manifests, clientCAConfigMapJSON)
+
+		storageClusterPeerSpec.ClientCAConfigMap = corev1.LocalObjectReference{Name: clientCAConfigMapName}
+		storageClusterPeerSpec.ClientSAN = oppositeTLSInfo.ClientSAN
+
+		storageClusterPeerJson, err := json.Marshal(storageClusterPeerManifest{
+			TypeMeta:   storageClusterPeer.TypeMeta,
+			ObjectMeta: storageClusterPeer.ObjectMeta,
+			Spec:       storageClusterPeerSpec,
+		})
 		if err != nil {
 			logger.Error("Failed to marshal StorageClusterPeer to JSON", "StorageClusterPeer", storageClusterPeerName)
 			return err
 		}
+		manifests = append(manifests, storageClusterPeerJson)
 
 		ownerRef := metav1.OwnerReference{
 			APIVersion: mirrorPeer.APIVersion,
@@ -563,7 +627,7 @@ func createStorageClusterPeer(ctx context.Context, client client.Client, logger 
 				},
 			},
 		}
-		operationResult, err := utils.CreateOrUpdateManifestWork(ctx, client, manifestWorkName, namespace, storageClusterPeerJson, manifesConfigOption, ownerRef)
+		operationResult, err := utils.CreateOrUpdateManifestWork(ctx, client, manifestWorkName, namespace, manifesConfigOption, ownerRef, manifests...)
 		if err != nil {
 			return err
 		}
@@ -590,6 +654,26 @@ func fetchOnboardingTicket(ctx context.Context, client client.Client, clientInfo
 		return "", fmt.Errorf("token data not found in secret %s", secretName)
 	}
 	return string(tokenData), nil
+}
+
+// These manifest fields mirror the StorageClusterPeer TLS fields added in
+// ocs-operator commit 1a5135b616cb41157abf0969a1132217faccb8a1. MCO's pinned
+// OCS API type predates them. Importing the newer OCS API revision requires
+// Kubernetes v0.37.1, which conflicts with MCO's Argo CD and library-go dependencies
+// that still require Kubernetes v0.34.
+type storageClusterPeerManifest struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	Spec              storageClusterPeerManifestSpec `json:"spec,omitempty"`
+}
+
+type storageClusterPeerManifestSpec struct {
+	ocsv1.StorageClusterPeerSpec `json:",inline"`
+	ServerCAConfigMap            corev1.ConfigMapKeySelector `json:"serverCAConfigMap,omitempty"`
+	ServerSAN                    string                      `json:"serverSAN,omitempty"`
+	ClientCertSecret             corev1.LocalObjectReference `json:"clientCertSecret,omitempty"`
+	ClientCAConfigMap            corev1.LocalObjectReference `json:"clientCAConfigMap,omitempty"`
+	ClientSAN                    string                      `json:"clientSAN,omitempty"`
 }
 
 func getStorageClusterPeerName(providerClusterName string) string {
@@ -690,7 +774,7 @@ func updateProviderConfigMap(logger *slog.Logger, ctx context.Context, client cl
 	}
 
 	logger.Info("Creating or updating ManifestWork with updated ConfigMap")
-	_, err = utils.CreateOrUpdateManifestWork(ctx, client, manifestWorkName, manifestWorkNamespace, updatedObjJson, []workv1.ManifestConfigOption{}, ownerRef)
+	_, err = utils.CreateOrUpdateManifestWork(ctx, client, manifestWorkName, manifestWorkNamespace, []workv1.ManifestConfigOption{}, ownerRef, updatedObjJson)
 	if err != nil {
 		return fmt.Errorf("failed to update ManifestWork for provider %s: %w", providerName, err)
 	}

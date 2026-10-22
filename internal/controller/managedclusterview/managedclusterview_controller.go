@@ -209,6 +209,13 @@ func (r *ManagedClusterViewReconciler) getOdfInfoMap(ctx context.Context, manage
 			NamespacedName:                odfInfo.StorageCluster.NamespacedName,
 			ProviderManagedClusterName:    managedClusterName,
 			StorageProviderPublicEndpoint: providerPublicEndpoint,
+			TLSInfo: odf.TLSInfo{
+				ServerSAN:       odfInfo.TLSInfo.ServerSAN,
+				ServerCMContent: odfInfo.TLSInfo.ServerCMContent,
+				ClientSAN:       odfInfo.TLSInfo.ClientSAN,
+				ClientCMContent: odfInfo.TLSInfo.ClientCMContent,
+				ClientCertName:  odfInfo.TLSInfo.ClientCertName,
+			},
 		}
 
 		if len(cephblockPoolsInfo) > 0 {

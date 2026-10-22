@@ -28,6 +28,14 @@ type InfoCephBlockPool struct {
 	MirrorEnabled bool   `json:"mirrorEnabled"`
 }
 
+type TLSInfo struct {
+	ServerSAN       string `json:"serverSAN"`
+	ServerCMContent string `json:"serverCmContent"`
+	ClientSAN       string `json:"clientSAN"`
+	ClientCMContent string `json:"clientCmContent"`
+	ClientCertName  string `json:"clientCertName"`
+}
+
 type ProviderInfo struct {
 	Version                       string               `json:"version"`
 	DeploymentType                string               `json:"deploymentType"`
@@ -37,6 +45,7 @@ type ProviderInfo struct {
 	CephClusterFSID               string               `json:"cephClusterFSID"`
 	StorageProviderPublicEndpoint string               `json:"storageProviderPublicEndpoint"`
 	InfoCephBlockPools            []InfoCephBlockPool  `json:"infoCephBlockPools"`
+	TLSInfo                       TLSInfo              `json:"tlsInfo,omitempty"`
 }
 
 type ClientInfo struct {

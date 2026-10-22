@@ -83,6 +83,12 @@ func TestCreateOrUpdateODFConfigMap(t *testing.T) {
 			"openshift-storage_ocs-storagecluster.config.yaml": `
 version: "4.Y.Z"
 deploymentType: "internal"
+tlsInfo:
+  serverSAN: "cluster1-server.example.com"
+  serverCmContent: "cluster1-server-ca"
+  clientSAN: "cluster1-client.example.com"
+  clientCmContent: "cluster1-client-ca"
+  clientCertName: "cluster1-client-cert"
 clients:
   - name: "client1"
     clusterId: "cluster1"
@@ -120,7 +126,7 @@ storageCluster:
 		assert.NotNil(t, cm)
 
 		expectedData := map[string]string{
-			"cluster1_client1": `{"clusterId":"cluster1","name":"client1","providerInfo":{"version":"4.Y.Z","deploymentType":"internal","providerManagedClusterName":"cluster1","namespacedName":{"Namespace":"openshift-storage","Name":"ocs-storagecluster"},"storageProviderEndpoint":"","cephClusterFSID":"7a3d6b81-a55d-44fe-84d0-46c67cd395ca","storageProviderPublicEndpoint":"","infoCephBlockPools":[{"name":"pool1","mirrorEnabled":true},{"name":"pool2","mirrorEnabled":false}]},"clientManagedClusterName":"cluster1","clientId":"client1"}`,
+			"cluster1_client1": `{"clusterId":"cluster1","name":"client1","providerInfo":{"version":"4.Y.Z","deploymentType":"internal","providerManagedClusterName":"cluster1","namespacedName":{"Namespace":"openshift-storage","Name":"ocs-storagecluster"},"storageProviderEndpoint":"","cephClusterFSID":"7a3d6b81-a55d-44fe-84d0-46c67cd395ca","storageProviderPublicEndpoint":"","infoCephBlockPools":[{"name":"pool1","mirrorEnabled":true},{"name":"pool2","mirrorEnabled":false}],"tlsInfo":{"serverSAN":"cluster1-server.example.com","serverCmContent":"cluster1-server-ca","clientSAN":"cluster1-client.example.com","clientCmContent":"cluster1-client-ca","clientCertName":"cluster1-client-cert"}},"clientManagedClusterName":"cluster1","clientId":"client1"}`,
 		}
 
 		assert.Equal(t, expectedData, cm.Data)
@@ -136,6 +142,12 @@ storageCluster:
 			"openshift-storage_ocs-storagecluster.config.yaml": `
 version: "4.Y.Z"
 deploymentType: "internal"
+tlsInfo:
+  serverSAN: "cluster2-server.example.com"
+  serverCmContent: "cluster2-server-ca"
+  clientSAN: "cluster2-client.example.com"
+  clientCmContent: "cluster2-client-ca"
+  clientCertName: "cluster2-client-cert"
 clients:
   - name: "client2"
     clusterId: "cluster2"
@@ -172,8 +184,8 @@ storageCluster:
 		assert.NotNil(t, cm)
 
 		expectedData := map[string]string{
-			"cluster1_client1": `{"clusterId":"cluster1","name":"client1","providerInfo":{"version":"4.Y.Z","deploymentType":"internal","providerManagedClusterName":"cluster1","namespacedName":{"Namespace":"openshift-storage","Name":"ocs-storagecluster"},"storageProviderEndpoint":"","cephClusterFSID":"7a3d6b81-a55d-44fe-84d0-46c67cd395ca","storageProviderPublicEndpoint":"","infoCephBlockPools":[{"name":"pool1","mirrorEnabled":true},{"name":"pool2","mirrorEnabled":false}]},"clientManagedClusterName":"cluster1","clientId":"client1"}`,
-			"cluster2_client2": `{"clusterId":"cluster2","name":"client2","providerInfo":{"version":"4.Y.Z","deploymentType":"internal","providerManagedClusterName":"cluster2","namespacedName":{"Namespace":"openshift-storage","Name":"ocs-storagecluster"},"storageProviderEndpoint":"","cephClusterFSID":"8b3d6b81-b55d-55fe-94d0-56c67cd495ca","storageProviderPublicEndpoint":"","infoCephBlockPools":[{"name":"pool1","mirrorEnabled":true},{"name":"pool2","mirrorEnabled":false}]},"clientManagedClusterName":"cluster2","clientId":"client2"}`,
+			"cluster1_client1": `{"clusterId":"cluster1","name":"client1","providerInfo":{"version":"4.Y.Z","deploymentType":"internal","providerManagedClusterName":"cluster1","namespacedName":{"Namespace":"openshift-storage","Name":"ocs-storagecluster"},"storageProviderEndpoint":"","cephClusterFSID":"7a3d6b81-a55d-44fe-84d0-46c67cd395ca","storageProviderPublicEndpoint":"","infoCephBlockPools":[{"name":"pool1","mirrorEnabled":true},{"name":"pool2","mirrorEnabled":false}],"tlsInfo":{"serverSAN":"cluster1-server.example.com","serverCmContent":"cluster1-server-ca","clientSAN":"cluster1-client.example.com","clientCmContent":"cluster1-client-ca","clientCertName":"cluster1-client-cert"}},"clientManagedClusterName":"cluster1","clientId":"client1"}`,
+			"cluster2_client2": `{"clusterId":"cluster2","name":"client2","providerInfo":{"version":"4.Y.Z","deploymentType":"internal","providerManagedClusterName":"cluster2","namespacedName":{"Namespace":"openshift-storage","Name":"ocs-storagecluster"},"storageProviderEndpoint":"","cephClusterFSID":"8b3d6b81-b55d-55fe-94d0-56c67cd495ca","storageProviderPublicEndpoint":"","infoCephBlockPools":[{"name":"pool1","mirrorEnabled":true},{"name":"pool2","mirrorEnabled":false}],"tlsInfo":{"serverSAN":"cluster2-server.example.com","serverCmContent":"cluster2-server-ca","clientSAN":"cluster2-client.example.com","clientCmContent":"cluster2-client-ca","clientCertName":"cluster2-client-cert"}},"clientManagedClusterName":"cluster2","clientId":"client2"}`,
 		}
 
 		assert.Equal(t, expectedData, cm.Data)
