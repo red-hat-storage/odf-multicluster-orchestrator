@@ -169,13 +169,51 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 	// This reduces memory footprint by filtering out unnecessary resources.
 	cacheOptions := cache.Options{
 		ByObject: map[client.Object]cache.ByObject{
-			// Only cache ManagedClusterAddOn with required label
+			// For upgrade support, we need to cache specific addon resources by name
+			// (tokenexchange, s3config) in addition to labeled addons.
+			// NOTE: Enable it in future release, and remove the transform caching logic below
+			// for MCA and CMA resource types.
+			// // Only cache ManagedClusterAddOn with required label
+			// &addonapiv1alpha1.ManagedClusterAddOn{}: {
+			// 	Label: createByMCOLabelSelector,
+			// },
+			// // Only cache ClusterManagementAddOn with required label
+			// &addonapiv1alpha1.ClusterManagementAddOn{}: {
+			// 	Label: createByMCOLabelSelector,
+			// },
+			// Since field selectors don't support OR logic for multiple names,
+			// we use client-side filtering via Transform to keep only needed addons in memory.
 			&addonapiv1alpha1.ManagedClusterAddOn{}: {
-				Label: createByMCOLabelSelector,
+				Transform: func(obj interface{}) (interface{}, error) {
+					addon, ok := obj.(*addonapiv1alpha1.ManagedClusterAddOn)
+					if !ok {
+						return obj, nil
+					}
+					// Keep addons with specific names or with the created-by label
+					if addon.Name == utils.TokenExchangeName ||
+						addon.Name == utils.S3ConfigAddonName ||
+						addon.Labels[utils.CreatedByLabelKey] != "" {
+						return obj, nil
+					}
+					// Skip other addons to reduce memory usage
+					return nil, nil
+				},
 			},
-			// Only cache ClusterManagementAddOn with required label
 			&addonapiv1alpha1.ClusterManagementAddOn{}: {
-				Label: createByMCOLabelSelector,
+				Transform: func(obj interface{}) (interface{}, error) {
+					addon, ok := obj.(*addonapiv1alpha1.ClusterManagementAddOn)
+					if !ok {
+						return obj, nil
+					}
+					// Keep addons with specific names or with the created-by label
+					if addon.Name == utils.TokenExchangeName ||
+						addon.Name == utils.S3ConfigAddonName ||
+						addon.Labels[utils.CreatedByLabelKey] != "" {
+						return obj, nil
+					}
+					// Skip other addons to reduce memory usage
+					return nil, nil
+				},
 			},
 			// Only cache ManagedClusterViews created by this controller
 			&viewv1beta1.ManagedClusterView{}: {
@@ -203,9 +241,10 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 			},
 			// Only cache ManifestWorks created by this operator to reduce memory usage.
 			// Only cache ManifestWorks labeled with "multicluster.odf.openshift.io/created-by".
-			&workv1.ManifestWork{}: {
-				Label: createByMCOLabelSelector,
-			},
+			// NOTE: Enable it in future release, such that upgraded clusters already have the label added to the ManifestWork created by MCO
+			// &workv1.ManifestWork{}: {
+			// 	Label: createByMCOLabelSelector,
+			// },
 			// ManagedCluster: Use transform to reduce memory footprint
 			// We only need metadata and status.clusterClaims, so strip everything else
 			&clusterv1.ManagedCluster{}: {
