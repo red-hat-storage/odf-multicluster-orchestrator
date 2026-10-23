@@ -121,12 +121,20 @@ func checkStorageClusterPeerStatus(ctx context.Context, client client.Client, lo
 		}
 		logger.Info("StorageClusterPeer ManifestWork has reached Applied status", "ManifestWorkName", manifestWorkName)
 
-		mwResourceStatusManifests := manifestWork.Status.ResourceStatus.Manifests
-		if len(mwResourceStatusManifests) > 0 && len(mwResourceStatusManifests[0].StatusFeedbacks.Values) > 0 {
-			if *mwResourceStatusManifests[0].StatusFeedbacks.Values[0].Value.String == string(ocsv1.StorageClusterPeerStateFailed) {
+		var peerManifestStatus *workv1.ManifestCondition
+		for i := range manifestWork.Status.ResourceStatus.Manifests {
+			manifestStatus := &manifestWork.Status.ResourceStatus.Manifests[i]
+			if manifestStatus.ResourceMeta.Kind == "StorageClusterPeer" {
+				peerManifestStatus = manifestStatus
+				break
+			}
+		}
+
+		if peerManifestStatus != nil && len(peerManifestStatus.StatusFeedbacks.Values) > 0 {
+			if *peerManifestStatus.StatusFeedbacks.Values[0].Value.String == string(ocsv1.StorageClusterPeerStateFailed) {
 				logger.Error("StorageClusterPeer is in Failed status", "ManifestWorkName", manifestWorkName)
 				return false, fmt.Errorf("StorageClusterPeer %s is in Failed status", manifestWorkName)
-			} else if *mwResourceStatusManifests[0].StatusFeedbacks.Values[0].Value.String != string(ocsv1.StorageClusterPeerStatePeered) {
+			} else if *peerManifestStatus.StatusFeedbacks.Values[0].Value.String != string(ocsv1.StorageClusterPeerStatePeered) {
 				logger.Info("StorageClusterPeer has not reached Peered status", "ManifestWorkName", manifestWorkName)
 				return false, nil
 			}
