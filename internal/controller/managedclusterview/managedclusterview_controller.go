@@ -7,11 +7,11 @@ import (
 	"log/slog"
 	"strings"
 
+	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/storagevendor/ibmstoragescale"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/storagevendor/odf"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
-	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v4/v1alpha1"
 	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	yamlv3 "gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
@@ -184,13 +184,13 @@ func (r *ManagedClusterViewReconciler) getOdfInfoMap(ctx context.Context, manage
 		if !ok {
 			return fmt.Errorf("unexpected value format in data for key %s: expected string, got %T", key, value)
 		}
-		var odfInfo ocsv1alpha1.OdfInfoData
+		var odfInfo multiclusterv1alpha1.OdfInfoData
 		err := yamlv3.Unmarshal([]byte(yamlContent), &odfInfo)
 		if err != nil {
 			return fmt.Errorf("failed to unmarshal DF info data for key %s: %w", key, err)
 		}
 
-		providerPublicEndpoint := odfInfo.StorageCluster.Annotations[ocsv1alpha1.ApiServerExportedAddressAnnotationName]
+		providerPublicEndpoint := odfInfo.StorageCluster.Annotations[multiclusterv1alpha1.ApiServerExportedAddressAnnotationName]
 		if providerPublicEndpoint == "" {
 			r.Logger.Info("StorageProviderPublicEndpoint is not available.")
 		}
@@ -209,6 +209,13 @@ func (r *ManagedClusterViewReconciler) getOdfInfoMap(ctx context.Context, manage
 			NamespacedName:                odfInfo.StorageCluster.NamespacedName,
 			ProviderManagedClusterName:    managedClusterName,
 			StorageProviderPublicEndpoint: providerPublicEndpoint,
+			TLSInfo: odf.TLSInfo{
+				ServerSAN:       odfInfo.TLSInfo.ServerSAN,
+				ServerCMContent: odfInfo.TLSInfo.ServerCMContent,
+				ClientSAN:       odfInfo.TLSInfo.ClientSAN,
+				ClientCMContent: odfInfo.TLSInfo.ClientCMContent,
+				ClientCertName:  odfInfo.TLSInfo.ClientCertName,
+			},
 		}
 
 		if len(cephblockPoolsInfo) > 0 {
