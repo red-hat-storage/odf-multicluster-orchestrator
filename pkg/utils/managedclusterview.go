@@ -32,7 +32,7 @@ func GetTokenExchangeManagedClusterViewName(clusterName string) string {
 }
 
 // CreateOrUpdateManagedClusterView creates or updates a ManagedClusterView resource.
-// It uses SetControllerReference to establish ownership with the provided ManagedCluster.
+// It uses SetOwnerReference to establish ownership with the provided ManagedCluster for garbage collection
 func CreateOrUpdateManagedClusterView(
 	ctx context.Context,
 	client ctrlClient.Client,
@@ -60,8 +60,8 @@ func CreateOrUpdateManagedClusterView(
 		AddLabel(mcv, CreatedByLabelKey, "odf-multicluster-managedcluster-controller")
 		AddLabel(mcv, HubRecoveryLabel, "")
 
-		// Set controller reference - this establishes ownership
-		if err := controllerutil.SetControllerReference(managedCluster, mcv, scheme); err != nil {
+		// Set owner reference - this establishes ownership for garbage collection
+		if err := controllerutil.SetOwnerReference(managedCluster, mcv, scheme); err != nil {
 			return fmt.Errorf("failed to set controller reference: %w", err)
 		}
 
