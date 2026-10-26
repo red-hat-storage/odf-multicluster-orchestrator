@@ -23,7 +23,6 @@ import (
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
-	ocsv1alpha1 "github.com/red-hat-storage/ocs-operator/api/v4/v1alpha1"
 	"gopkg.in/yaml.v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -49,7 +48,7 @@ func GetPeerRefForProviderCluster(ctx context.Context, spokeClient, hubClient cl
 	if err != nil {
 		return nil, fmt.Errorf("failed to get DF Info ConfigMap for namespace %s: %w", operatorNamespace, err)
 	}
-	var odfInfo ocsv1alpha1.OdfInfoData
+	var odfInfo multiclusterv1alpha1.OdfInfoData
 	for key, value := range cm.Data {
 		err := yaml.Unmarshal([]byte(value), &odfInfo)
 		if err != nil {

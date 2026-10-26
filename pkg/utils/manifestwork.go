@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-func CreateOrUpdateManifestWork(ctx context.Context, c client.Client, name string, namespace string, objJson []byte, manifestConfigOptions []workv1.ManifestConfigOption, ownerRef metav1.OwnerReference) (controllerutil.OperationResult, error) {
+func CreateOrUpdateManifestWork(ctx context.Context, c client.Client, name string, namespace string, manifestConfigOptions []workv1.ManifestConfigOption, ownerRef metav1.OwnerReference, manifests ...[]byte) (controllerutil.OperationResult, error) {
 	mw := workv1.ManifestWork{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -26,14 +26,13 @@ func CreateOrUpdateManifestWork(ctx context.Context, c client.Client, name strin
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c, &mw, func() error {
 		mw.Spec = workv1.ManifestWorkSpec{
 			Workload: workv1.ManifestsTemplate{
-				Manifests: []workv1.Manifest{
-					{
-						RawExtension: runtime.RawExtension{
-							Raw: objJson,
-						},
-					},
-				},
+				Manifests: make([]workv1.Manifest, len(manifests)),
 			},
+		}
+		for i, objJson := range manifests {
+			mw.Spec.Workload.Manifests[i] = workv1.Manifest{
+				RawExtension: runtime.RawExtension{Raw: objJson},
+			}
 		}
 
 		if mw.Labels == nil {
