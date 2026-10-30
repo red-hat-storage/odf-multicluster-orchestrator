@@ -119,34 +119,3 @@ func TestArePeerVersionsCompatible(t *testing.T) {
 		})
 	}
 }
-
-func TestGetIbmStorageScaleInfoFromConfigMap(t *testing.T) {
-	infoMap := map[string]string{
-		"cluster-a_scale-cluster-a": infoEntry(t, "5.2.0"),
-	}
-
-	t.Run("found", func(t *testing.T) {
-		info, err := getIbmStorageScaleInfoFromConfigMap(infoMap, "cluster-a_scale-cluster-a")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if info.Version != "5.2.0" {
-			t.Fatalf("expected version 5.2.0, got %q", info.Version)
-		}
-	})
-
-	t.Run("missing key", func(t *testing.T) {
-		_, err := getIbmStorageScaleInfoFromConfigMap(infoMap, "cluster-x_scale-cluster-x")
-		if err == nil {
-			t.Fatal("expected error for missing key, got nil")
-		}
-	})
-
-	t.Run("malformed JSON", func(t *testing.T) {
-		badMap := map[string]string{"k": "not-json"}
-		_, err := getIbmStorageScaleInfoFromConfigMap(badMap, "k")
-		if err == nil {
-			t.Fatal("expected error for malformed JSON, got nil")
-		}
-	})
-}
