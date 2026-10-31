@@ -27,6 +27,7 @@ import (
 	placementv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	workv1 "open-cluster-management.io/api/work/v1"
 	appsubapis "open-cluster-management.io/multicloud-operators-subscription/pkg/apis"
+	appv1beta1 "sigs.k8s.io/application/api/v1beta1"
 )
 
 var TestScheme = func() *runtime.Scheme {
@@ -42,6 +43,7 @@ var TestScheme = func() *runtime.Scheme {
 	utilruntime.Must(placementv1beta1.AddToScheme(s))
 	utilruntime.Must(argov1alpha1.AddToScheme(s))
 	utilruntime.Must(appsubapis.AddToScheme(s))
+	utilruntime.Must(appv1beta1.AddToScheme(s))
 	utilruntime.Must(replicationv1alpha1.AddToScheme(s))
 	utilruntime.Must(ocsv1.AddToScheme(s))
 	utilruntime.Must(ocsv1alpha1.AddToScheme(s))
