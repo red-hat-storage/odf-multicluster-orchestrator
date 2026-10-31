@@ -54,6 +54,10 @@ func (r *ClusterVersionReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		r.Logger.Error("Could not ensure compatibility for odf-multicluster-console plugin", "error", err)
 		return ctrl.Result{}, err
 	}
+	if err := r.ensureNginxConfigMap(ctx); err != nil {
+		r.Logger.Error("Could not ensure nginx config map for odf-multicluster-console", "error", err)
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -65,7 +69,10 @@ func (r *ClusterVersionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return err
 		}
 
-		return r.ensureConsolePlugin(ctx, clusterVersion)
+		if err := r.ensureConsolePlugin(ctx, clusterVersion); err != nil {
+			return err
+		}
+		return r.ensureNginxConfigMap(ctx)
 	}))
 	if err != nil {
 		return err
@@ -100,6 +107,19 @@ func (r *ClusterVersionReconciler) ensureConsolePlugin(ctx context.Context, clus
 			r.Logger.Info(fmt.Sprintf("Set the BasePath for odf-multicluster-console plugin as '%s'", basePath))
 			odfConsolePlugin.Spec.Backend.Service.BasePath = basePath
 		}
+		return nil
+	})
+	return err
+}
+
+func (r *ClusterVersionReconciler) ensureNginxConfigMap(ctx context.Context) error {
+	nginxConf, err := console.GenerateNginxConf()
+	if err != nil {
+		return fmt.Errorf("failed to generate nginx config: %w", err)
+	}
+	cm := console.GetNginxConfConfigMap(r.OperatorNamespace, "")
+	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error {
+		cm.Data = map[string]string{console.NginxConfKey: nginxConf}
 		return nil
 	})
 	return err
