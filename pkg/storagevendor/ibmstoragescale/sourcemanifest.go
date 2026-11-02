@@ -41,12 +41,7 @@ func getSourceManifestMCVName(sourceManifestName string) string {
 
 // readSourceManifests reads the SourceManifests listed in the cluster's info ConfigMap.
 // It returns each SourceManifest's resources, keyed by SourceManifest name.
-func (v *IbmStorageScaleVendor) readSourceManifests(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer, item multiclusterv1alpha1.PeerRef) (resourcesByManifestName map[string][]runtime.RawExtension, ready bool, err error) {
-	info, err := getIbmStorageScaleInfoFromConfigMap(v.infoMap, utils.GetKey(item.ClusterName, item.StorageClusterRef.Name))
-	if err != nil {
-		return nil, false, fmt.Errorf("unable to get IBM Storage Scale info for cluster %q: %w", item.ClusterName, err)
-	}
-
+func (v *IbmStorageScaleVendor) readSourceManifests(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer, item multiclusterv1alpha1.PeerRef, info IbmStorageScaleInfo) (resourcesByManifestName map[string][]runtime.RawExtension, ready bool, err error) {
 	if len(info.SourceManifests) == 0 {
 		v.logger.Info("No sourceManifests listed for cluster yet", "cluster", item.ClusterName)
 		return nil, false, nil

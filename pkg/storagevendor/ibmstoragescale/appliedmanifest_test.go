@@ -25,7 +25,6 @@ import (
 	"testing"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,14 +35,14 @@ import (
 
 func TestPushAppliedManifests(t *testing.T) {
 	peer := peerRef("cluster-b", "scale-cluster-b")
-	peerKey := utils.GetKey("cluster-b", "scale-cluster-b")
 	mwKey := types.NamespacedName{Name: getAppliedManifestWorkName("sm-a"), Namespace: "cluster-b"}
 	payload := []runtime.RawExtension{{Raw: []byte(`{"apiVersion":"scale.spectrum.ibm.com/v1beta1","kind":"FileSystem","metadata":{"name":"fsA"}}`)}}
+	info := IbmStorageScaleInfo{OperatorNamespace: "ibm-spectrum-scale"}
 
 	t.Run("creates a ManifestWork carrying the AppliedManifest on the peer", func(t *testing.T) {
-		v, cl, mp := newTestVendor(t, map[string]string{peerKey: infoEntry(t, "5.2.0")})
+		v, cl, mp := newTestVendor(t, nil)
 
-		require.NoError(t, v.syncAppliedManifests(context.TODO(), mp, peer, map[string][]runtime.RawExtension{"sm-a": payload}))
+		require.NoError(t, v.syncAppliedManifests(context.TODO(), mp, peer, info, map[string][]runtime.RawExtension{"sm-a": payload}))
 
 		mw := &workv1.ManifestWork{}
 		require.NoError(t, cl.Get(context.TODO(), mwKey, mw))
@@ -64,22 +63,15 @@ func TestPushAppliedManifests(t *testing.T) {
 	})
 
 	t.Run("updates the ManifestWork when the payload changes", func(t *testing.T) {
-		v, cl, mp := newTestVendor(t, map[string]string{peerKey: infoEntry(t, "5.2.0")})
-		require.NoError(t, v.syncAppliedManifests(context.TODO(), mp, peer, map[string][]runtime.RawExtension{"sm-a": payload}))
+		v, cl, mp := newTestVendor(t, nil)
+		require.NoError(t, v.syncAppliedManifests(context.TODO(), mp, peer, info, map[string][]runtime.RawExtension{"sm-a": payload}))
 
 		updated := []runtime.RawExtension{{Raw: []byte(`{"apiVersion":"scale.spectrum.ibm.com/v1beta1","kind":"FileSystem","metadata":{"name":"fsB"}}`)}}
-		require.NoError(t, v.syncAppliedManifests(context.TODO(), mp, peer, map[string][]runtime.RawExtension{"sm-a": updated}))
+		require.NoError(t, v.syncAppliedManifests(context.TODO(), mp, peer, info, map[string][]runtime.RawExtension{"sm-a": updated}))
 
 		mw := &workv1.ManifestWork{}
 		require.NoError(t, cl.Get(context.TODO(), mwKey, mw))
 		require.Len(t, mw.Spec.Workload.Manifests, 1)
 		assert.Contains(t, string(mw.Spec.Workload.Manifests[0].Raw), "fsB")
-	})
-
-	t.Run("errors when the peer is not discovered", func(t *testing.T) {
-		v, _, mp := newTestVendor(t, map[string]string{})
-
-		err := v.syncAppliedManifests(context.TODO(), mp, peer, map[string][]runtime.RawExtension{"sm-a": payload})
-		assert.Error(t, err)
 	})
 }

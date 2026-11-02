@@ -55,12 +55,7 @@ func buildAppliedManifest(name, namespace string, resources []runtime.RawExtensi
 
 // syncAppliedManifests creates or updates one ManifestWork per SourceManifest on the peer
 // cluster. Each ManifestWork carries an AppliedManifest with the same payload.
-func (v *IbmStorageScaleVendor) syncAppliedManifests(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer, peer multiclusterv1alpha1.PeerRef, resourcesByManifestName map[string][]runtime.RawExtension) error {
-	info, err := getIbmStorageScaleInfoFromConfigMap(v.infoMap, utils.GetKey(peer.ClusterName, peer.StorageClusterRef.Name))
-	if err != nil {
-		return fmt.Errorf("unable to get IBM Storage Scale info for cluster %q: %w", peer.ClusterName, err)
-	}
-
+func (v *IbmStorageScaleVendor) syncAppliedManifests(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer, peer multiclusterv1alpha1.PeerRef, info IbmStorageScaleInfo, resourcesByManifestName map[string][]runtime.RawExtension) error {
 	for manifestName, resources := range resourcesByManifestName {
 		if err := v.syncAppliedManifest(ctx, mirrorPeer,
 			peer.ClusterName, info.OperatorNamespace, manifestName, resources); err != nil {

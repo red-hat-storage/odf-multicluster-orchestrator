@@ -42,12 +42,7 @@ func getAppliedManifestStatusMCVName(appliedManifestName string) string {
 // checkAppliedManifestsStatus reads back every pushed AppliedManifest's status from the peer and
 // aggregates them. ready is true only when all AppliedManifests report Applied and are fresh.
 // It returns an error if any AppliedManifest reports a Failed or Degraded phase.
-func (v *IbmStorageScaleVendor) checkAppliedManifestsStatus(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer, peer multiclusterv1alpha1.PeerRef, resourcesByManifestName map[string][]runtime.RawExtension) (ready bool, err error) {
-	info, err := getIbmStorageScaleInfoFromConfigMap(v.infoMap, utils.GetKey(peer.ClusterName, peer.StorageClusterRef.Name))
-	if err != nil {
-		return false, fmt.Errorf("unable to get IBM Storage Scale info for cluster %q: %w", peer.ClusterName, err)
-	}
-
+func (v *IbmStorageScaleVendor) checkAppliedManifestsStatus(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer, peer multiclusterv1alpha1.PeerRef, info IbmStorageScaleInfo, resourcesByManifestName map[string][]runtime.RawExtension) (ready bool, err error) {
 	ready = true
 	for name := range resourcesByManifestName {
 		status, manifestReady, err := v.readAppliedManifestStatus(ctx, mirrorPeer, peer.ClusterName, info.OperatorNamespace, name)
