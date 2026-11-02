@@ -22,11 +22,8 @@ import (
 	"fmt"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
-	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 func getSourceManifestMCVName(sourceManifestName string) string {
@@ -65,7 +62,8 @@ func (v *IbmStorageScaleVendor) readSourceManifests(ctx context.Context, mirrorP
 // readSourceManifest reads a single SourceManifest from the managed cluster via an MCV.
 // It returns the SourceManifest's resources, or ready=false if the MCV result is not available yet.
 func (v *IbmStorageScaleVendor) readSourceManifest(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clusterName, sourceNamespace, name string) (resources []runtime.RawExtension, ready bool, err error) {
-	mcv, err := v.createOrUpdateSourceManifestMCV(ctx, mirrorPeer, clusterName, sourceNamespace, name)
+	sourceManifestMCVName := getSourceManifestMCVName(name)
+	mcv, err := v.createOrUpdateMCV(ctx, mirrorPeer, sourceManifestMCVName, clusterName, sourceManifestResource, sourceNamespace, name)
 	if err != nil {
 		return nil, false, err
 	}
@@ -80,32 +78,4 @@ func (v *IbmStorageScaleVendor) readSourceManifest(ctx context.Context, mirrorPe
 		return nil, false, fmt.Errorf("failed to unmarshal SourceManifest %q from ManagedClusterView %q: %w", name, mcv.Name, err)
 	}
 	return sourceManifest.Spec.Manifests, true, nil
-}
-
-// createOrUpdateSourceManifestMCV creates or updates the MCV that reads the SourceManifest
-// from its namespace on the managed cluster. This MCV is owned by the MirrorPeer.
-func (v *IbmStorageScaleVendor) createOrUpdateSourceManifestMCV(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clusterName, sourceNamespace, name string) (*viewv1beta1.ManagedClusterView, error) {
-	mcv := &viewv1beta1.ManagedClusterView{}
-	mcv.Name = getSourceManifestMCVName(name)
-	mcv.Namespace = clusterName
-
-	_, err := controllerutil.CreateOrUpdate(ctx, v.client, mcv, func() error {
-		mcv.Spec = viewv1beta1.ViewSpec{
-			Scope: viewv1beta1.ViewScope{
-				Group:     multiclusterv1alpha1.GroupVersion.Group,
-				Resource:  sourceManifestResource,
-				Name:      name,
-				Namespace: sourceNamespace,
-			},
-		}
-
-		utils.AddLabel(mcv, utils.CreatedByLabelKey, utils.CreatorMulticlusterOrchestrator)
-		utils.AddLabel(mcv, utils.HubRecoveryLabel, "")
-
-		return controllerutil.SetControllerReference(mirrorPeer, mcv, v.scheme)
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create or update ManagedClusterView %q in namespace %q: %w", mcv.Name, mcv.Namespace, err)
-	}
-	return mcv, nil
 }
