@@ -917,4 +917,72 @@ func TestReconcile_ExternalS3(t *testing.T) {
 	if len(updated.Status.ConfiguredClusters) != 2 {
 		t.Errorf("Status.ConfiguredClusters = %v, want 2 clusters", updated.Status.ConfiguredClusters)
 	}
+	if updated.Status.Type != multiclusterv1alpha1.S3TypeExternal {
+		t.Errorf("Status.Type = %q, want %q", updated.Status.Type, multiclusterv1alpha1.S3TypeExternal)
+	}
+}
+
+func TestReconcilePhases_SetsStatusType(t *testing.T) {
+	tests := []struct {
+		name     string
+		spec     multiclusterv1alpha1.S3ConfigurationSpec
+		wantType multiclusterv1alpha1.S3Type
+	}{
+		{
+			name: "InternalS3",
+			spec: multiclusterv1alpha1.S3ConfigurationSpec{
+				InternalS3: &multiclusterv1alpha1.InternalS3Spec{
+					ProviderCluster:  "cluster1",
+					StorageClassName: "test-storage-class",
+					Namespace:        "test-namespace",
+				},
+				ManagedClusters: []string{"cluster1"},
+			},
+			wantType: multiclusterv1alpha1.S3TypeInternal,
+		},
+		{
+			name: "ExternalS3",
+			spec: multiclusterv1alpha1.S3ConfigurationSpec{
+				ExternalS3: &multiclusterv1alpha1.ExternalS3Spec{
+					SecretRef: multiclusterv1alpha1.SecretReference{
+						Name:      "ext-s3-creds",
+						Namespace: "dr-system",
+					},
+				},
+				ManagedClusters: []string{"cluster1"},
+			},
+			wantType: multiclusterv1alpha1.S3TypeExternal,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Pre-set the finalizer and hub-recovery label so reconcilePhases moves
+			// past the first (finalizer-adding) pass and reaches the status.Type
+			// assignment on this same call, regardless of how the rest of the
+			// reconcile (missing secrets, addons, etc.) turns out.
+			s3Config := &multiclusterv1alpha1.S3Configuration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-s3config",
+					Finalizers: []string{S3ConfigurationFinalizer},
+					Labels:     map[string]string{utils.HubRecoveryLabel: ""},
+				},
+				Spec: tt.spec,
+			}
+
+			r := getFakeS3ConfigurationReconciler(t, s3Config)
+			ctx := context.TODO()
+			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+			// Downstream steps (secret lookup, addon deployment, etc.) are expected
+			// to fail or requeue in this minimal fixture; only status.Type matters here.
+			if _, err := r.reconcilePhases(ctx, logger, s3Config); err != nil {
+				t.Logf("reconcilePhases returned expected error from incomplete fixture: %s", err)
+			}
+
+			if s3Config.Status.Type != tt.wantType {
+				t.Errorf("Status.Type = %q, want %q", s3Config.Status.Type, tt.wantType)
+			}
+		})
+	}
 }
