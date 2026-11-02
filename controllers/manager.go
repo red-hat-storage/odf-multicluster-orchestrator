@@ -29,6 +29,7 @@ import (
 	placementv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	workv1 "open-cluster-management.io/api/work/v1"
 	appsubapis "open-cluster-management.io/multicloud-operators-subscription/pkg/apis"
+	appv1beta1 "sigs.k8s.io/application/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -54,6 +55,7 @@ func init() {
 	utilruntime.Must(placementv1beta1.AddToScheme(mgrScheme))
 	utilruntime.Must(argov1alpha1.AddToScheme(mgrScheme))
 	utilruntime.Must(appsubapis.AddToScheme(mgrScheme))
+	utilruntime.Must(appv1beta1.AddToScheme(mgrScheme))
 	// +kubebuilder:scaffold:scheme
 }
 

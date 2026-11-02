@@ -5,7 +5,7 @@ package ramen
 
 import (
 	"context"
-	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -126,6 +126,22 @@ func TestPAVReconcile_Subscription(t *testing.T) {
 
 	if len(updatedPAV.Status.ApplicationInfo.SubscriptionInfo.SubscriptionRefs) != 1 {
 		t.Errorf("Expected 1 subscription ref, got %d", len(updatedPAV.Status.ApplicationInfo.SubscriptionInfo.SubscriptionRefs))
+	}
+
+	if updatedPAV.Status.DRInfo.DRPolicyRef.Name != pavTestDRPolicyName {
+		t.Errorf("Expected DRPolicyRef.Name %s, got %s", pavTestDRPolicyName, updatedPAV.Status.DRInfo.DRPolicyRef.Name)
+	}
+
+	if len(updatedPAV.Status.DRInfo.DRClusters) != 2 {
+		t.Errorf("Expected 2 DRClusters, got %d", len(updatedPAV.Status.DRInfo.DRClusters))
+	}
+
+	if updatedPAV.Status.DRInfo.Status.Phase != ramenv1alpha1.Deployed {
+		t.Errorf("Expected phase %s, got %s", ramenv1alpha1.Deployed, updatedPAV.Status.DRInfo.Status.Phase)
+	}
+
+	if !reflect.DeepEqual(updatedPAV.Status.DRInfo.ProtectedNamespaces, []string{"app-namespace"}) {
+		t.Errorf("Expected ProtectedNamespaces [app-namespace], got %v", updatedPAV.Status.DRInfo.ProtectedNamespaces)
 	}
 }
 
@@ -557,10 +573,6 @@ func createTestPlacementDecisionForPAV() *placementv1beta1.PlacementDecision {
 
 func getFakePAVReconciler(objects ...client.Object) *ProtectedApplicationViewReconciler {
 	scheme := mgrScheme
-
-	if err := appv1beta1.AddToScheme(scheme); err != nil {
-		panic(fmt.Sprintf("Failed to add Application scheme: %v", err))
-	}
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).

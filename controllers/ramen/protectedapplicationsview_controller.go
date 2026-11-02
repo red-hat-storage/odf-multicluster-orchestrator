@@ -199,9 +199,13 @@ func (r *ProtectedApplicationViewReconciler) Reconcile(ctx context.Context, req 
 		return ctrl.Result{RequeueAfter: requeueAfterSeconds}, err
 	}
 	placement := &placementv1beta1.Placement{}
+	placementNS := drpc.Spec.PlacementRef.Namespace
+	if placementNS == "" {
+		placementNS = drpc.Namespace
+	}
 	placementKey := types.NamespacedName{
 		Name:      drpc.Spec.PlacementRef.Name,
-		Namespace: drpc.Spec.PlacementRef.Namespace,
+		Namespace: placementNS,
 	}
 	if err := r.Get(ctx, placementKey, placement); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -342,7 +346,6 @@ func (r *ProtectedApplicationViewReconciler) findApplicationForDRPC(
 		app, err := r.findParentApplication(ctx, subscriptions)
 		if err != nil {
 			logger.Error("Failed to find parent Application", "error", err)
-			return ApplicationResult{}, err
 		}
 
 		result := ApplicationResult{Type: multiclusterv1alpha1.SubscriptionType}
