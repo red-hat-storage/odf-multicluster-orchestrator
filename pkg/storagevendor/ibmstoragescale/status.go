@@ -29,12 +29,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-const (
-	appliedManifestStatusMCVNameTemplate = "ibmscale-sm-%s-status"
-
-	appliedManifestResource = "appliedmanifest"
-)
-
 func getAppliedManifestStatusMCVName(appliedManifestName string) string {
 	return fmt.Sprintf(appliedManifestStatusMCVNameTemplate, appliedManifestName)
 }
@@ -81,17 +75,17 @@ func (v *IbmStorageScaleVendor) readAppliedManifestStatus(ctx context.Context, m
 		return status, false, nil
 	}
 
-	var am multiclusterv1alpha1.AppliedManifest
-	if err := json.Unmarshal(mcv.Status.Result.Raw, &am); err != nil {
+	var appliedManifest multiclusterv1alpha1.AppliedManifest
+	if err := json.Unmarshal(mcv.Status.Result.Raw, &appliedManifest); err != nil {
 		return status, false, fmt.Errorf("failed to unmarshal AppliedManifest %q from ManagedClusterView %q: %w", name, mcv.Name, err)
 	}
 
-	if am.Status.ObservedGeneration != am.Generation {
-		v.logger.Info("AppliedManifest status is stale, waiting for the operator to catch up", "cluster", clusterName, "appliedManifest", name, "generation", am.Generation, "observedGeneration", am.Status.ObservedGeneration)
+	if appliedManifest.Status.ObservedGeneration != appliedManifest.Generation {
+		v.logger.Info("AppliedManifest status is stale, waiting for the operator to catch up", "cluster", clusterName, "appliedManifest", name, "generation", appliedManifest.Generation, "observedGeneration", appliedManifest.Status.ObservedGeneration)
 		return status, false, nil
 	}
 
-	return am.Status, true, nil
+	return appliedManifest.Status, true, nil
 }
 
 // createOrUpdateAppliedManifestStatusMCV creates or updates the MCV that reads the AppliedManifest's

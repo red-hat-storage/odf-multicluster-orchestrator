@@ -28,12 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-const (
-	appliedManifestWorkNameTemplate = "ibmscale-sm-%s"
-
-	appliedManifestKind = "AppliedManifest"
-)
-
 func getAppliedManifestWorkName(sourceManifestName string) string {
 	return fmt.Sprintf(appliedManifestWorkNameTemplate, sourceManifestName)
 }
