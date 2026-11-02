@@ -215,9 +215,10 @@ func (o *ManagerOptions) runManager(ctx context.Context) {
 					return nil, nil
 				},
 			},
-			// Only cache ManagedClusterViews created by this controller
+			// Cache ManagedClusterViews created by MCO (any created-by value: managedcluster
+			// controller's configmap MCVs and the MirrorPeer controller's sync/status MCVs).
 			&viewv1beta1.ManagedClusterView{}: {
-				Label: labels.SelectorFromSet(labels.Set{utils.CreatedByLabelKey: "odf-multicluster-managedcluster-controller"}),
+				Label: createByMCOLabelSelector,
 			},
 			// Only cache the specific TLSProfile resource we monitor
 			&ocstlsv1.TLSProfile{}: {
