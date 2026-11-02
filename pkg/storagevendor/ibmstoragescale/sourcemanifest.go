@@ -40,46 +40,57 @@ func getSourceManifestMCVName(sourceManifestName string) string {
 }
 
 // readSourceManifests reads the SourceManifests listed in the cluster's info ConfigMap.
-// It returns the cluster's SourceManifests by name.
-func (v *IbmStorageScaleVendor) readSourceManifests(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer, item multiclusterv1alpha1.PeerRef) (manifests map[string][]runtime.RawExtension, ready bool, err error) {
-	logger := v.logger.With("cluster", item.ClusterName)
-
+// It returns each SourceManifest's resources, keyed by SourceManifest name.
+func (v *IbmStorageScaleVendor) readSourceManifests(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer, item multiclusterv1alpha1.PeerRef) (resourcesByManifestName map[string][]runtime.RawExtension, ready bool, err error) {
 	info, err := getIbmStorageScaleInfoFromConfigMap(v.infoMap, utils.GetKey(item.ClusterName, item.StorageClusterRef.Name))
 	if err != nil {
 		return nil, false, fmt.Errorf("unable to get IBM Storage Scale info for cluster %q: %w", item.ClusterName, err)
 	}
 
 	if len(info.SourceManifests) == 0 {
-		logger.Info("No sourceManifests listed for cluster yet")
+		v.logger.Info("No sourceManifests listed for cluster yet", "cluster", item.ClusterName)
 		return nil, false, nil
 	}
 
-	manifests = make(map[string][]runtime.RawExtension, len(info.SourceManifests))
+	resourcesByManifestName = make(map[string][]runtime.RawExtension, len(info.SourceManifests))
 	ready = true
 	for _, name := range info.SourceManifests {
 		// Always create/update every MCV before bailing out so they are all populated in parallel.
-		mcv, err := v.createOrUpdateSourceManifestMCV(ctx, mirrorPeer, item.ClusterName, info.OperatorNamespace, name)
+		resources, manifestReady, err := v.readSourceManifest(ctx, mirrorPeer, item.ClusterName, info.OperatorNamespace, name)
 		if err != nil {
 			return nil, false, err
 		}
-
-		if len(mcv.Status.Result.Raw) == 0 {
-			logger.Info("SourceManifest ManagedClusterView result not available yet", "sourceManifest", name, "mcv", mcv.Name)
+		if !manifestReady {
 			ready = false
 			continue
 		}
-
-		var sm multiclusterv1alpha1.SourceManifest
-		if err := json.Unmarshal(mcv.Status.Result.Raw, &sm); err != nil {
-			return nil, false, fmt.Errorf("failed to unmarshal SourceManifest %q from ManagedClusterView %q: %w", name, mcv.Name, err)
-		}
-		manifests[name] = sm.Spec.Manifests
+		resourcesByManifestName[name] = resources
 	}
 
 	if !ready {
 		return nil, false, nil
 	}
-	return manifests, true, nil
+	return resourcesByManifestName, true, nil
+}
+
+// readSourceManifest reads a single SourceManifest from the managed cluster via an MCV.
+// It returns the SourceManifest's resources, or ready=false if the MCV result is not available yet.
+func (v *IbmStorageScaleVendor) readSourceManifest(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clusterName, sourceNamespace, name string) (resources []runtime.RawExtension, ready bool, err error) {
+	mcv, err := v.createOrUpdateSourceManifestMCV(ctx, mirrorPeer, clusterName, sourceNamespace, name)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if len(mcv.Status.Result.Raw) == 0 {
+		v.logger.Info("SourceManifest ManagedClusterView result not available yet", "cluster", clusterName, "sourceManifest", name, "mcv", mcv.Name)
+		return nil, false, nil
+	}
+
+	var sm multiclusterv1alpha1.SourceManifest
+	if err := json.Unmarshal(mcv.Status.Result.Raw, &sm); err != nil {
+		return nil, false, fmt.Errorf("failed to unmarshal SourceManifest %q from ManagedClusterView %q: %w", name, mcv.Name, err)
+	}
+	return sm.Spec.Manifests, true, nil
 }
 
 // createOrUpdateSourceManifestMCV creates or updates the MCV that reads the SourceManifest
