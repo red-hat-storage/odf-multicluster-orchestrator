@@ -160,6 +160,7 @@ type MirrorPeerStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Type",type=string,JSONPath=.spec.type
+// +kubebuilder:printcolumn:name="StorageVendor",type=string,JSONPath=.spec.storageVendor
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=.status.phase
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=.metadata.creationTimestamp
 

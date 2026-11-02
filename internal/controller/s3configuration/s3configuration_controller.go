@@ -258,6 +258,12 @@ func (r *S3ConfigurationReconciler) reconcilePhases(ctx context.Context, logger 
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
+	if s3Config.Spec.InternalS3 != nil {
+		s3Config.Status.Type = multiclusterv1alpha1.S3TypeInternal
+	} else if s3Config.Spec.ExternalS3 != nil {
+		s3Config.Status.Type = multiclusterv1alpha1.S3TypeExternal
+	}
+
 	// Validate that managedClusters are not used by other S3Configurations
 	if err := r.validateManagedClustersUniqueness(ctx, logger, s3Config); err != nil {
 		s3Config.Status.Phase = multiclusterv1alpha1.S3ConfigurationPhaseFailed
