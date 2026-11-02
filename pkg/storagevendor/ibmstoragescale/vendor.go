@@ -66,24 +66,29 @@ func (v *IbmStorageScaleVendor) ValidateVersion(ctx context.Context, mirrorPeer 
 
 // ConfigureStorageForDR sets up DR resources for IBM Storage Scale.
 func (v *IbmStorageScaleVendor) ConfigureStorageForDR(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
-	// read every source cluster's SourceManifests.
+	// read every source cluster's SourceManifests and push them to the peer.
 	notReady := false
-	for _, item := range mirrorPeer.Spec.Items {
-		// TODO(phase 3): push these payloads to the peer as an AppliedManifest via ManifestWork.
-		_, ready, err := v.readSourceManifests(ctx, mirrorPeer, item)
+	for i, item := range mirrorPeer.Spec.Items {
+		resourcesByManifestName, ready, err := v.readSourceManifests(ctx, mirrorPeer, item)
 		if err != nil {
 			v.logger.Error("Failed to read SourceManifests", "cluster", item.ClusterName, "error", err)
 			return ctrl.Result{}, err
 		}
 		if !ready {
 			notReady = true
+			continue
+		}
+
+		peer := mirrorPeer.Spec.Items[1-i]
+		if err := v.syncAppliedManifests(ctx, mirrorPeer, peer, resourcesByManifestName); err != nil {
+			v.logger.Error("Failed to sync AppliedManifests", "cluster", peer.ClusterName, "error", err)
+			return ctrl.Result{}, err
 		}
 	}
 	if notReady {
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
-	// TODO create the ManifestWork (AppliedManifest) on the peer.
 	// TODO create the status MCV and reflect status onto the MirrorPeer.
 	return ctrl.Result{}, nil
 }
