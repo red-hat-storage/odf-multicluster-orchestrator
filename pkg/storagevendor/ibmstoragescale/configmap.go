@@ -28,11 +28,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	// IbmStorageScaleConfigMapName is the name of the ConfigMap on the hub that stores IBM Storage Scale cluster information
-	IbmStorageScaleConfigMapName = "ibm-storage-scale-info"
-)
-
 // getIbmStorageScaleConfigMap fetches the IBM Storage Scale info ConfigMap from the hub.
 func getIbmStorageScaleConfigMap(ctx context.Context, cl client.Client, namespace string) (*corev1.ConfigMap, error) {
 	cm := &corev1.ConfigMap{}

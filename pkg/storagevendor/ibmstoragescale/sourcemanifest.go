@@ -29,12 +29,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-const (
-	sourceManifestMCVNameTemplate = "ibmscale-sm-%s"
-
-	sourceManifestResource = "sourcemanifest"
-)
-
 func getSourceManifestMCVName(sourceManifestName string) string {
 	return fmt.Sprintf(sourceManifestMCVNameTemplate, sourceManifestName)
 }
@@ -81,11 +75,11 @@ func (v *IbmStorageScaleVendor) readSourceManifest(ctx context.Context, mirrorPe
 		return nil, false, nil
 	}
 
-	var sm multiclusterv1alpha1.SourceManifest
-	if err := json.Unmarshal(mcv.Status.Result.Raw, &sm); err != nil {
+	var sourceManifest multiclusterv1alpha1.SourceManifest
+	if err := json.Unmarshal(mcv.Status.Result.Raw, &sourceManifest); err != nil {
 		return nil, false, fmt.Errorf("failed to unmarshal SourceManifest %q from ManagedClusterView %q: %w", name, mcv.Name, err)
 	}
-	return sm.Spec.Manifests, true, nil
+	return sourceManifest.Spec.Manifests, true, nil
 }
 
 // createOrUpdateSourceManifestMCV creates or updates the MCV that reads the SourceManifest
