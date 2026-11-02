@@ -26,7 +26,6 @@ import (
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
 	"github.com/red-hat-storage/odf-multicluster-orchestrator/internal/controller/testutil"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
 
 	viewv1beta1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/view/v1beta1"
 	"github.com/stretchr/testify/assert"
@@ -55,13 +54,13 @@ func newTestVendor(t *testing.T, infoMap map[string]string, objs ...client.Objec
 
 func TestReadSourceManifests(t *testing.T) {
 	item := peerRef("cluster-a", "scale-cluster-a")
-	key := utils.GetKey("cluster-a", "scale-cluster-a")
 	mcvKey := types.NamespacedName{Name: getSourceManifestMCVName("sm-a"), Namespace: "cluster-a"}
+	info := IbmStorageScaleInfo{OperatorNamespace: "ibm-spectrum-scale", SourceManifests: []string{"sm-a"}}
 
 	t.Run("creates the MCV and requeues while the result is empty", func(t *testing.T) {
-		v, cl, mp := newTestVendor(t, map[string]string{key: infoEntry(t, "5.2.0")})
+		v, cl, mp := newTestVendor(t, nil)
 
-		payloads, ready, err := v.readSourceManifests(context.TODO(), mp, item)
+		payloads, ready, err := v.readSourceManifests(context.TODO(), mp, item, info)
 		require.NoError(t, err)
 		assert.False(t, ready)
 		assert.Nil(t, payloads)
@@ -84,9 +83,9 @@ func TestReadSourceManifests(t *testing.T) {
 				Result: runtime.RawExtension{Raw: []byte(sourceManifestResultJSON)},
 			},
 		}
-		v, _, mp := newTestVendor(t, map[string]string{key: infoEntry(t, "5.2.0")}, existing)
+		v, _, mp := newTestVendor(t, nil, existing)
 
-		payloads, ready, err := v.readSourceManifests(context.TODO(), mp, item)
+		payloads, ready, err := v.readSourceManifests(context.TODO(), mp, item, info)
 		require.NoError(t, err)
 		assert.True(t, ready)
 		require.Len(t, payloads["sm-a"], 1)
@@ -94,19 +93,12 @@ func TestReadSourceManifests(t *testing.T) {
 	})
 
 	t.Run("not ready when no sourceManifests are listed", func(t *testing.T) {
-		info := `{"version":"5.2.0","operatorNamespace":"ibm-spectrum-scale","cluster":{"name":"scale-cluster-a"},"sourceManifests":[]}`
-		v, _, mp := newTestVendor(t, map[string]string{key: info})
+		emptyInfo := IbmStorageScaleInfo{OperatorNamespace: "ibm-spectrum-scale"}
+		v, _, mp := newTestVendor(t, nil)
 
-		_, ready, err := v.readSourceManifests(context.TODO(), mp, item)
+		_, ready, err := v.readSourceManifests(context.TODO(), mp, item, emptyInfo)
 		require.NoError(t, err)
 		assert.False(t, ready)
-	})
-
-	t.Run("errors when the cluster is not discovered", func(t *testing.T) {
-		v, _, mp := newTestVendor(t, map[string]string{})
-
-		_, _, err := v.readSourceManifests(context.TODO(), mp, item)
-		assert.Error(t, err)
 	})
 
 	t.Run("errors on an invalid MCV result", func(t *testing.T) {
@@ -114,9 +106,9 @@ func TestReadSourceManifests(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: mcvKey.Name, Namespace: mcvKey.Namespace},
 			Status:     viewv1beta1.ViewStatus{Result: runtime.RawExtension{Raw: []byte("not-json")}},
 		}
-		v, _, mp := newTestVendor(t, map[string]string{key: infoEntry(t, "5.2.0")}, existing)
+		v, _, mp := newTestVendor(t, nil, existing)
 
-		_, _, err := v.readSourceManifests(context.TODO(), mp, item)
+		_, _, err := v.readSourceManifests(context.TODO(), mp, item, info)
 		assert.Error(t, err)
 	})
 }
