@@ -84,12 +84,20 @@ func (v *IbmStorageScaleVendor) ConfigureStorageForDR(ctx context.Context, mirro
 			v.logger.Error("Failed to sync AppliedManifests", "cluster", peer.ClusterName, "error", err)
 			return ctrl.Result{}, err
 		}
+
+		statusReady, err := v.checkAppliedManifestsStatus(ctx, mirrorPeer, peer, resourcesByManifestName)
+		if err != nil {
+			v.logger.Error("AppliedManifest reported a failure", "cluster", peer.ClusterName, "error", err)
+			return ctrl.Result{}, err
+		}
+		if !statusReady {
+			notReady = true
+		}
 	}
 	if notReady {
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
-	// TODO create the status MCV and reflect status onto the MirrorPeer.
 	return ctrl.Result{}, nil
 }
 
