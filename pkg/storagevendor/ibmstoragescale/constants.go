@@ -44,4 +44,18 @@ const (
 
 	// appliedManifestStatusMCVNameTemplate names the MCV that reads an AppliedManifest's status from the peer.
 	appliedManifestStatusMCVNameTemplate = resourceNamePrefix + "am-%s-status"
+
+	// sourceManifestCRDManifestWorkName is the ManifestWork that installs the SourceManifest CRD.
+	sourceManifestCRDManifestWorkName = "sourcemanifest-crd"
+
+	// appliedManifestCRDManifestWorkName is the ManifestWork that installs the AppliedManifest CRD.
+	appliedManifestCRDManifestWorkName = "appliedmanifest-crd"
+)
+
+const (
+	// sourceManifestCRDPath is the path to the SourceManifest CRD YAML file.
+	sourceManifestCRDPath = "config/crd/bases/multicluster.odf.openshift.io_sourcemanifests.yaml"
+
+	// appliedManifestCRDPath is the path to the AppliedManifest CRD YAML file.
+	appliedManifestCRDPath = "config/crd/bases/multicluster.odf.openshift.io_appliedmanifests.yaml"
 )

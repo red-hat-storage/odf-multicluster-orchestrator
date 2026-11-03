@@ -95,7 +95,14 @@ func (v *IbmStorageScaleVendor) ValidateVersion(
 
 // ConfigureStorageForDR sets up DR resources for IBM Storage Scale.
 func (v *IbmStorageScaleVendor) ConfigureStorageForDR(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
-	// read every source cluster's SourceManifests and push them to the peer.
+	// Ensure CRDs are installed on both clusters before syncing manifests.
+	for _, peerRef := range mirrorPeer.Spec.Items {
+		if err := v.ensureCRDs(ctx, mirrorPeer, peerRef.ClusterName); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	// Read every source cluster's SourceManifests and push them to the peer.
 	notReady := false
 	for i, source := range mirrorPeer.Spec.Items {
 		sourceInfo, err := v.getScaleInfo(source)
@@ -147,6 +154,41 @@ func (v *IbmStorageScaleVendor) CleanupResources(
 ) (ctrl.Result, error) {
 	// Placeholder: delete the owned MCVs and ManifestWorks (owner-reference GC handles most of it).
 	return ctrl.Result{}, nil
+}
+
+// ensureCRDs installs both SourceManifest and AppliedManifest CRDs on the managed cluster.
+func (v *IbmStorageScaleVendor) ensureCRDs(
+	ctx context.Context,
+	mirrorPeer *multiclusterv1alpha1.MirrorPeer,
+	clusterName string,
+) error {
+	// Install SourceManifest CRD.
+	if err := utils.EnsureCRD(
+		ctx,
+		v.client,
+		v.logger,
+		mirrorPeer,
+		clusterName,
+		sourceManifestCRDPath,
+		sourceManifestCRDManifestWorkName,
+	); err != nil {
+		return err
+	}
+
+	// Install AppliedManifest CRD.
+	if err := utils.EnsureCRD(
+		ctx,
+		v.client,
+		v.logger,
+		mirrorPeer,
+		clusterName,
+		appliedManifestCRDPath,
+		appliedManifestCRDManifestWorkName,
+	); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // getScaleInfo returns the IBM Storage Scale info for the cluster referenced by ref.
