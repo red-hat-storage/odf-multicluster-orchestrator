@@ -7,6 +7,7 @@ metadata:
     console.openshift.io/plugins: '["odf-multicluster-console"]'
     features.operators.openshift.io/tls-profiles: "true"
     operators.openshift.io/infrastructure-features: '["disconnected"]'
+    operators.operatorframework.io/internal-objects: '["appliedmanifests.multicluster.odf.openshift.io","sourcemanifests.multicluster.odf.openshift.io","protectedapplicationviews.multicluster.odf.openshift.io"]'
   labels:
     operatorframework.io/arch.amd64: supported
     operatorframework.io/arch.arm64: supported
