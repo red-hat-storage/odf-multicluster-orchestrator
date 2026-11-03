@@ -21,9 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-	"github.com/red-hat-storage/odf-multicluster-orchestrator/pkg/utils"
-
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -37,15 +34,6 @@ func getIbmStorageScaleConfigMap(ctx context.Context, cl client.Client, namespac
 		return nil, fmt.Errorf("failed to get ConfigMap %q in namespace %q: %w", IbmStorageScaleConfigMapName, namespace, err)
 	}
 	return cm, nil
-}
-
-// getScaleInfo returns the IBM Storage Scale info for the cluster referenced by ref.
-func (v *IbmStorageScaleVendor) getScaleInfo(ref multiclusterv1alpha1.PeerRef) (IbmStorageScaleInfo, error) {
-	info, err := getIbmStorageScaleInfoFromConfigMap(v.infoMap, utils.GetKey(ref.ClusterName, ref.StorageClusterRef.Name))
-	if err != nil {
-		return info, fmt.Errorf("unable to get IBM Storage Scale info for cluster %q: %w", ref.ClusterName, err)
-	}
-	return info, nil
 }
 
 // getIbmStorageScaleInfoFromConfigMap returns the IbmStorageScaleInfo stored under key in the info map.
