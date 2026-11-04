@@ -43,7 +43,13 @@ type IbmStorageScaleVendor struct {
 // NewIbmStorageScaleVendor constructs the IBM Storage Scale StorageVendor. It loads the
 // hub info ConfigMap; if it is not present yet (discovery not complete), this returns an
 // error so the MirrorPeer reconcile requeues until it appears.
-func NewIbmStorageScaleVendor(ctx context.Context, cl client.Client, scheme *runtime.Scheme, logger *slog.Logger, currentNamespace string) (*IbmStorageScaleVendor, error) {
+func NewIbmStorageScaleVendor(
+	ctx context.Context,
+	cl client.Client,
+	scheme *runtime.Scheme,
+	logger *slog.Logger,
+	currentNamespace string,
+) (*IbmStorageScaleVendor, error) {
 	infoConfigMap, err := getIbmStorageScaleConfigMap(ctx, cl, currentNamespace)
 	if err != nil {
 		return nil, err
@@ -63,10 +69,6 @@ func (v *IbmStorageScaleVendor) ValidateVersion(
 	ctx context.Context,
 	mirrorPeer *multiclusterv1alpha1.MirrorPeer,
 ) (ctrl.Result, error) {
-	if len(mirrorPeer.Spec.Items) != 2 {
-		return ctrl.Result{}, fmt.Errorf("expected exactly 2 items in MirrorPeer %q, got %d", mirrorPeer.Name, len(mirrorPeer.Spec.Items))
-	}
-
 	versions := make([]string, 0, 2)
 	for i := range mirrorPeer.Spec.Items {
 		peerRef := mirrorPeer.Spec.Items[i]
@@ -94,7 +96,10 @@ func (v *IbmStorageScaleVendor) ValidateVersion(
 }
 
 // ConfigureStorageForDR sets up DR resources for IBM Storage Scale.
-func (v *IbmStorageScaleVendor) ConfigureStorageForDR(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer) (ctrl.Result, error) {
+func (v *IbmStorageScaleVendor) ConfigureStorageForDR(
+	ctx context.Context,
+	mirrorPeer *multiclusterv1alpha1.MirrorPeer,
+) (ctrl.Result, error) {
 	// Ensure CRDs are installed on both clusters before syncing manifests.
 	for _, peerRef := range mirrorPeer.Spec.Items {
 		if err := v.ensureCRDs(ctx, mirrorPeer, peerRef.ClusterName); err != nil {
@@ -105,15 +110,22 @@ func (v *IbmStorageScaleVendor) ConfigureStorageForDR(ctx context.Context, mirro
 	// Read every source cluster's SourceManifests and push them to the peer.
 	notReady := false
 	for i, source := range mirrorPeer.Spec.Items {
-		sourceInfo, err := v.getScaleInfo(source)
+
+		sourceInfo, err := getIbmStorageScaleInfoFromConfigMap(
+			v.infoMap,
+			utils.GetKey(source.ClusterName, source.StorageClusterRef.Name),
+		)
 		if err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("unable to get IBM Storage Scale info for cluster %q: %w", source.ClusterName, err)
 		}
 
 		peer := mirrorPeer.Spec.Items[1-i]
-		peerInfo, err := v.getScaleInfo(peer)
+		peerInfo, err := getIbmStorageScaleInfoFromConfigMap(
+			v.infoMap,
+			utils.GetKey(peer.ClusterName, peer.StorageClusterRef.Name),
+		)
 		if err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("unable to get IBM Storage Scale info for cluster %q: %w", peer.ClusterName, err)
 		}
 
 		resourcesByManifestName, ready, err := v.readSourceManifests(ctx, mirrorPeer, source, sourceInfo)
@@ -191,15 +203,6 @@ func (v *IbmStorageScaleVendor) ensureCRDs(
 	return nil
 }
 
-// getScaleInfo returns the IBM Storage Scale info for the cluster referenced by ref.
-func (v *IbmStorageScaleVendor) getScaleInfo(ref multiclusterv1alpha1.PeerRef) (IbmStorageScaleInfo, error) {
-	info, err := getIbmStorageScaleInfoFromConfigMap(v.infoMap, utils.GetKey(ref.ClusterName, ref.StorageClusterRef.Name))
-	if err != nil {
-		return info, fmt.Errorf("unable to get IBM Storage Scale info for cluster %q: %w", ref.ClusterName, err)
-	}
-	return info, nil
-}
-
 // readSourceManifests reads the SourceManifests listed in the cluster's info ConfigMap.
 // It returns each SourceManifest's resources, keyed by SourceManifest name.
 func (v *IbmStorageScaleVendor) readSourceManifests(
@@ -207,14 +210,14 @@ func (v *IbmStorageScaleVendor) readSourceManifests(
 	mirrorPeer *multiclusterv1alpha1.MirrorPeer,
 	peerRef multiclusterv1alpha1.PeerRef,
 	info IbmStorageScaleInfo,
-) (resourcesByManifestName map[string][]runtime.RawExtension, ready bool, err error) {
+) (map[string][]runtime.RawExtension, bool, error) {
 	if len(info.SourceManifests) == 0 {
 		v.logger.Info("No sourceManifests listed for cluster yet", "cluster", peerRef.ClusterName)
 		return nil, false, nil
 	}
 
-	resourcesByManifestName = make(map[string][]runtime.RawExtension, len(info.SourceManifests))
-	ready = true
+	resourcesByManifestName := make(map[string][]runtime.RawExtension, len(info.SourceManifests))
+	ready := true
 	for _, name := range info.SourceManifests {
 		// Always create/update every MCV before bailing out so they are all populated in parallel.
 		mcv, err := v.createOrUpdateMCV(ctx,
@@ -225,19 +228,25 @@ func (v *IbmStorageScaleVendor) readSourceManifests(
 			info.OperatorNamespace,
 			name,
 		)
+
 		if err != nil {
 			return nil, false, err
 		}
 
 		if len(mcv.Status.Result.Raw) == 0 {
-			v.logger.Info("SourceManifest ManagedClusterView result not available yet", "cluster", peerRef.ClusterName, "sourceManifest", name, "mcv", mcv.Name)
+			v.logger.Info("SourceManifest ManagedClusterView result not available yet",
+				"cluster", peerRef.ClusterName,
+				"sourceManifest", name,
+				"mcv", mcv.Name,
+			)
 			ready = false
 			continue
 		}
 
 		var sourceManifest multiclusterv1alpha1.SourceManifest
 		if err := json.Unmarshal(mcv.Status.Result.Raw, &sourceManifest); err != nil {
-			return nil, false, fmt.Errorf("failed to unmarshal SourceManifest %q from ManagedClusterView %q: %w", name, mcv.Name, err)
+			return nil, false, fmt.Errorf("failed to unmarshal SourceManifest %q from ManagedClusterView %q: %w",
+				name, mcv.Name, err)
 		}
 		resourcesByManifestName[name] = sourceManifest.Spec.Manifests
 	}
@@ -290,8 +299,14 @@ func getAppliedManifestStatusMCVName(appliedManifestName string) string {
 // checkAppliedManifestsStatus reads back every pushed AppliedManifest's status from the peer and
 // aggregates them. ready is true only when all AppliedManifests report Applied and are fresh.
 // It returns an error if any AppliedManifest reports a Failed or Degraded phase.
-func (v *IbmStorageScaleVendor) checkAppliedManifestsStatus(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer, peer multiclusterv1alpha1.PeerRef, info IbmStorageScaleInfo, resourcesByManifestName map[string][]runtime.RawExtension) (ready bool, err error) {
-	ready = true
+func (v *IbmStorageScaleVendor) checkAppliedManifestsStatus(
+	ctx context.Context,
+	mirrorPeer *multiclusterv1alpha1.MirrorPeer,
+	peer multiclusterv1alpha1.PeerRef,
+	info IbmStorageScaleInfo,
+	resourcesByManifestName map[string][]runtime.RawExtension,
+) (bool, error) {
+	ready := true
 	for name := range resourcesByManifestName {
 		status, manifestReady, err := v.readAppliedManifestStatus(ctx, mirrorPeer, peer.ClusterName, info.OperatorNamespace, name)
 		if err != nil {
@@ -318,26 +333,50 @@ func (v *IbmStorageScaleVendor) checkAppliedManifestsStatus(ctx context.Context,
 // readAppliedManifestStatus reads an AppliedManifest's status back from the peer cluster via an MCV.
 // It returns the status, or ready=false if the MCV result is not available yet or the reported
 // status is stale (observedGeneration behind the AppliedManifest's generation).
-func (v *IbmStorageScaleVendor) readAppliedManifestStatus(ctx context.Context, mirrorPeer *multiclusterv1alpha1.MirrorPeer, clusterName, operatorNamespace, name string) (status multiclusterv1alpha1.AppliedManifestStatus, ready bool, err error) {
+func (v *IbmStorageScaleVendor) readAppliedManifestStatus(
+	ctx context.Context,
+	mirrorPeer *multiclusterv1alpha1.MirrorPeer,
+	clusterName,
+	operatorNamespace,
+	name string,
+) (multiclusterv1alpha1.AppliedManifestStatus, bool, error) {
 	appliedManifestStatusMCVName := getAppliedManifestStatusMCVName(name)
-	mcv, err := v.createOrUpdateMCV(ctx, mirrorPeer, appliedManifestStatusMCVName, clusterName, appliedManifestResource, operatorNamespace, name)
+	mcv, err := v.createOrUpdateMCV(ctx,
+		mirrorPeer,
+		appliedManifestStatusMCVName,
+		clusterName,
+		appliedManifestResourceType,
+		operatorNamespace,
+		name,
+	)
 	if err != nil {
-		return status, false, err
+		return multiclusterv1alpha1.AppliedManifestStatus{}, false, err
 	}
 
 	if len(mcv.Status.Result.Raw) == 0 {
-		v.logger.Info("AppliedManifest status ManagedClusterView result not available yet", "cluster", clusterName, "appliedManifest", name, "mcv", mcv.Name)
-		return status, false, nil
+		v.logger.Info("AppliedManifest status ManagedClusterView result not available yet",
+			"cluster", clusterName,
+			"appliedManifest", name,
+			"mcv", mcv.Name,
+		)
+		return multiclusterv1alpha1.AppliedManifestStatus{}, false, nil
 	}
 
 	var appliedManifest multiclusterv1alpha1.AppliedManifest
 	if err := json.Unmarshal(mcv.Status.Result.Raw, &appliedManifest); err != nil {
-		return status, false, fmt.Errorf("failed to unmarshal AppliedManifest %q from ManagedClusterView %q: %w", name, mcv.Name, err)
+		return multiclusterv1alpha1.AppliedManifestStatus{},
+			false,
+			fmt.Errorf("failed to unmarshal AppliedManifest %q from ManagedClusterView %q: %w", name, mcv.Name, err)
 	}
 
 	if appliedManifest.Status.ObservedGeneration != appliedManifest.Generation {
-		v.logger.Info("AppliedManifest status is stale, waiting for the operator to catch up", "cluster", clusterName, "appliedManifest", name, "generation", appliedManifest.Generation, "observedGeneration", appliedManifest.Status.ObservedGeneration)
-		return status, false, nil
+		v.logger.Info("AppliedManifest status is stale, waiting for the operator to catch up",
+			"cluster", clusterName,
+			"appliedManifest", name,
+			"generation", appliedManifest.Generation,
+			"observedGeneration", appliedManifest.Status.ObservedGeneration,
+		)
+		return multiclusterv1alpha1.AppliedManifestStatus{}, false, nil
 	}
 
 	return appliedManifest.Status, true, nil
