@@ -23,8 +23,6 @@ import (
 	"os"
 	"path/filepath"
 
-	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -45,13 +43,11 @@ func getCRDBytes(crdPath string) ([]byte, error) {
 }
 
 // EnsureCRDs creates or updates a ManifestWork that installs CRDs on the specified managed cluster.
-// The ManifestWork is owned by the MirrorPeer for automatic cleanup.
 func EnsureCRDs(
 	ctx context.Context,
 	client client.Client,
 	log *slog.Logger,
-	mirrorPeer *multiclusterv1alpha1.MirrorPeer,
-	clusterName string,
+	namespace string,
 	manifestWorkName string,
 	crdPaths ...string,
 ) error {
@@ -65,22 +61,34 @@ func EnsureCRDs(
 		crdBytes[i] = bytes
 	}
 
-	ownerRef := *metav1.NewControllerRef(mirrorPeer, multiclusterv1alpha1.GroupVersion.WithKind("MirrorPeer"))
-
 	result, err := CreateOrUpdateManifestWork(
 		ctx,
 		client,
 		manifestWorkName,
-		clusterName,
+		namespace,
 		nil,
-		ownerRef,
+		metav1.OwnerReference{},
 		crdBytes...,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create or update %s ManifestWork for cluster %s: %w",
-			manifestWorkName, clusterName, err)
+		return err
 	}
 
-	log.Info("CRD ManifestWork synced", "manifestWork", manifestWorkName, "cluster", clusterName, "result", result)
+	log.Info("ManifestWork for CRD created/updated",
+		"manifestWork", manifestWorkName,
+		"cluster", namespace,
+		"result", result,
+	)
+
+	mw, err := GetManifestWork(ctx, client, manifestWorkName, namespace)
+	if err != nil {
+		return err
+	}
+
+	isApplied := CheckManifestWorkStatus(mw)
+	if !isApplied {
+		return fmt.Errorf("CRD ManifestWork %s/%s not applied", mw.Namespace, mw.Name)
+	}
+
 	return nil
 }
