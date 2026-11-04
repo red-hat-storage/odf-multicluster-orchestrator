@@ -32,7 +32,8 @@ const (
 )
 
 // S3Type represents whether the S3 endpoint used by S3Configuration is
-// ODF-managed (Internal) or provided by the user (External).
+// provisioned via an OBC against a StorageClass (Internal) or provided
+// by the user (External).
 // +kubebuilder:validation:Enum=Internal;External
 type S3Type string
 
@@ -159,8 +160,9 @@ type S3ConfigurationSpec struct {
 
 // S3ConfigurationStatus defines the observed state of S3Configuration
 type S3ConfigurationStatus struct {
-	// Type indicates whether the S3 endpoint in use is ODF-managed (Internal)
-	// or externally provided (External), derived from spec.internalS3/spec.externalS3.
+	// Type indicates whether the S3 endpoint in use is provisioned via an OBC
+	// (Internal) or externally provided (External), derived from
+	// spec.internalS3/spec.externalS3.
 	// +optional
 	Type S3Type `json:"type,omitempty"`
 

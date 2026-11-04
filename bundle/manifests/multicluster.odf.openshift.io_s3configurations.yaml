@@ -200,8 +200,9 @@ spec:
                 type: string
               type:
                 description: |-
-                  Type indicates whether the S3 endpoint in use is ODF-managed (Internal)
-                  or externally provided (External), derived from spec.internalS3/spec.externalS3.
+                  Type indicates whether the S3 endpoint in use is provisioned via an OBC
+                  (Internal) or externally provided (External), derived from
+                  spec.internalS3/spec.externalS3.
                 enum:
                 - Internal
                 - External
