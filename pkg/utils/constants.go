@@ -35,6 +35,7 @@ const (
 	// AppliedManifestCRDPath is the path to the AppliedManifest CRD YAML file.
 	AppliedManifestCRDPath = "config/crd/bases/multicluster.odf.openshift.io_appliedmanifests.yaml"
 
-	// ManifestCRDsMWName is the ManifestWork that installs SourceManifest and AppliedManifest CRDs.
-	ManifestCRDsMWName = "manifest-crds"
+	// ManifestCRDsMWName is the name of the ManifestWork that installs
+	// the SourceManifest and AppliedManifest CRDs to managed clusters.
+	ManifestCRDsMWName = "df-mco-manifest-crds"
 )

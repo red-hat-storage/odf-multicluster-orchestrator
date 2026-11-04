@@ -41,6 +41,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	manifestworkv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -348,9 +349,41 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		},
 	}
 
+	// Only react to ManifestWork status condition changes, not periodic status updates.
+	manifestWorkStatusChangedPredicate := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldMW, okOld := e.ObjectOld.(*manifestworkv1.ManifestWork)
+			newMW, okNew := e.ObjectNew.(*manifestworkv1.ManifestWork)
+			if !okOld || !okNew {
+				return false
+			}
+
+			// Trigger on spec changes
+			if oldMW.Generation != newMW.Generation {
+				return true
+			}
+
+			// Trigger reconcile if conditions changed
+			if len(oldMW.Status.Conditions) != len(newMW.Status.Conditions) {
+				return true
+			}
+			for i := range oldMW.Status.Conditions {
+				oldCond := oldMW.Status.Conditions[i]
+				newCond := newMW.Status.Conditions[i]
+				if oldCond.Type != newCond.Type ||
+					oldCond.Status != newCond.Status ||
+					oldCond.Reason != newCond.Reason {
+					return true
+				}
+			}
+			return false
+		},
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multiclusterv1alpha1.MirrorPeer{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&viewv1beta1.ManagedClusterView{}, builder.WithPredicates(mcvResultChangedPredicate)).
+		Owns(&manifestworkv1.ManifestWork{}, builder.WithPredicates(manifestWorkStatusChangedPredicate)).
 		Watches(&addonapiv1alpha1.ManagedClusterAddOn{}, handler.EnqueueRequestsFromMapFunc(addonToMirrorPeerMapFunc),
 			builder.WithPredicates(predicate.NewPredicateFuncs(func(object client.Object) bool {
 				mca, ok := object.(*addonapiv1alpha1.ManagedClusterAddOn)
