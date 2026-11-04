@@ -17,22 +17,19 @@ limitations under the License.
 package ibmstoragescale
 
 const (
+
 	// IbmStorageScaleConfigMapName is the name of the ConfigMap on the hub that stores IBM Storage Scale cluster information.
 	IbmStorageScaleConfigMapName = "ibm-storage-scale-info"
-)
 
-const (
 	// sourceManifestResource is the MCV scope resource for reading a SourceManifest.
 	sourceManifestResource = "sourcemanifest"
 
-	// appliedManifestResource is the MCV scope resource for reading an AppliedManifest.
-	appliedManifestResource = "appliedmanifest"
+	// appliedManifestResourceType is the MCV scope resource for reading an AppliedManifest.
+	appliedManifestResourceType = "appliedmanifest"
 
 	// appliedManifestKind is the Kind set on the AppliedManifest carried in a ManifestWork.
 	appliedManifestKind = "AppliedManifest"
-)
 
-const (
 	// resourceNamePrefix is the shared prefix for every MCV and ManifestWork this package creates.
 	resourceNamePrefix = "ibmscale-"
 
