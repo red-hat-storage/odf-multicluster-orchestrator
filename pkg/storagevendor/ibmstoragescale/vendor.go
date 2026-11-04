@@ -104,7 +104,17 @@ func (v *IbmStorageScaleVendor) ConfigureStorageForDR(
 ) (ctrl.Result, error) {
 	// Ensure CRDs are installed on both clusters before syncing manifests.
 	for _, peerRef := range mirrorPeer.Spec.Items {
-		if err := v.ensureCRDs(ctx, mirrorPeer, peerRef.ClusterName); err != nil {
+		err := utils.EnsureCRDs(
+			ctx,
+			v.client,
+			v.logger,
+			mirrorPeer,
+			peerRef.ClusterName,
+			utils.ManifestCRDsMWName,
+			utils.SourceManifestCRDPath,
+			utils.AppliedManifestCRDPath,
+		)
+		if err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -168,41 +178,6 @@ func (v *IbmStorageScaleVendor) CleanupResources(
 ) (ctrl.Result, error) {
 	// Placeholder: delete the owned MCVs and ManifestWorks (owner-reference GC handles most of it).
 	return ctrl.Result{}, nil
-}
-
-// ensureCRDs installs both SourceManifest and AppliedManifest CRDs on the managed cluster.
-func (v *IbmStorageScaleVendor) ensureCRDs(
-	ctx context.Context,
-	mirrorPeer *multiclusterv1alpha1.MirrorPeer,
-	clusterName string,
-) error {
-	// Install SourceManifest CRD.
-	if err := utils.EnsureCRD(
-		ctx,
-		v.client,
-		v.logger,
-		mirrorPeer,
-		clusterName,
-		utils.SourceManifestCRDPath,
-		utils.SourceManifestCRDManifestWorkName,
-	); err != nil {
-		return err
-	}
-
-	// Install AppliedManifest CRD.
-	if err := utils.EnsureCRD(
-		ctx,
-		v.client,
-		v.logger,
-		mirrorPeer,
-		clusterName,
-		utils.AppliedManifestCRDPath,
-		utils.AppliedManifestCRDManifestWorkName,
-	); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // readSourceManifests reads the SourceManifests listed in the cluster's info ConfigMap.
