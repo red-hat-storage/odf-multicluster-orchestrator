@@ -21,15 +21,6 @@ const (
 	// IbmStorageScaleConfigMapName is the name of the ConfigMap on the hub that stores IBM Storage Scale cluster information.
 	IbmStorageScaleConfigMapName = "ibm-storage-scale-info"
 
-	// sourceManifestResource is the MCV scope resource for reading a SourceManifest.
-	sourceManifestResource = "sourcemanifest"
-
-	// appliedManifestResourceType is the MCV scope resource for reading an AppliedManifest.
-	appliedManifestResourceType = "appliedmanifest"
-
-	// appliedManifestKind is the Kind set on the AppliedManifest carried in a ManifestWork.
-	appliedManifestKind = "AppliedManifest"
-
 	// resourceNamePrefix is the shared prefix for every MCV and ManifestWork this package creates.
 	resourceNamePrefix = "ibmscale-"
 
@@ -41,18 +32,4 @@ const (
 
 	// appliedManifestStatusMCVNameTemplate names the MCV that reads an AppliedManifest's status from the peer.
 	appliedManifestStatusMCVNameTemplate = resourceNamePrefix + "am-%s-status"
-
-	// sourceManifestCRDManifestWorkName is the ManifestWork that installs the SourceManifest CRD.
-	sourceManifestCRDManifestWorkName = "sourcemanifest-crd"
-
-	// appliedManifestCRDManifestWorkName is the ManifestWork that installs the AppliedManifest CRD.
-	appliedManifestCRDManifestWorkName = "appliedmanifest-crd"
-)
-
-const (
-	// sourceManifestCRDPath is the path to the SourceManifest CRD YAML file.
-	sourceManifestCRDPath = "config/crd/bases/multicluster.odf.openshift.io_sourcemanifests.yaml"
-
-	// appliedManifestCRDPath is the path to the AppliedManifest CRD YAML file.
-	appliedManifestCRDPath = "config/crd/bases/multicluster.odf.openshift.io_appliedmanifests.yaml"
 )
