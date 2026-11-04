@@ -44,20 +44,25 @@ func getCRDBytes(crdPath string) ([]byte, error) {
 	return crdBytes, nil
 }
 
-// EnsureCRD creates or updates a ManifestWork that installs a CRD on the specified managed cluster.
+// EnsureCRDs creates or updates a ManifestWork that installs CRDs on the specified managed cluster.
 // The ManifestWork is owned by the MirrorPeer for automatic cleanup.
-func EnsureCRD(
+func EnsureCRDs(
 	ctx context.Context,
 	client client.Client,
 	log *slog.Logger,
 	mirrorPeer *multiclusterv1alpha1.MirrorPeer,
 	clusterName string,
-	crdPath string,
-	crdManifestWorkName string,
+	manifestWorkName string,
+	crdPaths ...string,
 ) error {
-	crdBytes, err := getCRDBytes(crdPath)
-	if err != nil {
-		return err
+	crdBytes := make([][]byte, len(crdPaths))
+
+	for i, path := range crdPaths {
+		bytes, err := getCRDBytes(path)
+		if err != nil {
+			return err
+		}
+		crdBytes[i] = bytes
 	}
 
 	ownerRef := *metav1.NewControllerRef(mirrorPeer, multiclusterv1alpha1.GroupVersion.WithKind("MirrorPeer"))
@@ -65,17 +70,17 @@ func EnsureCRD(
 	result, err := CreateOrUpdateManifestWork(
 		ctx,
 		client,
-		crdManifestWorkName,
+		manifestWorkName,
 		clusterName,
 		nil,
 		ownerRef,
-		crdBytes,
+		crdBytes...,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create or update %s ManifestWork for cluster %s: %w",
-			crdManifestWorkName, clusterName, err)
+			manifestWorkName, clusterName, err)
 	}
 
-	log.Info("CRD ManifestWork synced", "manifestWork", crdManifestWorkName, "cluster", clusterName, "result", result)
+	log.Info("CRD ManifestWork synced", "manifestWork", manifestWorkName, "cluster", clusterName, "result", result)
 	return nil
 }
