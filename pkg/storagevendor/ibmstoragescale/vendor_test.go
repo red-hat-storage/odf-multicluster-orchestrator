@@ -220,6 +220,29 @@ func TestSyncAppliedManifests(t *testing.T) {
 	t.Run("creates a ManifestWork carrying the AppliedManifest on the peer", func(t *testing.T) {
 		v, cl, mp := newTestVendor(t, nil)
 
+		// Pre-create ManifestWork with status to simulate it being applied
+		controller := true
+		existingMW := &workv1.ManifestWork{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      mwKey.Name,
+				Namespace: mwKey.Namespace,
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "multicluster.odf.openshift.io/v1alpha1",
+					Kind:       "MirrorPeer",
+					Name:       "mirror-ibm",
+					UID:        mp.UID,
+					Controller: &controller,
+				}},
+			},
+			Status: workv1.ManifestWorkStatus{
+				Conditions: []metav1.Condition{
+					{Type: workv1.WorkApplied, Status: metav1.ConditionTrue},
+					{Type: workv1.WorkAvailable, Status: metav1.ConditionTrue},
+				},
+			},
+		}
+		require.NoError(t, cl.Create(context.TODO(), existingMW))
+
 		require.NoError(t, v.syncAppliedManifests(context.TODO(), mp, peer, info, map[string][]runtime.RawExtension{"sm-a": payload}))
 
 		mw := &workv1.ManifestWork{}
@@ -242,6 +265,29 @@ func TestSyncAppliedManifests(t *testing.T) {
 
 	t.Run("updates the ManifestWork when the payload changes", func(t *testing.T) {
 		v, cl, mp := newTestVendor(t, nil)
+
+		// Pre-create ManifestWork with status
+		controller := true
+		existingMW := &workv1.ManifestWork{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      mwKey.Name,
+				Namespace: mwKey.Namespace,
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "multicluster.odf.openshift.io/v1alpha1",
+					Kind:       "MirrorPeer",
+					Name:       "mirror-ibm",
+					UID:        mp.UID,
+					Controller: &controller,
+				}},
+			},
+			Status: workv1.ManifestWorkStatus{
+				Conditions: []metav1.Condition{
+					{Type: workv1.WorkApplied, Status: metav1.ConditionTrue},
+					{Type: workv1.WorkAvailable, Status: metav1.ConditionTrue},
+				},
+			},
+		}
+		require.NoError(t, cl.Create(context.TODO(), existingMW))
 		require.NoError(t, v.syncAppliedManifests(context.TODO(), mp, peer, info, map[string][]runtime.RawExtension{"sm-a": payload}))
 
 		updated := []runtime.RawExtension{{Raw: []byte(`{"apiVersion":"scale.spectrum.ibm.com/v1beta1","kind":"FileSystem","metadata":{"name":"fsB"}}`)}}

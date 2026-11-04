@@ -108,7 +108,6 @@ func (v *IbmStorageScaleVendor) ConfigureStorageForDR(
 			ctx,
 			v.client,
 			v.logger,
-			mirrorPeer,
 			peerRef.ClusterName,
 			utils.ManifestCRDsMWName,
 			utils.SourceManifestCRDPath,
@@ -271,13 +270,28 @@ func (v *IbmStorageScaleVendor) syncAppliedManifests(
 			peer.ClusterName,
 			nil,
 			ownerRef,
-			appliedManifest)
+			appliedManifest,
+		)
 		if err != nil {
 			return err
 		}
 
-		v.logger.Info("ManifestWork for AppliedManifest synced", "cluster",
-			peer.ClusterName, "appliedManifest", manifestName, "result", result)
+		v.logger.Info("ManifestWork for AppliedManifest created/updated",
+			"cluster", peer.ClusterName,
+			"appliedManifest", manifestName,
+			"result", result,
+		)
+
+		mw, err := utils.GetManifestWork(ctx, v.client, getAppliedManifestWorkName(manifestName), peer.ClusterName)
+		if err != nil {
+			return err
+		}
+
+		isApplied := utils.CheckManifestWorkStatus(mw)
+		if !isApplied {
+			return fmt.Errorf("ManifestWork for AppliedManifest %s/%s not applied", mw.Namespace, mw.Name)
+		}
+
 	}
 	return nil
 }
