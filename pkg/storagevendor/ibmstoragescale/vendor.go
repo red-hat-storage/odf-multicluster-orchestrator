@@ -183,8 +183,8 @@ func (v *IbmStorageScaleVendor) ensureCRDs(
 		v.logger,
 		mirrorPeer,
 		clusterName,
-		sourceManifestCRDPath,
-		sourceManifestCRDManifestWorkName,
+		utils.SourceManifestCRDPath,
+		utils.SourceManifestCRDManifestWorkName,
 	); err != nil {
 		return err
 	}
@@ -196,8 +196,8 @@ func (v *IbmStorageScaleVendor) ensureCRDs(
 		v.logger,
 		mirrorPeer,
 		clusterName,
-		appliedManifestCRDPath,
-		appliedManifestCRDManifestWorkName,
+		utils.AppliedManifestCRDPath,
+		utils.AppliedManifestCRDManifestWorkName,
 	); err != nil {
 		return err
 	}
@@ -225,12 +225,12 @@ func (v *IbmStorageScaleVendor) readSourceManifests(
 		mcv := &viewv1beta1.ManagedClusterView{}
 		mcv.Name = getSourceManifestMCVName(name)
 		mcv.Namespace = peerRef.ClusterName
-		
+
 		mcvConfig := func() error {
 			mcv.Spec = viewv1beta1.ViewSpec{
 				Scope: viewv1beta1.ViewScope{
 					Group:     multiclusterv1alpha1.GroupVersion.Group,
-					Resource:  sourceManifestResource,
+					Resource:  "sourcemanifest",
 					Name:      name,
 					Namespace: info.OperatorNamespace,
 				},
@@ -363,7 +363,7 @@ func (v *IbmStorageScaleVendor) readAppliedManifestStatus(
 		mcv.Spec = viewv1beta1.ViewSpec{
 			Scope: viewv1beta1.ViewScope{
 				Group:     multiclusterv1alpha1.GroupVersion.Group,
-				Resource:  appliedManifestResourceType,
+				Resource:  "appliedmanifest",
 				Name:      name,
 				Namespace: operatorNamespace,
 			},
@@ -424,7 +424,7 @@ func buildAppliedManifest(name, namespace string, resources []runtime.RawExtensi
 	return json.Marshal(&multiclusterv1alpha1.AppliedManifest{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: multiclusterv1alpha1.GroupVersion.String(),
-			Kind:       appliedManifestKind,
+			Kind:       "AppliedManifest",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
