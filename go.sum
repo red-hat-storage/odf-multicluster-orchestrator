@@ -990,8 +990,8 @@ github.com/prometheus/procfs v0.17.0/go.mod h1:oPQLaDAMRbA+u8H5Pbfq+dl3VDAvHxMUO
 github.com/prometheus/tsdb v0.7.1/go.mod h1:qhTCs0VvXwvX/y3TZrWD7rabWM+ijKTux40TwIPHuXU=
 github.com/r3labs/diff/v3 v3.0.2 h1:yVuxAY1V6MeM4+HNur92xkS39kB/N+cFi2hMkY06BbA=
 github.com/r3labs/diff/v3 v3.0.2/go.mod h1:Cy542hv0BAEmhDYWtGxXRQ4kqRsVIcEjG9gChUlTmkw=
-github.com/ramendr/ramen/api v0.0.0-20260113215613-3749cae33639 h1:QObLDV4PRTxdkSXxPGaLNPk2qFC/Tp5vy2XPRI18u4o=
-github.com/ramendr/ramen/api v0.0.0-20260113215613-3749cae33639/go.mod h1:G3q4wmHUdOVefjCKSacg3McDodLwtfFe84wSrGxQ69w=
+github.com/ramendr/ramen/api v0.0.0-20260609143232-8539a3642b6e h1:PNYx+wTSAoRo5THxe1qvyNuiQ9T3/DT+5aash0rI21E=
+github.com/ramendr/ramen/api v0.0.0-20260609143232-8539a3642b6e/go.mod h1:F6Iuq5ywxI4TJL2VvoJNQvn2cMWOHOdysbaoeT9RMig=
 github.com/red-hat-storage/ocs-operator/api/v4 v4.0.0-20260113064915-e9473b4e5f1a h1:FeRvfblz8THny6ShCPxCDmKu8rKmbF348f1FtPvTKhk=
 github.com/red-hat-storage/ocs-operator/api/v4 v4.0.0-20260113064915-e9473b4e5f1a/go.mod h1:Lkfm/UaH1hPkjLjXf4g2elAaGspLzmHXwgGSIkeNzf4=
 github.com/redis/go-redis/v9 v9.0.0-rc.4/go.mod h1:Vo3EsyWnicKnSKCA7HhgnvnyA74wOA69Cd2Meli5mmA=
