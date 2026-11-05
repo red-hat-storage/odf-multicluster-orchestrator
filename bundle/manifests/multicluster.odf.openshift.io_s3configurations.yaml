@@ -15,6 +15,12 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .status.type
+      name: Type
+      type: string
+    - jsonPath: .spec.managedClusters
+      name: ManagedClusters
+      type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
@@ -191,6 +197,15 @@ spec:
                 - Configuring
                 - Ready
                 - Failed
+                type: string
+              type:
+                description: |-
+                  Type indicates whether the S3 endpoint in use is provisioned via an OBC
+                  (Internal) or externally provided (External), derived from
+                  spec.internalS3/spec.externalS3.
+                enum:
+                - Internal
+                - External
                 type: string
             type: object
         required:

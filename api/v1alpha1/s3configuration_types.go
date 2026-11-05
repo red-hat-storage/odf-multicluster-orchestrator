@@ -31,6 +31,17 @@ const (
 	S3ConfigurationPhaseFailed      S3ConfigurationPhase = "Failed"
 )
 
+// S3Type represents whether the S3 endpoint used by S3Configuration is
+// provisioned via an OBC against a StorageClass (Internal) or provided
+// by the user (External).
+// +kubebuilder:validation:Enum=Internal;External
+type S3Type string
+
+const (
+	S3TypeInternal S3Type = "Internal"
+	S3TypeExternal S3Type = "External"
+)
+
 // SecretReference contains namespace + name to reference a secret
 type SecretReference struct {
 	// Name is the name of the secret
@@ -149,6 +160,12 @@ type S3ConfigurationSpec struct {
 
 // S3ConfigurationStatus defines the observed state of S3Configuration
 type S3ConfigurationStatus struct {
+	// Type indicates whether the S3 endpoint in use is provisioned via an OBC
+	// (Internal) or externally provided (External), derived from
+	// spec.internalS3/spec.externalS3.
+	// +optional
+	Type S3Type `json:"type,omitempty"`
+
 	// Phase represents the current phase of S3Configuration
 	// +optional
 	Phase S3ConfigurationPhase `json:"phase,omitempty"`
@@ -165,6 +182,8 @@ type S3ConfigurationStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
+// +kubebuilder:printcolumn:name="Type",type=string,JSONPath=.status.type
+// +kubebuilder:printcolumn:name="ManagedClusters",type=string,JSONPath=.spec.managedClusters
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=.status.phase
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=.metadata.creationTimestamp
 
