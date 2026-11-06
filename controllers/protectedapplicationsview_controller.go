@@ -12,6 +12,7 @@ import (
 	argov1alpha1 "github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
 	ramenv1alpha1 "github.com/ramendr/ramen/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -180,6 +181,11 @@ func (r *ProtectedApplicationViewReconciler) Reconcile(ctx context.Context, req 
 		Namespace: pav.Spec.DRPCRef.Namespace,
 	}
 	if err := r.Get(ctx, drpcKey, drpc); err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.Info("DRPlacementControl not found, PAV will be garbage collected",
+				"drpc", drpcKey.Name)
+			return ctrl.Result{}, nil
+		}
 		logger.Error("Failed to get DRPlacementControl", "error", err)
 		return ctrl.Result{RequeueAfter: requeueAfterSeconds}, err
 	}
@@ -189,6 +195,11 @@ func (r *ProtectedApplicationViewReconciler) Reconcile(ctx context.Context, req 
 		Namespace: drpc.Spec.PlacementRef.Namespace,
 	}
 	if err := r.Get(ctx, placementKey, placement); err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.Info("Placement not found, skipping reconciliation",
+				"placement", placementKey.Name)
+			return ctrl.Result{}, nil
+		}
 		logger.Error("Failed to get Placement", "error", err)
 		return ctrl.Result{RequeueAfter: requeueAfterSeconds}, err
 	}
