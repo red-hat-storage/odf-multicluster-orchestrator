@@ -124,12 +124,11 @@ func (r *MirrorPeerReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	vendorType := mirrorPeer.Spec.StorageVendor
-	if vendorType == "" {
+	if needsS3Migration(mirrorPeer) {
 		if err := r.createS3Configuration(ctx, logger, mirrorPeer); err != nil {
 			return ctrl.Result{}, err
 		}
-		mirrorPeer.Spec.StorageVendor = multiclusterv1alpha1.ODF
+		mirrorPeer.Spec.ManageS3 = false
 		if err := r.Client.Update(ctx, mirrorPeer); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -362,14 +361,13 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+// needsS3Migration uses manageS3 rather than storageVendor=="" because the CRD defaults storageVendor to "odf" on every read, masking legacy MirrorPeers.
+func needsS3Migration(mirrorPeer *multiclusterv1alpha1.MirrorPeer) bool {
+	return mirrorPeer.Spec.ManageS3
+}
+
 func (r *MirrorPeerReconciler) createS3Configuration(ctx context.Context, logger *slog.Logger, mirrorPeer *multiclusterv1alpha1.MirrorPeer) error {
 	logger.Info("Checking if S3Configuration needs to be created for upgrade", "MirrorPeer", mirrorPeer.Name)
-
-	// Only proceed if ManageS3 was enabled (deprecated field from 5.1)
-	if !mirrorPeer.Spec.ManageS3 {
-		logger.Info("ManageS3 is false, no S3Configuration resource to be created", "MirrorPeer", mirrorPeer.Name)
-		return nil
-	}
 
 	// Step 1: Collect s3ProfileNames from existing DRClusters
 	type drClusterInfo struct {
