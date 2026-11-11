@@ -168,7 +168,7 @@ func (a *S3ConfigAddons) permissionConfig(cluster *clusterv1.ManagedCluster, add
 		clusterrole.Rules = []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"multicluster.odf.openshift.io"},
-				Resources: []string{"s3configuration"},
+				Resources: []string{"s3configurations"},
 				Verbs:     []string{"get", "list", "watch", "update", "patch"},
 			},
 		}

@@ -56,6 +56,7 @@ func TestMirrorPeerReconcilerReconcile(t *testing.T) {
 			Name: "mirrorpeer",
 		},
 		Spec: multiclusterv1alpha1.MirrorPeerSpec{
+			StorageVendor: multiclusterv1alpha1.ODF,
 			Items: []multiclusterv1alpha1.PeerRef{
 				{
 					ClusterName: "cluster1",
