@@ -337,6 +337,35 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return reqs
 	}
 
+	crdManifestWorkToMirrorPeerMapFunc := func(ctx context.Context, object client.Object) []ctrl.Request {
+		r.Logger.Debug("Mapping CRD ManifestWork to MirrorPeer", "ManifestWork", client.ObjectKeyFromObject(object))
+		var reqs []ctrl.Request
+		mw, ok := object.(*manifestworkv1.ManifestWork)
+		if !ok {
+			r.Logger.Debug("Unable to cast object into ManifestWork. Not requeing any requests.")
+			return reqs
+		}
+
+		// Find all MirrorPeers that reference this cluster
+		var mpList multiclusterv1alpha1.MirrorPeerList
+		err := r.Client.List(ctx, &mpList)
+		if err != nil {
+			r.Logger.Debug("Unable to fetch list of all MirrorPeers. Not requeing any requests.")
+			return reqs
+		}
+
+		for _, mp := range mpList.Items {
+			for _, peer := range mp.Spec.Items {
+				if peer.ClusterName == mw.Namespace {
+					reqs = append(reqs, reconcile.Request{NamespacedName: types.NamespacedName{Name: mp.Name}})
+					break
+				}
+			}
+		}
+		r.Logger.Info("MirrorPeer reconcile requests generated based on CRD ManifestWork change.", "RequestCount", len(reqs), "Requests", reqs)
+		return reqs
+	}
+
 	// The OCM agent refreshes ManagedClusterView status periodically, so only react when the result changes.
 	mcvResultChangedPredicate := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
@@ -409,6 +438,11 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				),
 				utils.NamespacePredicate(r.CurrentNamespace),
 				utils.EventTypePredicate(true, true, true, true),
+			)).
+		Watches(&manifestworkv1.ManifestWork{}, handler.EnqueueRequestsFromMapFunc(crdManifestWorkToMirrorPeerMapFunc),
+			builder.WithPredicates(
+				utils.NamePredicate(utils.ManifestCRDsMWName),
+				manifestWorkStatusChangedPredicate,
 			)).
 		Complete(r)
 }
