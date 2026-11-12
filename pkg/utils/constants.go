@@ -28,4 +28,14 @@ const (
 	TLSProfileServer = "console"
 
 	AddonVersionAnnotationKey = "multicluster.odf.openshift.io/version"
+
+	// SourceManifestCRDPath is the path to the SourceManifest CRD YAML file.
+	SourceManifestCRDPath = "config/crd/bases/multicluster.odf.openshift.io_sourcemanifests.yaml"
+
+	// AppliedManifestCRDPath is the path to the AppliedManifest CRD YAML file.
+	AppliedManifestCRDPath = "config/crd/bases/multicluster.odf.openshift.io_appliedmanifests.yaml"
+
+	// ManifestCRDsMWName is the name of the ManifestWork that installs
+	// the SourceManifest and AppliedManifest CRDs to managed clusters.
+	ManifestCRDsMWName = "df-mco-manifest-crds"
 )
