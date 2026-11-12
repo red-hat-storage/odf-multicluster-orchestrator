@@ -178,6 +178,13 @@ func TestReadSourceManifests(t *testing.T) {
 		existing := &viewv1beta1.ManagedClusterView{
 			ObjectMeta: metav1.ObjectMeta{Name: mcvKey.Name, Namespace: mcvKey.Namespace},
 			Status: viewv1beta1.ViewStatus{
+				Conditions: []metav1.Condition{
+					{
+						Type:   viewv1beta1.ConditionViewProcessing,
+						Status: metav1.ConditionTrue,
+						Reason: viewv1beta1.ReasonGetResource,
+					},
+				},
 				Result: runtime.RawExtension{Raw: []byte(sourceManifestResultJSON)},
 			},
 		}
@@ -202,7 +209,16 @@ func TestReadSourceManifests(t *testing.T) {
 	t.Run("errors on an invalid MCV result", func(t *testing.T) {
 		existing := &viewv1beta1.ManagedClusterView{
 			ObjectMeta: metav1.ObjectMeta{Name: mcvKey.Name, Namespace: mcvKey.Namespace},
-			Status:     viewv1beta1.ViewStatus{Result: runtime.RawExtension{Raw: []byte("not-json")}},
+			Status: viewv1beta1.ViewStatus{
+				Conditions: []metav1.Condition{
+					{
+						Type:   viewv1beta1.ConditionViewProcessing,
+						Status: metav1.ConditionTrue,
+						Reason: viewv1beta1.ReasonGetResource,
+					},
+				},
+				Result: runtime.RawExtension{Raw: []byte("not-json")},
+			},
 		}
 		v, _, mp := newTestVendor(t, nil, existing)
 
@@ -315,7 +331,16 @@ func appliedManifestMCVResult(t *testing.T, phase multiclusterv1alpha1.AppliedMa
 			Name:      getAppliedManifestStatusMCVName("sm-a"),
 			Namespace: "cluster-b",
 		},
-		Status: viewv1beta1.ViewStatus{Result: runtime.RawExtension{Raw: raw}},
+		Status: viewv1beta1.ViewStatus{
+			Conditions: []metav1.Condition{
+				{
+					Type:   viewv1beta1.ConditionViewProcessing,
+					Status: metav1.ConditionTrue,
+					Reason: viewv1beta1.ReasonGetResource,
+				},
+			},
+			Result: runtime.RawExtension{Raw: raw},
+		},
 	}
 }
 
