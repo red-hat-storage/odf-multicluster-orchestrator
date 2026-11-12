@@ -222,12 +222,12 @@ func (v *IbmStorageScaleVendor) readSourceManifests(
 				mcv.Name, mcv.Namespace, err)
 		}
 
-		if len(mcv.Status.Result.Raw) == 0 {
-			v.logger.Info("SourceManifest ManagedClusterView result not available yet",
-				"cluster", peerRef.ClusterName,
-				"sourceManifest", name,
-				"mcv", mcv.Name,
-			)
+		// Validate MCV is ready
+		mcvReady, err := v.validateMCVReady(mcv, "SourceManifest", name, peerRef.ClusterName)
+		if err != nil {
+			return nil, false, err
+		}
+		if !mcvReady {
 			ready = false
 			continue
 		}
@@ -371,12 +371,12 @@ func (v *IbmStorageScaleVendor) readAppliedManifestStatus(
 				mcv.Name, mcv.Namespace, err)
 	}
 
-	if len(mcv.Status.Result.Raw) == 0 {
-		v.logger.Info("AppliedManifest status ManagedClusterView result not available yet",
-			"cluster", clusterName,
-			"appliedManifest", name,
-			"mcv", mcv.Name,
-		)
+	// Validate MCV is ready
+	mcvReady, err := v.validateMCVReady(mcv, "AppliedManifest", name, clusterName)
+	if err != nil {
+		return multiclusterv1alpha1.AppliedManifestStatus{}, false, err
+	}
+	if !mcvReady {
 		return multiclusterv1alpha1.AppliedManifestStatus{}, false, nil
 	}
 
@@ -398,6 +398,65 @@ func (v *IbmStorageScaleVendor) readAppliedManifestStatus(
 	}
 
 	return appliedManifest.Status, true, nil
+}
+
+// validateMCVReady checks if a ManagedClusterView has valid conditions and a populated result.
+// Returns (ready, error):
+//   - (true, nil): MCV is ready, result can be used
+//   - (false, nil): MCV not ready yet, should requeue
+//   - (false, error): MCV failed or invalid, should stop
+func (v *IbmStorageScaleVendor) validateMCVReady(
+	mcv *viewv1beta1.ManagedClusterView,
+	resourceType,
+	resourceName,
+	clusterName string,
+) (bool, error) {
+	// Check conditions
+	switch len(mcv.Status.Conditions) {
+	case 0:
+		v.logger.Info("ManagedClusterView conditions not available yet",
+			"cluster", clusterName,
+			"resourceType", resourceType,
+			"resourceName", resourceName,
+			"mcv", mcv.Name,
+		)
+		return false, nil
+	case 1:
+		cond := mcv.Status.Conditions[0]
+		if cond.Type != viewv1beta1.ConditionViewProcessing {
+			return false, fmt.Errorf("invalid ManagedClusterView condition type %q for %s %q on cluster %q",
+				cond.Type, resourceType, resourceName, clusterName)
+		}
+		if cond.Reason == viewv1beta1.ReasonGetResourceFailed {
+			return false, fmt.Errorf("%s %q not found on cluster %q: %s",
+				resourceType, resourceName, clusterName, cond.Message)
+		}
+		if cond.Status != metav1.ConditionTrue {
+			v.logger.Info("ManagedClusterView not ready yet",
+				"cluster", clusterName,
+				"resourceType", resourceType,
+				"resourceName", resourceName,
+				"reason", cond.Reason,
+				"message", cond.Message,
+			)
+			return false, nil
+		}
+	default:
+		return false, fmt.Errorf("unexpected: ManagedClusterView has %d conditions (expected 1) for %s %q on cluster %q",
+			len(mcv.Status.Conditions), resourceType, resourceName, clusterName)
+	}
+
+	// Check result is populated
+	if len(mcv.Status.Result.Raw) == 0 {
+		v.logger.Info("ManagedClusterView result not populated yet",
+			"cluster", clusterName,
+			"resourceType", resourceType,
+			"resourceName", resourceName,
+		)
+		return false, nil
+	}
+
+	return true, nil
 }
 
 func getSourceManifestMCVName(sourceManifestName string) string {
