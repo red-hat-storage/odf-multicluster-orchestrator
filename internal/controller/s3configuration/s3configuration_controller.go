@@ -50,7 +50,22 @@ const (
 
 	// OBCNamePrefix is the default prefix for OBC names
 	OBCNamePrefix = "odrbucket"
+
+	// externalS3SecretRefIndex indexes S3Configurations by the "<namespace>/<name>"
+	// of the secret referenced in spec.externalS3.secretRef.
+	externalS3SecretRefIndex = "spec.externalS3.secretRef"
 )
+
+// externalS3SecretRefIndexFunc returns the "<namespace>/<name>" key of the
+// external S3 secret referenced by an S3Configuration, if any.
+func externalS3SecretRefIndexFunc(obj client.Object) []string {
+	s3Config, ok := obj.(*multiclusterv1alpha1.S3Configuration)
+	if !ok || s3Config.Spec.ExternalS3 == nil {
+		return nil
+	}
+	ref := s3Config.Spec.ExternalS3.SecretRef
+	return []string{types.NamespacedName{Namespace: ref.Namespace, Name: ref.Name}.String()}
+}
 
 // S3ConfigurationReconciler reconciles a S3Configuration object
 type S3ConfigurationReconciler struct {
@@ -77,6 +92,11 @@ func (r *S3ConfigurationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return false
 	})
 
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &multiclusterv1alpha1.S3Configuration{},
+		externalS3SecretRefIndex, externalS3SecretRefIndexFunc); err != nil {
+		return fmt.Errorf("failed to setup S3Configuration external secret index: %w", err)
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multiclusterv1alpha1.S3Configuration{}).
 		Owns(&addonapiv1alpha1.ManagedClusterAddOn{}).
@@ -88,6 +108,12 @@ func (r *S3ConfigurationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.findS3ConfigForSecret),
 			builder.WithPredicates(secretPredicate),
+		).
+		// User-provided external S3 secrets carry no label of ours, so look up
+		// referencing S3Configurations through the secretRef index instead.
+		Watches(
+			&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.findS3ConfigsForExternalSecret),
 		).
 		Watches(
 			&corev1.ConfigMap{},
@@ -126,6 +152,27 @@ func (r *S3ConfigurationReconciler) findS3ConfigForSecret(ctx context.Context, s
 		}
 	}
 
+	return requests
+}
+
+// findS3ConfigsForExternalSecret finds S3Configurations whose spec.externalS3.secretRef
+// points at the given secret, so credential/endpoint changes (or the secret being
+// created after the CR) are propagated to the Ramen secret and S3 profile.
+func (r *S3ConfigurationReconciler) findS3ConfigsForExternalSecret(ctx context.Context, secret client.Object) []reconcile.Request {
+	s3ConfigList := &multiclusterv1alpha1.S3ConfigurationList{}
+	if err := r.List(ctx, s3ConfigList, client.MatchingFields{
+		externalS3SecretRefIndex: client.ObjectKeyFromObject(secret).String(),
+	}); err != nil {
+		r.Logger.Error("Failed to list S3Configurations for external secret watch", "secret", client.ObjectKeyFromObject(secret), "error", err)
+		return []reconcile.Request{}
+	}
+
+	requests := make([]reconcile.Request, 0, len(s3ConfigList.Items))
+	for _, s3Config := range s3ConfigList.Items {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{Name: s3Config.Name},
+		})
+	}
 	return requests
 }
 

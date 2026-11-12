@@ -796,6 +796,66 @@ func TestFindS3ConfigsForDRPolicy(t *testing.T) {
 	}
 }
 
+func TestFindS3ConfigsForExternalSecret(t *testing.T) {
+	externalCfg := func(name, secretNS, secretName string) *multiclusterv1alpha1.S3Configuration {
+		return &multiclusterv1alpha1.S3Configuration{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Spec: multiclusterv1alpha1.S3ConfigurationSpec{
+				ExternalS3: &multiclusterv1alpha1.ExternalS3Spec{
+					SecretRef: multiclusterv1alpha1.SecretReference{Name: secretName, Namespace: secretNS},
+				},
+				ManagedClusters: []string{name + "-cluster"},
+			},
+		}
+	}
+	internalCfg := &multiclusterv1alpha1.S3Configuration{
+		ObjectMeta: metav1.ObjectMeta{Name: "internal"},
+		Spec: multiclusterv1alpha1.S3ConfigurationSpec{
+			InternalS3: &multiclusterv1alpha1.InternalS3Spec{
+				ProviderCluster:  "dr-system",
+				StorageClassName: "sc",
+				Namespace:        "openshift-storage",
+			},
+			ManagedClusters: []string{"internal-cluster"},
+		},
+	}
+
+	r := getFakeS3ConfigurationReconciler(t,
+		externalCfg("match", "dr-system", "ext-creds"),
+		externalCfg("other-name", "dr-system", "other-creds"),
+		externalCfg("other-ns", "other-ns", "ext-creds"),
+		internalCfg,
+	)
+
+	tests := []struct {
+		name   string
+		secret *corev1.Secret
+		want   []string
+	}{
+		{
+			name:   "referenced secret enqueues only the referencing S3Configuration",
+			secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "ext-creds", Namespace: "dr-system"}},
+			want:   []string{"match"},
+		},
+		{
+			name:   "unreferenced secret enqueues nothing",
+			secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: "dr-system"}},
+			want:   nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			requests := r.findS3ConfigsForExternalSecret(context.TODO(), tt.secret)
+			var got []string
+			for _, req := range requests {
+				got = append(got, req.Name)
+			}
+			assert.ElementsMatch(t, tt.want, got)
+		})
+	}
+}
+
 // Helper function to create a fake reconciler with optional initial objects
 func getFakeS3ConfigurationReconciler(t *testing.T, initObjs ...runtime.Object) S3ConfigurationReconciler {
 	scheme := runtime.NewScheme()
@@ -816,6 +876,7 @@ func getFakeS3ConfigurationReconciler(t *testing.T, initObjs ...runtime.Object) 
 		WithScheme(scheme).
 		WithRuntimeObjects(initObjs...).
 		WithStatusSubresource(&multiclusterv1alpha1.S3Configuration{}).
+		WithIndex(&multiclusterv1alpha1.S3Configuration{}, externalS3SecretRefIndex, externalS3SecretRefIndexFunc).
 		Build()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
