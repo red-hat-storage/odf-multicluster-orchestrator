@@ -17,10 +17,12 @@ limitations under the License.
 package s3configuration
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"time"
 
 	multiclusterv1alpha1 "github.com/red-hat-storage/odf-multicluster-orchestrator/api/v1alpha1"
@@ -39,6 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -65,6 +68,35 @@ func externalS3SecretRefIndexFunc(obj client.Object) []string {
 	}
 	ref := s3Config.Spec.ExternalS3.SecretRef
 	return []string{types.NamespacedName{Namespace: ref.Namespace, Name: ref.Name}.String()}
+}
+
+// externalSecretChangedPredicate drops Secret updates that cannot affect an
+// S3Configuration, so the index lookup in findS3ConfigsForExternalSecret is
+// skipped for them. Secrets have no generation, so GenerationChangedPredicate
+// does not apply; instead an update passes only when:
+//   - Data changed (credentials, bucket, endpoint or region), or
+//   - the HubRecoveryLabel was removed (the reconciler re-adds it).
+//
+// This filters periodic resyncs and metadata-only edits, including the
+// reconciler's own HubRecoveryLabel addition. Create and Delete always pass:
+// a referenced secret appearing or disappearing must trigger a reconcile, and
+// which secrets are referenced is only known from the index lookup itself.
+func externalSecretChangedPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldSecret, okOld := e.ObjectOld.(*corev1.Secret)
+			newSecret, okNew := e.ObjectNew.(*corev1.Secret)
+			if !okOld || !okNew {
+				return false
+			}
+			if !maps.EqualFunc(oldSecret.Data, newSecret.Data, bytes.Equal) {
+				return true
+			}
+			_, hadLabel := oldSecret.Labels[utils.HubRecoveryLabel]
+			_, hasLabel := newSecret.Labels[utils.HubRecoveryLabel]
+			return hadLabel && !hasLabel
+		},
+	}
 }
 
 // S3ConfigurationReconciler reconciles a S3Configuration object
@@ -111,9 +143,11 @@ func (r *S3ConfigurationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		// User-provided external S3 secrets carry no label of ours, so look up
 		// referencing S3Configurations through the secretRef index instead.
+		// The predicate drops updates that cannot change the outcome.
 		Watches(
 			&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.findS3ConfigsForExternalSecret),
+			builder.WithPredicates(externalSecretChangedPredicate()),
 		).
 		Watches(
 			&corev1.ConfigMap{},
