@@ -40,6 +40,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	yaml "sigs.k8s.io/yaml"
 )
 
@@ -796,6 +797,145 @@ func TestFindS3ConfigsForDRPolicy(t *testing.T) {
 	}
 }
 
+func TestFindS3ConfigsForExternalSecret(t *testing.T) {
+	externalCfg := func(name, secretNS, secretName string) *multiclusterv1alpha1.S3Configuration {
+		return &multiclusterv1alpha1.S3Configuration{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Spec: multiclusterv1alpha1.S3ConfigurationSpec{
+				ExternalS3: &multiclusterv1alpha1.ExternalS3Spec{
+					SecretRef: multiclusterv1alpha1.SecretReference{Name: secretName, Namespace: secretNS},
+				},
+				ManagedClusters: []string{name + "-cluster"},
+			},
+		}
+	}
+	internalCfg := &multiclusterv1alpha1.S3Configuration{
+		ObjectMeta: metav1.ObjectMeta{Name: "internal"},
+		Spec: multiclusterv1alpha1.S3ConfigurationSpec{
+			InternalS3: &multiclusterv1alpha1.InternalS3Spec{
+				ProviderCluster:  "dr-system",
+				StorageClassName: "sc",
+				Namespace:        "openshift-storage",
+			},
+			ManagedClusters: []string{"internal-cluster"},
+		},
+	}
+
+	r := getFakeS3ConfigurationReconciler(t,
+		externalCfg("match", "dr-system", "ext-creds"),
+		externalCfg("other-name", "dr-system", "other-creds"),
+		externalCfg("other-ns", "other-ns", "ext-creds"),
+		internalCfg,
+	)
+
+	tests := []struct {
+		name   string
+		secret *corev1.Secret
+		want   []string
+	}{
+		{
+			name:   "referenced secret enqueues only the referencing S3Configuration",
+			secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "ext-creds", Namespace: "dr-system"}},
+			want:   []string{"match"},
+		},
+		{
+			name:   "unreferenced secret enqueues nothing",
+			secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: "dr-system"}},
+			want:   nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			requests := r.findS3ConfigsForExternalSecret(context.TODO(), tt.secret)
+			var got []string
+			for _, req := range requests {
+				got = append(got, req.Name)
+			}
+			assert.ElementsMatch(t, tt.want, got)
+		})
+	}
+}
+
+func TestExternalSecretChangedPredicate(t *testing.T) {
+	base := func() *corev1.Secret {
+		return &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "ext-creds",
+				Namespace:       "dr-system",
+				ResourceVersion: "1",
+				Labels:          map[string]string{utils.HubRecoveryLabel: ""},
+			},
+			Data: map[string][]byte{
+				utils.AwsAccessKeyId:     []byte("access-key"),
+				utils.AwsSecretAccessKey: []byte("secret-key"),
+			},
+		}
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(s *corev1.Secret)
+		want   bool
+	}{
+		{
+			name:   "resync with identical object is dropped",
+			mutate: func(s *corev1.Secret) {},
+			want:   false,
+		},
+		{
+			name: "metadata-only change is dropped",
+			mutate: func(s *corev1.Secret) {
+				s.ResourceVersion = "2"
+				s.Annotations = map[string]string{"foo": "bar"}
+				s.Labels["other"] = "x"
+			},
+			want: false,
+		},
+		{
+			name: "rotated credential passes",
+			mutate: func(s *corev1.Secret) {
+				s.Data[utils.AwsAccessKeyId] = []byte("rotated")
+			},
+			want: true,
+		},
+		{
+			name: "added data key passes",
+			mutate: func(s *corev1.Secret) {
+				s.Data[utils.S3Endpoint] = []byte("https://s3.example.com")
+			},
+			want: true,
+		},
+		{
+			name: "removed HubRecoveryLabel passes",
+			mutate: func(s *corev1.Secret) {
+				delete(s.Labels, utils.HubRecoveryLabel)
+			},
+			want: true,
+		},
+	}
+
+	p := externalSecretChangedPredicate()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			oldSecret := base()
+			newSecret := base()
+			tt.mutate(newSecret)
+			got := p.Update(event.UpdateEvent{ObjectOld: oldSecret, ObjectNew: newSecret})
+			assert.Equal(t, tt.want, got)
+		})
+	}
+
+	// Reconciler adding the label to a user secret must not requeue.
+	unlabelled := base()
+	delete(unlabelled.Labels, utils.HubRecoveryLabel)
+	assert.False(t, p.Update(event.UpdateEvent{ObjectOld: unlabelled, ObjectNew: base()}),
+		"adding HubRecoveryLabel should be dropped")
+
+	assert.True(t, p.Create(event.CreateEvent{Object: base()}), "create must pass")
+	assert.True(t, p.Delete(event.DeleteEvent{Object: base()}), "delete must pass")
+}
+
 // Helper function to create a fake reconciler with optional initial objects
 func getFakeS3ConfigurationReconciler(t *testing.T, initObjs ...runtime.Object) S3ConfigurationReconciler {
 	scheme := runtime.NewScheme()
@@ -816,6 +956,7 @@ func getFakeS3ConfigurationReconciler(t *testing.T, initObjs ...runtime.Object) 
 		WithScheme(scheme).
 		WithRuntimeObjects(initObjs...).
 		WithStatusSubresource(&multiclusterv1alpha1.S3Configuration{}).
+		WithIndex(&multiclusterv1alpha1.S3Configuration{}, externalS3SecretRefIndex, externalS3SecretRefIndexFunc).
 		Build()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
