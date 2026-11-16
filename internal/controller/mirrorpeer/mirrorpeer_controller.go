@@ -23,6 +23,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -392,19 +393,7 @@ func (r *MirrorPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}
 
 			// Trigger reconcile if conditions changed
-			if len(oldMW.Status.Conditions) != len(newMW.Status.Conditions) {
-				return true
-			}
-			for i := range oldMW.Status.Conditions {
-				oldCond := oldMW.Status.Conditions[i]
-				newCond := newMW.Status.Conditions[i]
-				if oldCond.Type != newCond.Type ||
-					oldCond.Status != newCond.Status ||
-					oldCond.Reason != newCond.Reason {
-					return true
-				}
-			}
-			return false
+			return !reflect.DeepEqual(oldMW.Status.Conditions, newMW.Status.Conditions)
 		},
 	}
 

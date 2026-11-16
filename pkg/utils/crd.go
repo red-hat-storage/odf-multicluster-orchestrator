@@ -69,7 +69,7 @@ func EnsureCRDs(
 		return err
 	}
 
-	isApplied := CheckManifestWorkStatus(mw)
+	isApplied := IsManifestWorkApplied(mw)
 	if !isApplied {
 		return fmt.Errorf("CRD ManifestWork %s/%s not applied", mw.Namespace, mw.Name)
 	}

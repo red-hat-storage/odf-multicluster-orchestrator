@@ -158,10 +158,9 @@ func TestReadSourceManifests(t *testing.T) {
 	t.Run("creates the MCV and requeues while the result is empty", func(t *testing.T) {
 		v, cl, mp := newTestVendor(t, nil)
 
-		payloads, ready, err := v.readSourceManifests(context.TODO(), mp, item, info)
+		manifests, err := v.readSourceManifests(context.TODO(), mp, item, info)
 		require.NoError(t, err)
-		assert.False(t, ready)
-		assert.Nil(t, payloads)
+		assert.Nil(t, manifests)
 
 		mcv := &viewv1beta1.ManagedClusterView{}
 		require.NoError(t, cl.Get(context.TODO(), mcvKey, mcv))
@@ -190,20 +189,21 @@ func TestReadSourceManifests(t *testing.T) {
 		}
 		v, _, mp := newTestVendor(t, nil, existing)
 
-		payloads, ready, err := v.readSourceManifests(context.TODO(), mp, item, info)
+		manifests, err := v.readSourceManifests(context.TODO(), mp, item, info)
 		require.NoError(t, err)
-		assert.True(t, ready)
-		require.Len(t, payloads["sm-a"], 1)
-		assert.Contains(t, string(payloads["sm-a"][0].Raw), "fsA")
+		require.Len(t, manifests, 1)
+		assert.Equal(t, "sm-a", manifests[0].Name)
+		require.Len(t, manifests[0].Spec.Manifests, 1)
+		assert.Contains(t, string(manifests[0].Spec.Manifests[0].Raw), "fsA")
 	})
 
 	t.Run("not ready when no sourceManifests are listed", func(t *testing.T) {
 		emptyInfo := IbmStorageScaleInfo{OperatorNamespace: "ibm-spectrum-scale"}
 		v, _, mp := newTestVendor(t, nil)
 
-		_, ready, err := v.readSourceManifests(context.TODO(), mp, item, emptyInfo)
+		manifests, err := v.readSourceManifests(context.TODO(), mp, item, emptyInfo)
 		require.NoError(t, err)
-		assert.False(t, ready)
+		assert.Nil(t, manifests)
 	})
 
 	t.Run("errors on an invalid MCV result", func(t *testing.T) {
@@ -222,7 +222,7 @@ func TestReadSourceManifests(t *testing.T) {
 		}
 		v, _, mp := newTestVendor(t, nil, existing)
 
-		_, _, err := v.readSourceManifests(context.TODO(), mp, item, info)
+		_, err := v.readSourceManifests(context.TODO(), mp, item, info)
 		assert.Error(t, err)
 	})
 }
@@ -231,6 +231,12 @@ func TestSyncAppliedManifests(t *testing.T) {
 	peer := peerRef("cluster-b", "scale-cluster-b")
 	mwKey := types.NamespacedName{Name: getAppliedManifestWorkName("sm-a"), Namespace: "cluster-b"}
 	payload := []runtime.RawExtension{{Raw: []byte(`{"apiVersion":"scale.spectrum.ibm.com/v1beta1","kind":"FileSystem","metadata":{"name":"fsA"}}`)}}
+	sourceManifests := []multiclusterv1alpha1.SourceManifest{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "sm-a"},
+			Spec:       multiclusterv1alpha1.SourceManifestSpec{Manifests: payload},
+		},
+	}
 	info := IbmStorageScaleInfo{OperatorNamespace: "ibm-spectrum-scale"}
 
 	t.Run("creates a ManifestWork carrying the AppliedManifest on the peer", func(t *testing.T) {
@@ -259,7 +265,7 @@ func TestSyncAppliedManifests(t *testing.T) {
 		}
 		require.NoError(t, cl.Create(context.TODO(), existingMW))
 
-		require.NoError(t, v.syncAppliedManifests(context.TODO(), mp, peer, info, map[string][]runtime.RawExtension{"sm-a": payload}))
+		require.NoError(t, v.syncAppliedManifests(context.TODO(), mp, peer, info, sourceManifests))
 
 		mw := &workv1.ManifestWork{}
 		require.NoError(t, cl.Get(context.TODO(), mwKey, mw))
@@ -304,10 +310,16 @@ func TestSyncAppliedManifests(t *testing.T) {
 			},
 		}
 		require.NoError(t, cl.Create(context.TODO(), existingMW))
-		require.NoError(t, v.syncAppliedManifests(context.TODO(), mp, peer, info, map[string][]runtime.RawExtension{"sm-a": payload}))
+		require.NoError(t, v.syncAppliedManifests(context.TODO(), mp, peer, info, sourceManifests))
 
 		updated := []runtime.RawExtension{{Raw: []byte(`{"apiVersion":"scale.spectrum.ibm.com/v1beta1","kind":"FileSystem","metadata":{"name":"fsB"}}`)}}
-		require.NoError(t, v.syncAppliedManifests(context.TODO(), mp, peer, info, map[string][]runtime.RawExtension{"sm-a": updated}))
+		updatedManifests := []multiclusterv1alpha1.SourceManifest{
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "sm-a"},
+				Spec:       multiclusterv1alpha1.SourceManifestSpec{Manifests: updated},
+			},
+		}
+		require.NoError(t, v.syncAppliedManifests(context.TODO(), mp, peer, info, updatedManifests))
 
 		mw := &workv1.ManifestWork{}
 		require.NoError(t, cl.Get(context.TODO(), mwKey, mw))
@@ -347,22 +359,23 @@ func appliedManifestMCVResult(t *testing.T, phase multiclusterv1alpha1.AppliedMa
 func TestCheckAppliedManifestsStatus(t *testing.T) {
 	peer := peerRef("cluster-b", "scale-cluster-b")
 	info := IbmStorageScaleInfo{OperatorNamespace: "ibm-spectrum-scale"}
-	resourcesByManifestName := map[string][]runtime.RawExtension{"sm-a": nil}
+	sourceManifests := []multiclusterv1alpha1.SourceManifest{
+		{ObjectMeta: metav1.ObjectMeta{Name: "sm-a"}},
+	}
 
 	tests := []struct {
 		name               string
 		phase              multiclusterv1alpha1.AppliedManifestPhase
 		generation         int64
 		observedGeneration int64
-		wantReady          bool
 		wantErr            bool
 	}{
 		{
-			name:               "Applied and fresh — ready",
+			name:               "Applied and fresh — no error",
 			phase:              multiclusterv1alpha1.AppliedManifestPhaseApplied,
 			generation:         1,
 			observedGeneration: 1,
-			wantReady:          true,
+			wantErr:            false,
 		},
 		{
 			name:               "Failed — error",
@@ -379,25 +392,25 @@ func TestCheckAppliedManifestsStatus(t *testing.T) {
 			wantErr:            true,
 		},
 		{
-			name:               "Pending — not ready",
+			name:               "Pending — no error (watches will requeue)",
 			phase:              multiclusterv1alpha1.AppliedManifestPhasePending,
 			generation:         1,
 			observedGeneration: 1,
-			wantReady:          false,
+			wantErr:            false,
 		},
 		{
-			name:               "Applying — not ready",
+			name:               "Applying — no error (watches will requeue)",
 			phase:              multiclusterv1alpha1.AppliedManifestPhaseApplying,
 			generation:         1,
 			observedGeneration: 1,
-			wantReady:          false,
+			wantErr:            false,
 		},
 		{
-			name:               "stale observedGeneration — not ready",
+			name:               "stale observedGeneration — no error (watches will requeue)",
 			phase:              multiclusterv1alpha1.AppliedManifestPhaseApplied,
 			generation:         2,
 			observedGeneration: 1,
-			wantReady:          false,
+			wantErr:            false,
 		},
 	}
 
@@ -406,13 +419,12 @@ func TestCheckAppliedManifestsStatus(t *testing.T) {
 			mcv := appliedManifestMCVResult(t, tt.phase, tt.generation, tt.observedGeneration)
 			v, _, mp := newTestVendor(t, nil, mcv)
 
-			ready, err := v.checkAppliedManifestsStatus(context.TODO(), mp, peer, info, resourcesByManifestName)
+			err := v.checkAppliedManifestsStatus(context.TODO(), mp, peer, info, sourceManifests)
 			if tt.wantErr {
 				assert.Error(t, err)
-				return
+			} else {
+				assert.NoError(t, err)
 			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantReady, ready)
 		})
 	}
 }

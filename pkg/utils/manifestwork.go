@@ -67,9 +67,9 @@ func GetManifestWork(ctx context.Context, c client.Client, manifestWorkName stri
 	return &manifestWork, nil
 }
 
-// CheckManifestWorkStatus checks the status of a ManifestWork.
+// IsManifestWorkApplied checks the status of a ManifestWork.
 // Returns true if WorkApplied, WorkAvailable is true and WorkDegraded is not true.
-func CheckManifestWorkStatus(mw *workv1.ManifestWork) bool {
+func IsManifestWorkApplied(mw *workv1.ManifestWork) bool {
 
 	var applied, available, degraded bool
 	conditions := mw.Status.Conditions
