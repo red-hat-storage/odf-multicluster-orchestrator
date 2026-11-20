@@ -166,8 +166,10 @@ func (r *ResourceDistributionReconciler) Reconcile(ctx context.Context, req ctrl
 	for _, mw := range manifestWorkList.Items {
 		if mw.DeletionTimestamp.IsZero() {
 			cId := mw.Labels[utils.CreatedForClientID]
-			if _, ok := addonDeletionlock.Data[cId]; !ok {
-				addonDeletionlock.Data[cId] = ""
+			if cId != "" {
+				if _, ok := addonDeletionlock.Data[cId]; !ok {
+					addonDeletionlock.Data[cId] = ""
+				}
 			}
 		}
 	}
