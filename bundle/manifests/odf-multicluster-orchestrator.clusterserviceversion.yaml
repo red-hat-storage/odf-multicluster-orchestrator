@@ -452,10 +452,24 @@ spec:
                 - mountPath: /var/serving-cert
                   name: odf-multicluster-console-serving-cert
                   readOnly: true
+                - mountPath: /etc/nginx/nginx.conf
+                  name: odf-multicluster-console-nginx-conf
+                  subPath: nginx.conf
+                - mountPath: /var/log/nginx
+                  name: odf-multicluster-console-nginx-log
+                - mountPath: /var/lib/nginx/tmp
+                  name: odf-multicluster-console-nginx-tmp
               volumes:
               - name: odf-multicluster-console-serving-cert
                 secret:
                   secretName: odf-multicluster-console-serving-cert
+              - configMap:
+                  name: odf-multicluster-console-nginx-conf
+                name: odf-multicluster-console-nginx-conf
+              - emptyDir: {}
+                name: odf-multicluster-console-nginx-log
+              - emptyDir: {}
+                name: odf-multicluster-console-nginx-tmp
       permissions:
       - rules:
         - apiGroups:
