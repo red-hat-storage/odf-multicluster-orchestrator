@@ -796,6 +796,78 @@ func TestFindS3ConfigsForDRPolicy(t *testing.T) {
 	}
 }
 
+func TestFindS3ConfigForSecret(t *testing.T) {
+	externalCfg := func(name, secretNS, secretName string) *multiclusterv1alpha1.S3Configuration {
+		return &multiclusterv1alpha1.S3Configuration{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Spec: multiclusterv1alpha1.S3ConfigurationSpec{
+				ExternalS3: &multiclusterv1alpha1.ExternalS3Spec{
+					SecretRef: multiclusterv1alpha1.SecretReference{Name: secretName, Namespace: secretNS},
+				},
+				ManagedClusters: []string{name + "-cluster"},
+			},
+		}
+	}
+	internalCfg := &multiclusterv1alpha1.S3Configuration{
+		ObjectMeta: metav1.ObjectMeta{Name: "internal"},
+		Spec: multiclusterv1alpha1.S3ConfigurationSpec{
+			InternalS3: &multiclusterv1alpha1.InternalS3Spec{
+				ProviderCluster:  "cluster1",
+				StorageClassName: "sc",
+				Namespace:        "openshift-storage",
+			},
+			ManagedClusters: []string{"cluster1", "cluster2"},
+		},
+	}
+
+	r := getFakeS3ConfigurationReconciler(t,
+		internalCfg,
+		externalCfg("ext-match", "openshift-dr-system", "ext-creds"),
+		externalCfg("ext-other-name", "openshift-dr-system", "other-creds"),
+		externalCfg("ext-other-ns", "other-ns", "ext-creds"),
+	)
+
+	secret := func(ns, name string) *corev1.Secret {
+		return &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+			Labels:    map[string]string{utils.CreatedByLabelKey: utils.S3ConfigAddonName},
+		}}
+	}
+
+	tests := []struct {
+		name   string
+		secret *corev1.Secret
+		want   []string
+	}{
+		{
+			name:   "addon-synced secret in provider cluster namespace enqueues the internal config",
+			secret: secret("cluster1", "odrbucket-internal"),
+			want:   []string{"internal"},
+		},
+		{
+			name:   "referenced external secret enqueues only its S3Configuration",
+			secret: secret("openshift-dr-system", "ext-creds"),
+			want:   []string{"ext-match"},
+		},
+		{
+			name:   "unreferenced secret enqueues nothing",
+			secret: secret("openshift-dr-system", "unrelated"),
+			want:   nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got []string
+			for _, req := range r.findS3ConfigForSecret(context.TODO(), tt.secret) {
+				got = append(got, req.Name)
+			}
+			assert.ElementsMatch(t, tt.want, got)
+		})
+	}
+}
+
 // Helper function to create a fake reconciler with optional initial objects
 func getFakeS3ConfigurationReconciler(t *testing.T, initObjs ...runtime.Object) S3ConfigurationReconciler {
 	scheme := runtime.NewScheme()
@@ -845,9 +917,14 @@ func TestReconcile_ExternalS3(t *testing.T) {
 		},
 	}
 
-	// User-provided source secret.
+	// User-provided source secret. It must carry the created-by label, because the
+	// manager only caches Secrets with that label.
 	sourceSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "ext-s3-creds", Namespace: "dr-system"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ext-s3-creds",
+			Namespace: "dr-system",
+			Labels:    map[string]string{utils.CreatedByLabelKey: utils.S3ConfigAddonName},
+		},
 		Data: map[string][]byte{
 			utils.AwsAccessKeyId:     []byte("access-key"),
 			utils.AwsSecretAccessKey: []byte("secret-key"),

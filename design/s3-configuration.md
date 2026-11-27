@@ -132,6 +132,8 @@ kind: Secret
 metadata:
   name: external-s3
   namespace: openshift-dr-system
+  labels:
+    multicluster.odf.openshift.io/created-by: s3config  # required: operator only caches/watches labelled secrets
 stringData:
   AWS_ACCESS_KEY_ID: "..."
   AWS_SECRET_ACCESS_KEY: "..."
@@ -300,6 +302,8 @@ kind: Secret
 metadata:
   name: aws-s3-creds
   namespace: openshift-dr-system
+  labels:
+    multicluster.odf.openshift.io/created-by: s3config  # required: operator only caches/watches labelled secrets
 stringData:
   AWS_ACCESS_KEY_ID: "AKIAIOSFODNN7EXAMPLE"
   AWS_SECRET_ACCESS_KEY: "wJalrXUtnFEMI/..."

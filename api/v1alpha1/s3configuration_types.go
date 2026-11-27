@@ -94,6 +94,10 @@ type ExternalS3Spec struct {
 	//   - s3CompatibleEndpoint: S3 endpoint URL
 	//   - s3Region: S3 region (required; used as the AWS SDK signing region)
 	//
+	// The secret must also carry the label
+	// "multicluster.odf.openshift.io/created-by: s3config"; the operator only
+	// watches and reads secrets with this label.
+	//
 	// +kubebuilder:validation:Required
 	SecretRef SecretReference `json:"secretRef"`
 }

@@ -62,7 +62,10 @@ type S3ConfigurationReconciler struct {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *S3ConfigurationReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// Predicate to watch secrets with our CreatedByLabelKey in managed cluster namespaces
+	// Predicate to watch secrets with our CreatedByLabelKey: addon-synced secrets in
+	// managed cluster namespaces, and user-provided external S3 secrets. The manager
+	// only caches Secrets carrying CreatedByLabelKey, so external S3 secrets must have
+	// it set to S3ConfigAddonName to be seen here at all.
 	secretPredicate := predicate.NewPredicateFuncs(func(obj client.Object) bool {
 		secret, ok := obj.(*corev1.Secret)
 		if !ok {
@@ -102,9 +105,11 @@ func (r *S3ConfigurationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// findS3ConfigForSecret finds S3Configurations that should be reconciled when a secret changes
+// findS3ConfigForSecret finds S3Configurations that should be reconciled when a secret changes:
+//   - InternalS3: the addon-synced secret lives in the provider cluster's namespace
+//   - ExternalS3: the secret is the one referenced by spec.externalS3.secretRef
 func (r *S3ConfigurationReconciler) findS3ConfigForSecret(ctx context.Context, secret client.Object) []reconcile.Request {
-	// Get the secret's namespace - this should be a managed cluster namespace
+	// For InternalS3 this is the managed cluster namespace the addon syncs into
 	clusterNamespace := secret.GetNamespace()
 
 	// List all S3Configurations
@@ -118,6 +123,15 @@ func (r *S3ConfigurationReconciler) findS3ConfigForSecret(ctx context.Context, s
 	for _, s3Config := range s3ConfigList.Items {
 		// Check if this S3Config uses this cluster
 		if s3Config.Spec.InternalS3 != nil && s3Config.Spec.InternalS3.ProviderCluster == clusterNamespace {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: s3Config.Name,
+				},
+			})
+		} else if s3Config.Spec.ExternalS3 != nil &&
+			s3Config.Spec.ExternalS3.SecretRef.Namespace == secret.GetNamespace() &&
+			s3Config.Spec.ExternalS3.SecretRef.Name == secret.GetName() {
+			// Check if this S3Config references this external secret
 			requests = append(requests, reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: s3Config.Name,
