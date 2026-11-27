@@ -33,6 +33,10 @@ help: ## Display this help.
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) crd rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
+sync-assets: ## Sync generated CRD files to storagevendor/assets for embedding
+	@cp config/crd/bases/multicluster.odf.openshift.io_sourcemanifests.yaml pkg/storagevendor/assets/
+	@cp config/crd/bases/multicluster.odf.openshift.io_appliedmanifests.yaml pkg/storagevendor/assets/
+
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
@@ -70,7 +74,7 @@ build: manifests generate fmt vet golangci-lint kube-linter ## Build manager bin
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go
 
-operator-build: generate fmt vet golangci-lint kube-linter ## Build docker image with the manager.
+operator-build: manifests generate fmt vet golangci-lint kube-linter ## Build docker image with the manager.
 	${BUILD_TOOL} build --build-arg=LDFLAGS=${LDFLAGS} -t ${IMG} .
 
 operator-push: ## Push docker image with the manager.
